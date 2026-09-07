@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111c">
+  <title>MesHeures</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style/style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <button class="brand" data-nav="home" aria-label="Accueil">
+        <span class="logo">🚑</span>
+        <span><strong>MesHeures</strong><small>TON TEMPS · TES DROITS · TES PREUVES</small></span>
+      </button>
+      <div class="top-actions">
+        <button class="icon-btn" id="quickToday" title="Aujourd'hui">◉</button>
+        <button class="icon-btn" data-nav="settings" title="Réglages">⚙</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="view active" id="view-home">
+        <div class="welcome">
+          <div><span class="eyebrow">TON TEMPS · TES DROITS · TES PREUVES</span><h1 id="hello">Bonjour 👋</h1><p id="todayLabel"></p></div>
+          <button class="today-chip" id="homeToday">Aujourd'hui <span>→</span></button>
+        </div>
+
+        <article class="hero-card">
+          <div>
+            <span class="eyebrow">JOURNÉE DU JOUR</span>
+            <h2 id="homeDayTitle">À organiser</h2>
+            <p id="homeDayText">Choisis ton type de journée puis saisis tes horaires.</p>
+          </div>
+          <div class="time-orb"><strong id="homeDayTte">—</strong><small>TTE</small></div>
+          <div class="hero-actions">
+            <button class="primary" id="openToday">✦ Ouvrir ma journée</button>
+            <button class="secondary" id="copyYesterday">▣ Copier la veille</button>
+          </div>
+        </article>
+
+        <div class="section-head"><h2>Ma période</h2><button data-nav="pay">Voir la paie →</button></div>
+        <div class="metrics">
+          <article class="metric"><span>◷</span><small>TTE</small><strong id="metricTte">0h00</strong><em id="metricDays">0 jour</em></article>
+          <article class="metric"><span>↗</span><small>HEURES SUP.</small><strong id="metricOvertime">0h00</strong><em>au-delà de 35 h / semaine</em></article>
+          <article class="metric wide"><span>€</span><small>BRUT ESTIMÉ</small><strong id="metricGross">0 €</strong><em>estimation basée sur tes réglages</em></article>
+        </div>
+
+        <div class="section-head"><h2>À surveiller</h2><button data-nav="audit">Audit complet →</button></div>
+        <div class="panel" id="homeAlerts"></div>
+
+        <div class="section-head"><h2>Accès rapides</h2></div>
+        <div class="quick-grid">
+          <button data-nav="day"><b>◷</b><span>Saisir</span><small>ma journée</small></button>
+          <button data-nav="month"><b>▦</b><span>Mois</span><small>mon planning</small></button>
+          <button data-nav="pay"><b>€</b><span>Paie</span><small>estimation</small></button>
+          <button data-nav="audit"><b>✓</b><span>Audit</span><small>contrôles</small></button>
+          <button data-nav="settings"><b>⚙</b><span>Réglages</span><small>mes paramètres</small></button>
+          <button id="exportQuick"><b>⇩</b><span>Sauvegarde</span><small>exporter</small></button>
+        </div>
+      </section>
+
+      <section class="view" id="view-day">
+        <div class="page-head">
+          <div><span class="eyebrow">SAISIE SIMPLE</span><h1>Ma journée</h1></div>
+          <button class="secondary small" id="dayToday">Aujourd'hui</button>
+        </div>
+
+        <div class="date-nav card">
+          <button id="prevDay">‹</button>
+          <div><strong id="dayDate"></strong><small id="dayMeta"></small></div>
+          <button id="nextDay">›</button>
+        </div>
+
+        <div class="day-types card">
+          <span class="label">TYPE DE JOURNÉE</span>
+          <div class="segmented" id="dayTypes">
+            <button data-type="T">Travail</button>
+            <button data-type="CP">CP</button>
+            <button data-type="RC">RC</button>
+            <button data-type="ABS">Absence</button>
+            <button data-type="R">Repos</button>
+          </div>
+        </div>
+
+        <div class="card work-card" id="workCard">
+          <div class="card-title"><div><span class="label">HORAIRES</span><h2>Mon service</h2></div><div class="big-tte" id="dayTte">0h00</div></div>
+          <div class="time-grid">
+            <label>Début<input type="time" id="dayStart"></label>
+            <label>Fin<input type="time" id="dayEnd"></label>
+          </div>
+          <div class="pause-head"><div><span class="label">PAUSES</span><small>Déduites du temps de travail effectif</small></div><button class="secondary small" id="addPause">+ Ajouter</button></div>
+          <div id="pauseList"></div>
+          <div class="summary-row"><span>Amplitude</span><strong id="dayAmplitude">0h00</strong></div>
+          <div class="summary-row"><span>Pauses</span><strong id="dayPauses">0h00</strong></div>
+          <div class="summary-row accent"><span>Temps de travail effectif</span><strong id="dayEffective">0h00</strong></div>
+        </div>
+
+        <div class="card">
+          <span class="label">NOTE / PREUVE</span>
+          <textarea id="dayNote" rows="3" placeholder="Remarque, incident, précision…"></textarea>
+          <label class="check"><input type="checkbox" id="dayHoliday"> Jour férié</label>
+        </div>
+        <button class="primary full" id="saveDay">✓ Enregistrer la journée</button>
+      </section>
+
+      <section class="view" id="view-month">
+        <div class="page-head"><div><span class="eyebrow">VISION D'ENSEMBLE</span><h1>Mon mois</h1></div></div>
+        <div class="month-nav card"><button id="prevMonth">‹</button><strong id="monthTitle"></strong><button id="nextMonth">›</button></div>
+        <div class="calendar-card card">
+          <div class="weekdays"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+          <div id="calendar" class="calendar"></div>
+        </div>
+        <div class="month-summary metrics compact">
+          <article class="metric"><small>TTE</small><strong id="monthTte">0h00</strong></article>
+          <article class="metric"><small>JOURS</small><strong id="monthWorkDays">0</strong></article>
+          <article class="metric"><small>BRUT</small><strong id="monthGross">0 €</strong></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-pay">
+        <div class="page-head"><div><span class="eyebrow">ESTIMATION</span><h1>Ma paie</h1><p id="payPeriodLabel"></p></div></div>
+        <div class="card pay-total"><span class="label">BRUT ESTIMÉ SUR LA PÉRIODE</span><strong id="payGross">0 €</strong><small id="payNetHint">Net estimé : 0 €</small></div>
+        <div class="card breakdown" id="payBreakdown"></div>
+        <div class="card">
+          <span class="label">PARAMÈTRES UTILISÉS</span>
+          <div class="summary-row"><span>Taux horaire</span><strong id="payRate"></strong></div>
+          <div class="summary-row"><span>Base hebdomadaire</span><strong id="payBase"></strong></div>
+          <div class="summary-row"><span>Coefficient net</span><strong id="payNet"></strong></div>
+          <button class="secondary full" data-nav="settings">Modifier mes réglages</button>
+        </div>
+      </section>
+
+      <section class="view" id="view-audit">
+        <div class="page-head"><div><span class="eyebrow">CONTRÔLE</span><h1>Audit</h1><p>Des contrôles simples sur tes journées saisies.</p></div></div>
+        <div class="audit-score card"><span>Indice de vigilance</span><strong id="auditScore">—</strong><small id="auditScoreText"></small></div>
+        <div class="panel" id="auditList"></div>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="page-head"><div><span class="eyebrow">MES DONNÉES</span><h1>Réglages & sauvegarde</h1></div></div>
+        <div class="card settings-form">
+          <span class="label">MON PROFIL</span>
+          <label>Prénom / nom<input id="setName" type="text" placeholder="Ex. Mickaël"></label>
+          <label>Date d'embauche<input id="setEmb" type="date"></label>
+          <div class="two">
+            <label>Taux horaire brut (€)<input id="setRate" type="number" min="0" step="0.01"></label>
+            <label>Base hebdomadaire (h)<input id="setBase" type="number" min="1" step="0.5"></label>
+          </div>
+          <div class="two">
+            <label>Coefficient net<input id="setNet" type="number" min="0" max="1" step="0.001"></label>
+            <label>Amplitude max (h)<input id="setMaxAmp" type="number" min="1" max="24" step="0.25"></label>
+          </div>
+          <button class="primary full" id="saveSettings">✓ Enregistrer les réglages</button>
+        </div>
+
+        <div class="card">
+          <span class="label">SAUVEGARDE</span>
+          <p class="muted">L'import conserve la structure complète de ta sauvegarde JSON et ne la transforme pas.</p>
+          <div class="backup-actions">
+            <button class="primary" id="exportBackup">⇩ Exporter ma sauvegarde</button>
+            <label class="secondary upload">⇧ Importer une sauvegarde<input id="importBackup" type="file" accept="application/json,.json" hidden></label>
+          </div>
+          <p class="tiny" id="backupInfo"></p>
+        </div>
+        <div class="danger card">
+          <span class="label">ZONE DANGEREUSE</span>
+          <button id="resetApp">Réinitialiser l'application</button>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="active" data-nav="home"><span>⌂</span><small>Accueil</small></button>
+      <button data-nav="day"><span>◷</span><small>Jour</small></button>
+      <button data-nav="month"><span>▦</span><small>Mois</small></button>
+      <button data-nav="pay"><span>€</span><small>Paie</small></button>
+      <button data-nav="audit"><span>✓</span><small>Audit</small></button>
+      <button data-nav="settings"><span>☰</span><small>Plus</small></button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="scripts/app.js"></script>
+</body>
+</html>
