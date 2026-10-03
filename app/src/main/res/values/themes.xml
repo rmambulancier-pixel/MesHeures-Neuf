@@ -1,0 +1,7 @@
+<resources>
+ <style name="Theme.MesHeures" parent="android:style/Theme.Material.NoActionBar">
+  <item name="android:fontFamily">sans</item><item name="android:windowLightStatusBar">false</item>
+  <item name="android:statusBarColor">@color/pulse_bg</item><item name="android:navigationBarColor">@color/pulse_bg</item>
+  <item name="android:windowActionModeOverlay">true</item>
+ </style>
+</resources>

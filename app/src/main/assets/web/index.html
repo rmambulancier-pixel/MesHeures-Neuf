@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>MesHeures V36.2.0</title>
+<meta name="application-version" content="36.2.0">
+<link rel="manifest" href="./manifest.json">
+<link rel="stylesheet" href="./style/v30.css?v=36.2.0">
+<link rel="stylesheet" href="./style/v31-home.css?v=36.2.0">
+<link rel="stylesheet" href="./style/v32-fixes.css?v=36.2.0">
+<link rel="icon" href="./icon.svg">
+
+
+
+
+
+
+
+<!-- xlsx / pdf.js / tesseract ne sont plus chargés ici : ils pesaient plusieurs Mo
+     téléchargés et parsés à CHAQUE démarrage, même sans import ni OCR.
+     Ils sont maintenant chargés à la demande via mhLoadLib() (app-core.js),
+     seulement quand une fonction d'import/OCR en a réellement besoin. -->
+<style id="mh-base">
+/* Styles de secours critiques : l'app reste correcte même si le CSS externe est encore en cache. */
+#mhSplash{position:fixed;inset:0;background:#0b1016;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:opacity .28s ease,visibility .28s ease}
+#mhSplash img{width:82px!important;height:82px!important;max-width:82px!important;object-fit:contain;border-radius:22px;box-shadow:0 0 30px #1687ff44}
+#mhSplash b{font-size:25px;letter-spacing:-.5px}
+#mhSplash span{font-size:10px;color:#7f8b98;letter-spacing:.8px}
+#mhSplash.off{opacity:0;visibility:hidden;pointer-events:none}
+.mh-header-logo{width:24px!important;height:24px!important;max-width:24px!important;max-height:24px!important;object-fit:contain;vertical-align:-6px;border-radius:7px;box-shadow:0 0 14px #1f8fff33}
+:root{--bg:#0d1117;--card:#161b22;--line:#30363d;--txt:#e6edf3;--dim:#8b949e;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--acc:#238636;--blue:#58a6ff;--pur:#bc8cff;--ora:#f0883e}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,sans-serif;padding-bottom:80px}
+header{position:sticky;top:0;z-index:20;background:#0d1117ee;backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 12px}
+h1{font-size:17px;margin:0;display:flex;align-items:center;gap:8px}
+.badge{background:var(--bad);color:#fff;font-size:10px;border-radius:9px;padding:1px 6px;font-weight:700}
+.tabs{display:flex;gap:4px;margin-top:9px;overflow-x:auto}
+.tabs button{flex:1;min-width:60px;background:#21262d;border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:7px 2px;font-size:11px;font-weight:600;position:relative}
+.tabs button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.tabs button .tb{position:absolute;top:-4px;right:-2px;background:var(--bad);color:#fff;font-size:9px;border-radius:7px;padding:0 4px;font-weight:700}
+main{padding:12px;max-width:860px;margin:0 auto}
+main>section{display:none}main>section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px;margin-bottom:11px}
+h2{font-size:15px;margin:0 0 10px;color:var(--ok);display:flex;align-items:center;gap:7px}
+h2 .sub{font-size:11px;color:var(--dim);font-weight:400}
+label{display:block;font-size:11px;color:var(--dim);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
+input,select,textarea{background:#0d1117;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px;font-size:15px;width:100%;font-family:inherit}
+input[type=checkbox]{width:20px;height:20px;vertical-align:-4px}
+textarea{font-size:12px;font-family:ui-monospace,monospace}
+.grid{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+.g2{display:grid;gap:9px;grid-template-columns:1fr 1fr}
+.g3{display:grid;gap:9px;grid-template-columns:1fr 1fr 1fr}
+button{background:var(--acc);color:#fff;border:0;border-radius:9px;padding:10px 13px;font-size:14px;font-weight:600;cursor:pointer}
+button.g{background:#21262d;border:1px solid var(--line);color:var(--txt)}
+button.r{background:#3d1a1c;border:1px solid #6e2427;color:#ff9b96}
+button.b{background:#0d2137;border:1px solid #1a3a5c;color:var(--blue)}
+.row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.nav{display:flex;gap:8px;align-items:center;margin-bottom:11px}
+.nav button{padding:10px 15px;font-size:17px}
+.nav .lbl{flex:1;text-align:center;font-weight:700;font-size:15px}
+.chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px}
+.chips button{flex:1;min-width:56px;padding:8px 3px;font-size:12px;background:#21262d;border:1px solid var(--line);color:var(--dim)}
+.chips button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 3px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--dim);font-size:10px;text-transform:uppercase;font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.ok{color:var(--ok);font-weight:700}td.bad{color:var(--bad);font-weight:700}
+tr.q{background:#0f2d1a}tr.q td{color:var(--ok);font-weight:700}
+tr.t{background:#1c2128}tr.t td{font-weight:700}
+.kpis{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(88px,1fr))}
+.kpi{background:#0d1117;border:1px solid var(--line);border-radius:9px;padding:9px 4px;text-align:center;cursor:default}
+.kpi b{display:block;font-size:16px;color:var(--ok);font-variant-numeric:tabular-nums}
+.kpi span{font-size:10px;color:var(--dim)}
+.kpi.warn b{color:var(--warn)}.kpi.bad b{color:var(--bad)}
+.al{padding:8px 10px;border-radius:7px;margin-bottom:6px;font-size:13px;line-height:1.4}
+.al.w{background:#2d2411;border-left:3px solid var(--warn)}
+.al.b{background:#2d1516;border-left:3px solid var(--bad)}
+.al.i{background:#11202d;border-left:3px solid var(--blue)}
+.al.k{background:#0f2d1a;border-left:3px solid var(--ok)}
+.al.p{background:#1e1230;border-left:3px solid var(--pur)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr) 44px;gap:3px}
+.cal .h{font-size:10px;color:var(--dim);text-align:center;padding:3px 0}
+.cel{background:#0d1117;border:1px solid var(--line);border-radius:7px;padding:4px 1px;min-height:52px;text-align:center;cursor:pointer;transition:opacity .15s}
+.cel:active{opacity:.7}
+.cel .d{font-size:11px;color:var(--dim)}
+.cel .v{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+.cel .ic{font-size:9px;line-height:1.2}
+.cel.T{background:#0f2d1a;border-color:#1d5c33}.cel.T .v{color:var(--ok)}
+.cel.RC{background:#1a1f4d;border-color:#33409e}.cel.RC .v{color:#8b9bff}
+.cel.CP{background:#3d3312;border-color:#7a6620}.cel.CP .v{color:var(--warn)}
+.cel.MAL{background:#3d1a1c;border-color:#6e2427}.cel.MAL .v{color:#ff9b96}
+.cel.NUIT{background:#1a0d3d;border-color:#3d1a7a}.cel.NUIT .v{color:var(--pur)}
+.cel.off{opacity:.3}.cel.now{outline:2px solid var(--ok)}
+.cel.err{outline:2px solid var(--bad)}
+.rec{background:#1c2128;border:1px solid var(--line);border-radius:7px;font-size:10px;padding:4px 1px;text-align:center;color:var(--dim);line-height:1.25}
+.rec b{display:block;color:var(--ok);font-size:11px}
+.pz{background:#0d1117;border:1px solid var(--line);border-radius:9px;padding:9px;margin-bottom:7px}
+.bar{height:7px;background:#21262d;border-radius:4px;overflow:hidden;margin:7px 0}
+.bar i{display:block;height:100%;background:var(--ok);transition:width .3s}
+.bar.warn i{background:var(--warn)}.bar.bad i{background:var(--bad)}
+.mut{color:var(--dim);font-size:12px}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin:1px}
+.tag.ok{background:#0f2d1a;color:var(--ok)}.tag.w{background:#2d2411;color:var(--warn)}.tag.b{background:#2d1516;color:var(--bad)}.tag.i{background:#11202d;color:var(--blue)}
+.fab{position:fixed;bottom:0;left:0;right:0;background:#0d1117ee;backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:9px 12px;display:flex;gap:8px;z-index:30}
+.fab button{flex:1;font-size:13px}
+.chart{display:flex;align-items:flex-end;gap:3px;height:92px;margin:9px 0}
+.chart .bar-w{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px}
+.chart .bar-w .bv{background:var(--acc);border-radius:3px 3px 0 0;width:100%;min-height:2px;transition:height .3s}
+.chart .bar-w .bv.hs{background:var(--warn)}
+.chart .bar-w .bl{font-size:8px;color:var(--dim)}
+.modal-bg{display:none;position:fixed;inset:0;background:#0009;z-index:50;justify-content:center;align-items:flex-end}
+.modal-bg.on{display:flex}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:16px 16px 0 0;padding:18px;width:100%;max-width:600px;max-height:80vh;overflow-y:auto}
+.modal h3{margin:0 0 12px;font-size:16px}
+.diff-ok{color:var(--ok)}.diff-bad{color:var(--bad)}.diff-warn{color:var(--warn)}
+@media(min-width:600px){.modal{border-radius:16px;margin:auto}}
+@media print{.tabs,.fab,header,button,textarea,.modal-bg{display:none!important}section{display:block!important}body{background:#fff;color:#000;padding:0}.card{border:1px solid #ccc;background:#fff;page-break-inside:avoid}h2,.kpi b{color:#000}}
+
+/* premium fallback */
+/* Fallback premium UI: keeps the dashboard readable even when an old PWA cache serves the stylesheet. */
+.mh-dashboard{max-width:720px!important;margin:0 auto;padding-top:4px}.dash-head{display:flex;align-items:center;justify-content:space-between;padding:8px 2px 3px}.dash-brand{display:flex;align-items:center;gap:10px}.dash-logo{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(145deg,#242a35,#141922);border:1px solid #343c48;font-size:21px}.dash-kicker{font-size:12px;letter-spacing:1.3px;font-weight:900}.dash-kicker span{display:inline-block;margin-left:5px;padding:2px 7px;border:1px solid #c6a84b;border-radius:999px;color:#e4c762;font-size:8px;vertical-align:2px}.dash-greeting{font-size:21px;font-weight:800;line-height:1.1;margin-top:3px}.dash-settings{width:43px;height:43px;border-radius:13px!important;padding:0!important}.dash-sub{color:var(--dim);font-size:11px;padding:4px 4px 12px}.hero-pro{position:relative;overflow:hidden;background:linear-gradient(145deg,#171d26,#0b0f14);border:1px solid #2b3541;border-radius:23px;padding:17px;margin-bottom:16px}.hero-pro-top{display:flex;align-items:center;justify-content:space-between}.hero-pro-title{font-size:15px;font-weight:800}.hero-play{width:42px;height:42px;border-radius:13px!important;background:#222a34!important;border:1px solid #35404d!important;padding:0!important;font-size:22px!important}.hero-time{font-size:52px;line-height:1;font-weight:900;letter-spacing:-2.5px;margin:17px 0 4px}.hero-caption{color:var(--dim);font-size:11px}.hero-chart{height:55px;display:flex;align-items:flex-end;gap:8px;margin-top:16px}.mini-day{height:100%;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px}.mini-day i{display:block;width:100%;max-width:24px;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,#b98cff,#7454bf)}.mini-day i.today{background:linear-gradient(180deg,#64dd8f,#209c54)}.mini-day span{font-size:8px;color:#6f7a86}.section-head{display:flex;align-items:center;justify-content:space-between;margin:5px 2px 9px}.section-head h2{margin:0!important;color:#eef3f7!important;font-size:16px!important}.text-action{background:transparent!important;border:0!important;color:#8e9aaa!important;padding:2px!important;font-size:11px!important}.period-pill{font-size:9px;padding:5px 8px;border-radius:999px;background:#151c24;border:1px solid #29333e;color:#8793a0}.stat-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}.stat-card{border:1px solid #2a333e;border-radius:18px;padding:14px;background:linear-gradient(145deg,#171d25,#10151c);min-height:110px;display:flex;flex-direction:column;justify-content:space-between}.stat-card span{font-size:10px;color:#9aa4b0}.stat-card b{font-size:25px}.stat-card.purple b{color:#b98cff}.stat-card.gold b{color:#e3b84c}.activity-card,.dash-panel{background:linear-gradient(145deg,#151b22,#0f141a);border:1px solid #29333e;border-radius:19px;padding:12px;margin-bottom:10px}.activity-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.activity-day{min-height:74px!important;padding:9px 3px!important;border-radius:12px!important;background:#171e27!important;border:1px solid #28323e!important;display:flex;flex-direction:column;align-items:center;justify-content:space-between}.activity-day b{font-size:9px;color:#7d8996}.activity-day strong{font-size:13px}.activity-day.work strong{color:#65dc8e}.activity-day.night strong{color:#b98cff}.activity-day.leave strong{color:#e1b74d}.dash-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.panel-title{display:flex;justify-content:space-between;font-weight:800;font-size:12px;margin-bottom:11px}.big-inline{display:flex;flex-direction:column}.big-inline b,.pay-big{font-size:24px;font-weight:900}.dash-muted{font-size:9px;color:#778390}.dash-progress{height:7px;background:#202832;border-radius:999px;overflow:hidden;margin:12px 0 7px}.dash-progress i{display:block;height:100%;background:linear-gradient(90deg,#36b865,#71dd9a)}.pay-lines{display:grid;gap:5px;margin-top:10px}.pay-lines div{display:flex;justify-content:space-between;border-top:1px solid #28313b;padding-top:5px;font-size:9px}.dash-alert{width:100%;display:flex;align-items:center;gap:9px;text-align:left;background:#121820!important;border:1px solid #252f3a!important;color:var(--txt)!important;padding:9px!important;border-radius:11px!important;margin-bottom:6px}.dash-alert div{display:flex;flex-direction:column;min-width:0;flex:1}.dash-alert small{font-size:10px;overflow:hidden;text-overflow:ellipsis}.dash-ok{padding:11px;border-radius:11px;background:#102318;color:#6ddd96;font-size:10px}.audit-empty{padding:12px;border-radius:10px;background:#0d1117;border:1px dashed var(--line);color:var(--dim);font-size:12px}@media(max-width:600px){.mh-dashboard{padding-left:0;padding-right:0}.hero-time{font-size:47px}.dash-grid-2{grid-template-columns:1fr}.stat-card{min-height:105px}}
+
+/* Mobile navigation / legal / projection */
+.mh-v30-nav{display:none}
+.mh-v30-menu,.mh-v30-overlay{display:none;position:fixed;inset:0;background:#000b;z-index:100;align-items:flex-end}
+.mh-v30-menu.on{display:flex}.mh-v30-sheet,.mh-v30-dialog{width:100%;max-width:680px;margin:auto auto 0;background:var(--card);border:1px solid var(--line);border-radius:18px 18px 0 0;padding:16px;max-height:86vh;overflow:auto}
+.mh-v30-sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:17px}.mh-v30-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}.mh-v30-tools button{background:#21262d;border:1px solid var(--line);text-align:left}.mh-v30-theme{border-top:1px solid var(--line);margin-top:14px;padding-top:12px}.mh-v30-theme>div{display:flex;gap:7px;margin-top:8px}.mh-v30-theme button{flex:1;background:#21262d}
+.mh-v30-projection{margin-top:10px}.mh-v30-proj-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.mh-v30-proj-grid>div{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center}.mh-v30-proj-grid span{display:block;font-size:10px;color:var(--dim)}.mh-v30-proj-grid b{display:block;font-size:18px;margin-top:3px}.mh-v30-proj-grid b.ok{color:var(--ok)}.mh-v30-proj-grid b.warn{color:var(--warn)}.mh-v30-proj-grid b.bad{color:var(--bad)}.mh-v30-proj-note,.mh-v30-reg small{display:block;color:var(--dim);font-size:10px;margin-top:8px}.mh-v30-reg{margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}.mh-v30-back{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:12px}.mh-v30-legal-list small{display:block;color:var(--dim);margin-top:3px}.mh-v30-overlay{display:flex}.mh-v30-dialog{margin:auto;border-radius:18px;max-height:85vh}.mh-v30-dialog hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+:root[data-theme="light"]{--bg:#f5f7f9;--card:#fff;--line:#d0d7de;--txt:#1f2328;--dim:#57606a;--ok:#1a7f37;--warn:#9a6700;--bad:#cf222e;--blue:#0969da;--pur:#8250df;--ora:#bc4c00} :root[data-theme="light"] body{background:var(--bg)}
+@media(max-width:700px){body{padding-bottom:76px}.tabs{display:none}.mh-v30-nav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:80;background:#0d1117f2;border-top:1px solid var(--line);backdrop-filter:blur(12px);padding:7px 6px calc(7px + env(safe-area-inset-bottom));gap:5px}.mh-v30-nav button{flex:1;background:transparent;color:var(--dim);border:0;padding:6px 2px;font-size:18px;line-height:1}.mh-v30-nav button span{display:block;font-size:9px;margin-top:3px;font-weight:700}.mh-v30-nav button:active,.mh-v30-nav button:hover{color:#fff}.mh-v30-proj-grid{grid-template-columns:1fr 1fr 1fr}.mh-v30-tools{grid-template-columns:1fr 1fr}}
+@media(min-width:701px){.mh-v30-nav{display:flex;position:fixed;right:18px;bottom:18px;z-index:80;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px;gap:4px}.mh-v30-nav button{background:#21262d}.mh-v30-nav button span{font-size:10px;margin-left:4px}}
+
+.mh-v30-intel{margin:10px 0}.mh-v30-intel .mh-v30-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mh-v30-intel .mh-v30-kpis>div{background:#0d1117;border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center}.mh-v30-intel .mh-v30-kpis b{display:block;font-size:18px}.mh-v30-intel .mh-v30-kpis span{display:block;color:var(--dim);font-size:9px;margin-top:3px}.mh-v30-intel .mh-v30-kpis b.ok{color:var(--ok)}.mh-v30-intel .mh-v30-kpis b.warn{color:var(--warn)}.mh-v30-intel .mh-v30-kpis b.bad{color:var(--bad)}.mh-v30-intel-bar{height:7px;background:#202832;border-radius:999px;overflow:hidden;margin:10px 0 7px}.mh-v30-intel-bar i{display:block;height:100%;background:linear-gradient(90deg,#36b865,#e3b84c,#f85149)}.mh-v30-intel-note{font-size:10px;color:var(--dim);margin-bottom:9px}.mh-v30-intel details{border-top:1px solid var(--line);padding-top:9px}.mh-v30-intel details summary{font-size:12px;font-weight:700;cursor:pointer}.mh-v30-intel .al small{display:block;color:var(--dim);margin-top:4px}.mh-v30-intel .audit-empty{margin-top:8px}
+@media(max-width:600px){.mh-v30-intel .mh-v30-kpis{grid-template-columns:1fr 1fr}.mh-v30-intel .mh-v30-kpis>div:last-child{grid-column:1/-1}}
+
+/* V31.1.0 — THEME LIGHT FINAL OVERRIDE
+   Cette couche corrige les anciennes couches historiques qui imposaient des couleurs sombres en dur.
+   Elle ne modifie ni le moteur métier ni les données. */
+:root[data-theme="light"]{
+  --bg:#f5f7f9;--card:#ffffff;--card2:#f0f3f6;--line:#d0d7de;--txt:#1f2328;--dim:#57606a;
+  --acc:#1a7f37;--acc2:#116329;--blue:#0969da;--warn:#9a6700;--bad:#cf222e;--pur:#8250df;--ora:#bc4c00;
+  --shadow:0 8px 24px rgba(31,35,40,.10);
+  color-scheme:light;
+}
+:root[data-theme="light"] html,
+html[data-theme="light"]{background:#f5f7f9!important;color-scheme:light}
+:root[data-theme="light"] body{
+  background:#f5f7f9!important;color:#1f2328!important;
+}
+:root[data-theme="light"] header{
+  background:rgba(255,255,255,.94)!important;border-bottom-color:#d0d7de!important;box-shadow:0 4px 18px rgba(31,35,40,.08)!important;
+}
+:root[data-theme="light"] .card,
+:root[data-theme="light"] .home-card,
+:root[data-theme="light"] .dash-panel,
+:root[data-theme="light"] .activity-card,
+:root[data-theme="light"] .mh-plugin-card,
+:root[data-theme="light"] .mh-v30-card,
+:root[data-theme="light"] .mh-v30-dossier,
+:root[data-theme="light"] .mh-v30-proof,
+:root[data-theme="light"] .mh-v30-reconciliation,
+:root[data-theme="light"] .pay-sim-card,
+:root[data-theme="light"] .hero,
+:root[data-theme="light"] .hero-pro,
+:root[data-theme="light"] .pro-summary,
+:root[data-theme="light"] .security-box,
+:root[data-theme="light"] .mh-v30-sheet,
+:root[data-theme="light"] .mh-v30-dialog,
+:root[data-theme="light"] .mh-dashboard .card{
+  background:#ffffff!important;color:#1f2328!important;border-color:#d0d7de!important;box-shadow:var(--shadow)!important;
+}
+:root[data-theme="light"] .hero-pro,
+:root[data-theme="light"] .hero,
+:root[data-theme="light"] .pro-summary{
+  background:linear-gradient(145deg,#ffffff,#f4f7fa)!important;
+}
+:root[data-theme="light"] .stat-card,
+:root[data-theme="light"] .activity-day,
+:root[data-theme="light"] .mh-v30-proj-grid>div,
+:root[data-theme="light"] .mh-v30-intel .mh-v30-kpis>div,
+:root[data-theme="light"] .kpi,
+:root[data-theme="light"] .home-kpi,
+:root[data-theme="light"] .pz,
+:root[data-theme="light"] .cel,
+:root[data-theme="light"] .rec,
+:root[data-theme="light"] .audit-strip span,
+:root[data-theme="light"] .pro-grid>div,
+:root[data-theme="light"] .mh-v30-row,
+:root[data-theme="light"] .period-pill{
+  background:#f6f8fa!important;color:#1f2328!important;border-color:#d0d7de!important;
+}
+:root[data-theme="light"] .stat-card,
+:root[data-theme="light"] .activity-card,
+:root[data-theme="light"] .dash-panel{background:linear-gradient(145deg,#ffffff,#f6f8fa)!important}
+:root[data-theme="light"] .mh-v30-nav,
+:root[data-theme="light"] .fab,
+:root[data-theme="light"] .nav{
+  background:rgba(255,255,255,.96)!important;color:#1f2328!important;border-color:#d0d7de!important;box-shadow:0 -4px 18px rgba(31,35,40,.08)!important;
+}
+:root[data-theme="light"] .mh-v30-nav button,
+:root[data-theme="light"] .mh-v30-tools button,
+:root[data-theme="light"] .mh-v30-theme button,
+:root[data-theme="light"] .tabs button,
+:root[data-theme="light"] button.g{
+  background:#eef1f4!important;color:#1f2328!important;border-color:#c7cfd8!important;
+}
+:root[data-theme="light"] .mh-v30-nav button:hover,
+:root[data-theme="light"] .mh-v30-nav button:active{color:#0969da!important}
+:root[data-theme="light"] button.b{background:#eaf2ff!important;color:#0969da!important;border-color:#9ec5fe!important}
+:root[data-theme="light"] button.r{background:#fff0f0!important;color:#cf222e!important;border-color:#f2b8b8!important}
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea{
+  background:#ffffff!important;color:#1f2328!important;border-color:#c7cfd8!important;
+}
+:root[data-theme="light"] input::placeholder,
+:root[data-theme="light"] textarea::placeholder{color:#8c959f!important}
+:root[data-theme="light"] .mh-page-title,
+:root[data-theme="light"] .home-title,
+:root[data-theme="light"] .dash-greeting,
+:root[data-theme="light"] .section-head h2,
+:root[data-theme="light"] .panel-title,
+:root[data-theme="light"] .dash-kicker,
+:root[data-theme="light"] h1,
+:root[data-theme="light"] h3,
+:root[data-theme="light"] td,
+:root[data-theme="light"] th{color:#1f2328!important}
+:root[data-theme="light"] .section-head h2{color:#1f2328!important}
+:root[data-theme="light"] .mh-page-sub,
+:root[data-theme="light"] .dash-sub,
+:root[data-theme="light"] .home-date,
+:root[data-theme="light"] .home-muted,
+:root[data-theme="light"] .dash-muted,
+:root[data-theme="light"] .hero-caption,
+:root[data-theme="light"] .stat-card span,
+:root[data-theme="light"] .stat-card small,
+:root[data-theme="light"] .activity-day b,
+:root[data-theme="light"] .period-pill,
+:root[data-theme="light"] .text-action,
+:root[data-theme="light"] .mut,
+:root[data-theme="light"] label,
+:root[data-theme="light"] .mh-v30-intel-note,
+:root[data-theme="light"] .mh-v30-proj-note,
+:root[data-theme="light"] .mh-v30-reg small{color:#57606a!important}
+:root[data-theme="light"] .dash-logo{background:linear-gradient(145deg,#eef2f6,#ffffff)!important;border-color:#cbd3dc!important}
+:root[data-theme="light"] .dash-settings{background:#eef1f4!important;color:#1f2328!important}
+:root[data-theme="light"] .activity-day.work strong{color:#1a7f37!important}
+:root[data-theme="light"] .activity-day.night strong{color:#8250df!important}
+:root[data-theme="light"] .activity-day.leave strong{color:#9a6700!important}
+:root[data-theme="light"] .home-kpi.ok b,
+:root[data-theme="light"] .kpi b,
+:root[data-theme="light"] .mh-v30-intel .mh-v30-kpis b.ok{color:#1a7f37!important}
+:root[data-theme="light"] .home-kpi.warn b,
+:root[data-theme="light"] .kpi.warn b,
+:root[data-theme="light"] .mh-v30-intel .mh-v30-kpis b.warn{color:#9a6700!important}
+:root[data-theme="light"] .home-kpi.bad b,
+:root[data-theme="light"] .kpi.bad b,
+:root[data-theme="light"] .mh-v30-intel .mh-v30-kpis b.bad{color:#cf222e!important}
+:root[data-theme="light"] .cel.T{background:#e8f5ec!important;border-color:#9fd3ae!important}
+:root[data-theme="light"] .cel.RC{background:#eef0ff!important;border-color:#b8c0f5!important}
+:root[data-theme="light"] .cel.CP{background:#fff7dc!important;border-color:#e3c76b!important}
+:root[data-theme="light"] .cel.MAL{background:#fff0f0!important;border-color:#e8aaaa!important}
+:root[data-theme="light"] .cel.NUIT{background:#f3ecff!important;border-color:#c8a9ed!important}
+:root[data-theme="light"] tr.q{background:#e8f5ec!important}
+:root[data-theme="light"] tr.t{background:#eef1f4!important}
+:root[data-theme="light"] .al.w{background:#fff7dc!important;border-left-color:#9a6700!important;color:#7a5200!important}
+:root[data-theme="light"] .al.b{background:#fff0f0!important;border-left-color:#cf222e!important;color:#9b1c24!important}
+:root[data-theme="light"] .al.i{background:#eaf2ff!important;border-left-color:#0969da!important;color:#0754a5!important}
+:root[data-theme="light"] .al.k{background:#e8f5ec!important;border-left-color:#1a7f37!important;color:#176b31!important}
+:root[data-theme="light"] .al.p{background:#f3ecff!important;border-left-color:#8250df!important;color:#6334a3!important}
+:root[data-theme="light"] .danger-soft{background:#fff0f0!important;border-color:#e8aaaa!important;color:#9b1c24!important}
+:root[data-theme="light"] .dash-alert{background:#f6f8fa!important;border-color:#d0d7de!important;color:#1f2328!important}
+:root[data-theme="light"] .dash-ok{background:#e8f5ec!important;color:#176b31!important}
+:root[data-theme="light"] .audit-empty{background:#f6f8fa!important;border-color:#d0d7de!important;color:#57606a!important}
+:root[data-theme="light"] .mh-v30-menu,
+:root[data-theme="light"] .mh-v30-overlay,
+:root[data-theme="light"] .modal-bg{background:rgba(31,35,40,.35)!important}
+:root[data-theme="light"] .mh-v30-sheet-head{color:#1f2328!important}
+:root[data-theme="light"] .mh-v30-theme{border-color:#d0d7de!important}
+:root[data-theme="light"] .mh-v30-intel .mh-v30-kpis>div,
+:root[data-theme="light"] .mh-v30-proj-grid>div{box-shadow:none!important}
+:root[data-theme="light"] .dash-progress,
+:root[data-theme="light"] .mh-v30-intel-bar,
+:root[data-theme="light"] .bar,
+:root[data-theme="light"] .home-progress{background:#dfe5eb!important}
+:root[data-theme="light"] .hero-play{background:#eef1f4!important;border-color:#c7cfd8!important;color:#1f2328!important}
+:root[data-theme="light"] .pay-lines div,
+:root[data-theme="light"] .home-row{border-color:#d0d7de!important}
+:root[data-theme="light"] .mh-v30-timeline,
+:root[data-theme="light"] .mh-v30-timeline *{border-color:#d0d7de!important}
+
+</style>
+<script defer src="./scripts/app-v35-romi-bridge.js?v=36.2.0"></script>
+<script defer src="./scripts/app-v35-pa-analyse.js?v=36.2.0"></script>
+</head>
+<body><div id="mhSplash"><img src="./icon.svg" alt=""><b>MesHeures</b><span>Suivre aujourd’hui · anticiper demain</span></div>
+<header>
+<h1><img src="./icon.svg" class="mh-header-logo" alt="" width="24" height="24"> MesHeures <span id="mhVersion" class="mut" style="font-size:9px;font-weight:500">V36.2.0</span> <span id="hBadge" style="display:none" class="badge">!</span></h1>
+
+</header>
+<main>
+<section id="s-home" class="mh-dashboard on"></section>
+
+
+<section id="s-jour">
+<div class="nav">
+<button class="g" onclick="goDay(-1)">‹</button>
+<div class="lbl" id="dLbl"></div>
+<button class="g" onclick="goDay(1)">›</button>
+</div>
+<div class="card">
+<div class="chips" id="dType"></div>
+<div id="dWork"></div>
+<div style="margin-top:9px"><label>Note</label>
+<input id="dNote" maxlength="120" onchange="setD('note',this.value)" placeholder="Remarque, incident…"></div>
+</div>
+<div class="card"><h2>Résumé du jour</h2><div class="kpis" id="dKpi"></div><div id="dAl" style="margin-top:10px"></div></div>
+<div class="card"><h2>Quatorzaine en cours</h2><div id="dQuat"></div></div>
+<div class="card"><h2>Projection fin de période <span class="sub" id="dProjLbl"></span></h2><div id="dProj"></div></div>
+<div class="fab">
+<button class="g" onclick="goToday()">📅 Aujourd'hui</button>
+<button class="g" onclick="dupliConfirm()">📋 Copier veille</button>
+<button class="g danger-soft" onclick="clearDay()">🗑️ Effacer</button>
+<button class="g" onclick="mhPrint()">🖨️ Imprimer</button>
+</div>
+</section>
+
+<section id="s-mois">
+<div class="nav">
+<button class="g" onclick="goMonth(-1)">‹</button>
+<div class="lbl" id="mLbl"></div>
+<button class="g" onclick="goMonth(1)">›</button>
+</div>
+<div class="month-toolbar card">
+  <div class="month-toolbar-top"><div><span class="month-mini-label">SUIVI DU MOIS</span><strong id="mSummaryLine">—</strong></div><button class="g month-today" onclick="goTodayMonth()">Aujourd'hui</button></div>
+  <div class="month-modes" role="tablist" aria-label="Affichage du mois">
+    <button id="mModeCal" class="on" onclick="setMonthMode('calendar')">▦ Calendrier</button>
+    <button id="mModePlan" onclick="setMonthMode('planning')">☰ Planning</button>
+  </div>
+</div>
+<div class="card month-calendar-card"><div class="month-legend"><span><i class="lg-work"></i>Travail</span><span><i class="lg-leave"></i>CP</span><span><i class="lg-rest"></i>RC</span><span><i class="lg-alert"></i>Alerte</span></div><div class="cal" id="mCal"></div>
+<div class="mut month-help">Touchez une journée pour l'ouvrir · les totaux sont regroupés par semaine</div></div>
+<div class="card month-selected" id="mSelected"></div>
+<div class="card"><h2>Total du mois</h2><div class="kpis" id="mKpi"></div></div>
+<div class="card"><h2>Graphique TTE journalier</h2><div class="chart" id="mChart"></div></div>
+<div class="card"><h2>Dimanches, fériés et alertes du mois</h2><div id="mDim"></div></div>
+</section>
+
+<section id="s-paie">
+<div class="nav">
+<button class="g" onclick="goPer(-1)">‹</button>
+<div class="lbl" id="pLbl"></div>
+<button class="g" onclick="goPer(1)">›</button>
+</div>
+<div class="card">
+<div class="g2">
+<div><label>Début de période</label><input type="date" id="pS" onchange="DB.per.start=this.value;save();renderPay()"></div>
+<div><label>Nb de quatorzaines</label><input type="number" min="1" max="6" id="pN" onchange="DB.per.nb=+this.value;save();renderPay()"></div>
+</div>
+<div style="margin-top:9px" id="pAlign"></div>
+<button onclick="regPer()" style="margin-top:6px;width:100%">📌 Enregistrer dans l'audit</button>
+</div>
+<div class="card pay-sim-card" id="pSimCard"><div class="pay-sim-head"><div><span class="eyebrow">SIMULATION</span><h2>💶 Fiche de paie estimative</h2></div><span class="sim-badge">ESTIMATION</span></div><div id="pSim"></div><div class="sim-disclaimer">Simulation indicative — elle ne remplace pas votre bulletin de salaire.</div></div>
+<div class="card"><h2>KPIs</h2><div class="kpis" id="pKpi"></div></div>
+<div class="card"><h2>Détail quatorzaines</h2><div style="overflow-x:auto"><table id="pTab"></table></div></div>
+<div class="card"><h2>Anomalies <span class="sub" id="pAlCount"></span></h2><div id="pAl"></div></div>
+<div class="card"><h2>Brut estimé</h2><div style="overflow-x:auto"><table id="pBrut"></table></div>
+<div class="g2" style="margin-top:9px">
+<button class="g" onclick="copySum()">📋 Copier résumé</button>
+<button class="g" onclick="mhPrint()">🖨️ Imprimer</button>
+</div></div>
+<div class="card"><h2>Repos compensateur</h2>
+<div class="g2">
+<div><label>HS 25 % payées (h)</label><input type="number" step="0.01" id="pP25" onchange="setBul('p25',this.value)"></div>
+<div><label>HS 50 % payées (h)</label><input type="number" step="0.01" id="pP50" onchange="setBul('p50',this.value)"></div>
+</div>
+<div class="g2" style="margin-top:9px">
+<div><label>RC antérieur (h)</label><input type="number" step="0.01" id="pRC" onchange="setBul('rcOld',this.value)"></div>
+<div><label>RC bulletin (h)</label><input type="number" step="0.01" id="pRCA" onchange="setBul('rcAcq',this.value)"></div>
+</div>
+<div id="pRcOut" style="margin-top:9px"></div></div>
+<div class="card"><h2>Comparaison TTE bulletin</h2><div style="overflow-x:auto"><table id="pCmp"></table></div></div>
+</section>
+
+<section id="s-audit">
+<div class="card"><h2>Vue globale</h2><div class="kpis" id="aKpi"></div></div>
+<div class="card"><h2>Résumé annuel</h2><div style="overflow-x:auto"><table id="aAnn"></table></div></div>
+<div class="card"><h2>Périodes enregistrées</h2><div style="overflow-x:auto"><table id="aTab"></table></div></div>
+<div class="card"><h2>Dimanches & fériés travaillés</h2><div id="aFer"></div></div>
+<div class="card"><h2>Solde RC cumulé</h2><div id="aRc"></div></div>
+<div class="card"><h2>Anomalies critiques</h2><div id="aAl"></div></div>
+</section>
+
+<section id="s-bul">
+<div class="card">
+<h2>📄 Importer un bulletin de paie employeur</h2>
+<div class="al i" style="margin-bottom:10px">Importe ton bulletin PDF reçu de l'employeur. Le programme détecte automatiquement les écarts avec ses propres calculs.</div>
+<div style="margin-bottom:9px"><label>Fichier PDF bulletin de paie</label>
+<input type="file" accept=".pdf,application/pdf" id="fbul" onchange="parseBulFile(this.files[0])"></div>
+<label>ou coller le texte extrait ici</label>
+<textarea id="bulTxt" rows="5" placeholder="Colle le texte copié depuis le bulletin PDF…"></textarea>
+<button onclick="analyserBulletin()" style="margin-top:7px;width:100%">🔍 Analyser le bulletin</button>
+<div id="bulOut" style="margin-top:9px"></div>
+</div>
+<div class="card" id="bulResultCard" style="display:none">
+<h2>Résultat de l'analyse <span class="sub" id="bulMois"></span></h2><div id="bulStatus" class="bulletin-status"></div>
+<div class="kpis" id="bulKpi"></div>
+<div style="margin-top:10px;overflow-x:auto"><table id="bulTab"></table></div>
+<div id="bulAl" style="margin-top:10px"></div>
+</div>
+<div class="card">
+<h2>Historique des bulletins importés</h2>
+<div id="bulHist"></div>
+</div>
+</section>
+
+<section id="s-romi">
+<div class="card">
+<h2>📋 ROMI1 <span class="sub">Récap Mensuel Salarié — relevé officiel employeur</span></h2>
+<div class="al i" style="margin-bottom:10px">C'est le document le plus fiable de l'employeur (durée du travail, RC, ancienneté) — plus fiable que ton propre suivi.
+<b>Le ROMI1 reçu est un scan (impression → PDF), sans texte à l'intérieur.</b> Le moteur ROMI1 V36.2.0 conserve les valeurs du document source séparément des calculs MesHeures. L'OCR n'est utilisé qu'en secours.</div>
+<div style="margin-bottom:9px"><label>Photo ou PDF du ROMI1</label>
+<input type="file" accept=".pdf,application/pdf,image/*" id="fromi" onchange="parseRomiFile(this.files[0])"></div>
+<div id="romiOcrOut" style="margin-top:9px"></div>
+<details style="margin-top:9px"><summary class="mut" style="cursor:pointer">Texte brut lu par l'OCR (vérification)</summary>
+<textarea id="romiRawTxt" rows="6" readonly style="margin-top:7px"></textarea></details>
+<div class="g2" style="margin-top:9px">
+<div><label>Début de période</label><input type="date" id="rmStart"></div>
+<div><label>Fin de période</label><input type="date" id="rmEnd"></div>
+</div>
+<div class="grid" id="rmFields" style="margin-top:9px"></div>
+<button onclick="saveRomi()" style="margin-top:9px;width:100%">💾 Enregistrer ce relevé</button>
+<div id="romiOut" style="margin-top:9px"></div>
+</div>
+<div class="card" id="romiResultCard" style="display:none">
+<h2>Analyse <span class="sub" id="romiPerLbl"></span></h2>
+<div class="kpis" id="romiKpi"></div>
+<div id="romiAl" style="margin-top:10px"></div>
+</div>
+<div class="card"><h2>Historique des relevés ROMI1</h2><div id="romiHist"></div></div>
+</section>
+
+<section id="s-reg">
+<div class="card"><h2>Identité & contrat</h2>
+<div class="g2">
+<div><label>Prénom Nom</label><input id="rNom" placeholder="Mickael ROTH" onchange="DB.s.nom=this.value;save()"></div>
+<div><label>Date d'embauche</label><input type="date" id="rEmb" onchange="DB.s.emb=this.value;save();renderReg()"></div>
+</div>
+<div class="g2" style="margin-top:9px">
+<div><label>Ancienneté auto (calc.)</label><div id="rAncCalc" class="al i" style="margin:0;font-size:12px"></div></div>
+<div><label>Ancienneté prime (%)</label><input type="number" step="0.01" id="rAnc" onchange="DB.s.anc=+this.value;save()"></div>
+</div>
+</div>
+<div class="card"><h2>Tarifs</h2><div class="grid" id="rg1"></div></div>
+<div class="card"><h2>Quatorzaines & durées</h2>
+<div class="grid" id="rg2"></div>
+<div style="margin-top:9px"><label style="text-transform:none;font-size:14px;color:var(--txt)"><input type="checkbox" id="rMin" onchange="DB.s.min=this.checked;save();renderAll()"> TTE minimale 4h30 (si contrat)</label></div>
+</div>
+<div class="card"><h2>Paniers & habillage</h2><div class="grid" id="rg3"></div></div>
+<div class="card"><h2>Import AmbuTrack — PDF</h2>
+<div style="margin-bottom:8px"><label>Fichier PDF AmbuTrack</label>
+<input type="file" accept=".pdf,application/pdf" id="fpdf" onchange="parsePdfFile(this.files[0])"></div>
+<label>ou coller le texte ici</label>
+<textarea id="impTxt" rows="5" placeholder="Colle ici le texte copié depuis le PDF AmbuTrack…"></textarea>
+<button onclick="parsePDF()" style="margin-top:7px;width:100%">Importer le texte</button>
+<div id="impOut" style="margin-top:9px"></div>
+</div>
+<div class="card"><h2>Import AmbuTrack — Excel</h2>
+<input type="file" accept=".xlsx,.xls" id="fx" onchange="parseExcel(this.files[0])">
+</div>
+<div class="card"><h2>Sauvegarde JSON</h2>
+<div id="rBk" style="margin-bottom:9px"></div>
+<div class="row">
+<button class="g" onclick="expo()">⬇ Exporter</button>
+<button class="g" onclick="$('impJ').click()">⬆ Importer JSON</button>
+<input type="file" accept=".json" id="impJ" onchange="impo(this)" style="display:none">
+<button class="r" onclick="wipe()">🗑 Effacer tout</button>
+</div>
+</div>
+<div class="card plugin-manager"><div class="section-head"><h2>🧩 Extensions</h2><span class="period-pill">V36.2.0</span></div>
+<div class="al i">Ajoute des modules à MesHeures sans toucher au cœur de l’application. Les extensions importées sont isolées dans un cadre sécurisé et n’accèdent qu’aux données explicitement autorisées.</div>
+<div class="row" style="margin-bottom:10px"><button onclick="$('mhPluginFile').click()">➕ Installer .mhplugin</button><button class="g" onclick="mhPluginInfo()">ℹ️ Fonctionnement</button><button class="g" onclick="mhPluginExport()">⬇️ Export plugins</button><input id="mhPluginFile" type="file" accept=".mhplugin,application/json" onchange="mhImportPlugin(this)" style="display:none"></div>
+<div id="mhPluginList"></div>
+</div>
+<div class="card"><h2>Archive PDF pré-chargée</h2>
+<div class="al i">📦 <b>Mickael Roth — Ambulance de l'uby</b><br>19/05/2025 → 06/09/2026 · se charge automatiquement au 1er lancement.</div>
+<button class="g" onclick="loadArchive()" style="margin-top:8px;width:100%">🔄 Recharger l'archive</button>
+</div>
+</section>
+</main>
+
+<div class="modal-bg" id="dayMenuModal">
+<div class="modal day-menu-modal">
+<div class="day-menu-kicker">MESHEURES · JOURNÉE</div>
+<h3 id="dayMenuTitle">Journée</h3>
+<div id="dayMenuSummary" class="day-menu-summary"></div>
+<label>Date de destination</label>
+<input type="date" id="dayDupTarget">
+<div class="day-menu-actions">
+<button onclick="dayMenuAction('edit')">✏️ Modifier</button>
+<button class="g" onclick="dayMenuAction('detail')">📊 Voir le détail</button>
+<button class="g" onclick="dayMenuAction('duplicate')">📋 Dupliquer vers…</button>
+<button class="r" onclick="dayMenuAction('clear')">🗑️ Effacer</button>
+</div>
+<button class="g day-menu-close" onclick="closeModal('dayMenuModal')">Fermer</button>
+</div>
+</div>
+
+<div class="modal-bg" id="undoModal">
+<div class="modal">
+<h3>↩️ Annuler la dernière action ?</h3>
+<div id="undoDesc" style="margin-bottom:14px;color:var(--dim);font-size:13px"></div>
+<div class="row">
+<button onclick="doUndo()">Annuler l'action</button>
+<button class="g" onclick="closeModal('undoModal')">Garder</button>
+</div>
+</div>
+</div>
+
+<script defer src="./scripts/app-core.js?v=36.2.0"></script>
+<script defer src="./scripts/app-pwa.js?v=36.2.0"></script>
+<script defer src="./scripts/app-ui.js?v=36.2.0"></script>
+<script defer src="./scripts/specialized-reader.js?v=36.2.0"></script>
+<script defer src="./scripts/app-parser.js?v=36.2.0"></script>
+<script defer src="./scripts/app-plugins.js?v=36.2.0"></script>
+<script src="./vendor/pdfjs/pdf.min.js"></script>
+<script>
+if(window.pdfjsLib){
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc="./vendor/pdfjs/pdf.worker.min.js";
+}
+</script>
+<script defer src="./scripts/romi-master.js"></script>
+<script defer src="./scripts/app.js?v=36.2.0"></script>
+<script defer src="./scripts/app-pay.js?v=36.2.0"></script>
+<script defer src="./scripts/app-roadmap.js?v=36.2.0"></script>
+<script defer src="./scripts/app-projection.js?v=36.2.0"></script>
+<script defer src="./scripts/app-legal.js?v=36.2.0"></script>
+<script defer src="./scripts/app-backup.js?v=36.2.0"></script>
+<script defer src="./scripts/app-v31-4-smart.js?v=36.2.0"></script>
+<script defer src="./scripts/app-intelligence.js?v=36.2.0"></script>
+<script defer src="./scripts/app-evidence.js?v=36.2.0"></script>
+<script defer src="./scripts/app-dossier.js?v=36.2.0"></script>
+<script defer src="./scripts/app-reconciliation.js?v=36.2.0"></script>
+<script defer src="./scripts/app-hybrid.js?v=36.2.0"></script>
+<script defer src="scripts/app-v30.js?v=36.2.0"></script>
+<script defer src="scripts/app-v30-smart.js?v=36.2.0"></script>
+<script defer src="scripts/app-v31-home.js?v=36.2.0"></script>
+<script defer src="./scripts/app-v33-assistant.js?v=36.2.0"></script>
+<script defer src="./scripts/app-theme.js?v=36.2.0"></script>
+<script>(function(){var hide=function(){var s=document.getElementById('mhSplash');if(s)s.classList.add('off')};setTimeout(hide,300);setTimeout(hide,1000);})();</script>
+<script defer src="./scripts/app-v35-7-romi-reconciliation.js?v=36.2.0"></script>
+<script defer src="./scripts/app-v35-8-correction.js?v=36.2.0"></script>
+</body>
+</html>

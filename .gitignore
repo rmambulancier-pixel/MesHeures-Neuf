@@ -1,0 +1,12 @@
+# Android / Gradle
+.gradle/
+build/
+**/build/
+local.properties
+
+# APK générés
+*.apk
+*.aab
+
+# Backups temporaires de développement
+*.before-*

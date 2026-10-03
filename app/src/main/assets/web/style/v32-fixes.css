@@ -1,0 +1,152 @@
+/* MesHeures V32.2.1 — correctifs de lisibilité + formulaire « Nouvelle journée »
+   Chargé en dernier (après v30.css et v31-home.css).
+
+   Contexte :
+   1. En thème clair, plusieurs blocs gardaient leur fond sombre du thème nuit avec un texte
+      sombre hérité du thème clair (Analyse, Audit, barre « Repos » de Saisie). Ratio ≈ 1,1:1.
+   2. Le début de v30.css contient un commentaire mal fermé : ~230 règles situées après
+      (dont .mh302-*) ne sont jamais lues par le navigateur. Le formulaire « Nouvelle journée »
+      (bouton « + Ajouter une journée » de l'Accueil) s'affichait donc sans mise en forme.
+      Seules les règles de ce formulaire sont reprises ici, telles qu'elles étaient prévues.
+   Vérifié par un balayage automatique des ratios de contraste (WCAG AA, 4,5:1) sur tous les
+   onglets, en thème clair et sombre : qa/contrast-scan.py. */
+
+/* ---------- Formulaire « Nouvelle journée » ---------- */
+#mh302Fab{display:none!important} /* doublon de « + Ajouter une journée » (Accueil), rendu hors flux */
+.mh302-modal{position:fixed;inset:0;z-index:1000;display:none;background:#0009;backdrop-filter:blur(7px)}
+.mh302-modal.on{display:flex;align-items:flex-end}
+.mh302-sheet{width:100%;max-width:760px;margin:0 auto;padding:17px 15px calc(20px + env(safe-area-inset-bottom));border-radius:23px 23px 0 0;background:#111920;border:1px solid #2c3944;color:#edf3f8}
+.mh302-sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.mh302-sheet-head small,.mh302-sheet-head b{display:block}
+.mh302-sheet-head small{font-size:10px;letter-spacing:1px;color:#93a1ab}
+.mh302-sheet-head b{margin-top:3px;font-size:18px}
+.mh302-sheet-head button{width:40px!important;min-height:40px!important;padding:0!important;border-radius:50%!important}
+.mh302-sheet label{display:block;margin:8px 0;font-size:11px;color:#93a1ab}
+.mh302-sheet input{width:100%;margin-top:4px;font-size:16px}
+.mh302-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mh302-save{width:100%;margin-top:8px;min-height:48px!important}
+:root[data-theme="light"] .mh302-sheet{background:#fff;border-color:#d0d7de;color:#1f2328}
+:root[data-theme="light"] .mh302-sheet-head small,:root[data-theme="light"] .mh302-sheet label{color:#57606a}
+
+/* ---------- Boutons « actifs » : blanc sur vert #1aaf5d = 2,9:1, insuffisant (les deux thèmes) ---------- */
+section:not(.mh-dashboard) .chips button.on,
+.month-modes button.on,
+.tabs button.on,
+.mh30-typebar button.on,
+.mh30-meal button.on,
+:root[data-theme="light"] .month-modes button.on{background:#15803d!important;border-color:#15803d!important;color:#fff!important}
+
+/* ---------- Thème sombre : quelques gris à 4,0 à 4,4:1 remontés à 4,5:1 ---------- */
+html:root:not([data-theme="light"]){--dim:#9ba5b0;--bad:#ff7b72}
+:root:not([data-theme="light"]) .month-calendar-card .day-secondary,
+:root:not([data-theme="light"]) .week-total span,
+:root:not([data-theme="light"]) .week-total small{color:#8f9daa}
+:root:not([data-theme="light"]) .selected-day-head span{color:#8ea3b3}
+
+/* ---------- Thème clair ---------- */
+:root[data-theme="light"],html:root[data-theme="light"]{--warn:#845000;--mh-light-warn:#845000;--mh-light-purple:#6b3fc4;--mh-light-bad:#b4232b}
+
+/* Analyse (Centre de pilotage) : cartes sombres + texte sombre */
+:root[data-theme="light"] .mh30-card,
+:root[data-theme="light"] .mh30-today,
+:root[data-theme="light"] .mh30-period,
+:root[data-theme="light"] .mh30-next,
+:root[data-theme="light"] .mh30-stat,
+:root[data-theme="light"] .mh30-day-summary>div{background:#fff!important;border:1px solid #d0d7de!important;color:#1f2328!important;box-shadow:0 1px 2px rgba(31,35,40,.06)}
+:root[data-theme="light"] .mh30-cardtitle,
+:root[data-theme="light"] .mh30-cardtitle span,
+:root[data-theme="light"] .mh30-cardtitle b,
+:root[data-theme="light"] .mh30-stat b,
+:root[data-theme="light"] .mh30-day-summary b{color:#1f2328!important}
+:root[data-theme="light"] .mh30-cardtitle small,
+:root[data-theme="light"] .mh30-stat span,
+:root[data-theme="light"] .mh30-stat small,
+:root[data-theme="light"] .mh30-day-summary span,
+:root[data-theme="light"] .mh30-period-foot,
+:root[data-theme="light"] .mh30-period-foot span,
+:root[data-theme="light"] .mh30-bars span,
+:root[data-theme="light"] .mh30-pagehead p,
+:root[data-theme="light"] .mh30-empty,
+:root[data-theme="light"] .mh30-ok{color:#57606a!important}
+:root[data-theme="light"] .mh30-stat b.bad{color:#b4232b!important}
+:root[data-theme="light"] .mh30-kicker{color:#1a7f37!important}
+:root[data-theme="light"] .mh30-progress{background:#dde3e8}
+:root[data-theme="light"] .mh30-alert{color:#1f2328!important}
+:root[data-theme="light"] .mh30-alert.warn{background:#fff8e6!important;border:1px solid #e5c85b!important}
+:root[data-theme="light"] .mh30-alert.bad{background:#fff0ef!important;border:1px solid #f2a7a2!important}
+:root[data-theme="light"] .mh30-alert-btn{background:#fff!important;border:1px solid #d0d7de!important;color:#1f2328!important}
+:root[data-theme="light"] .mh30-alert-btn b{color:#1f2328!important}
+:root[data-theme="light"] .mh30-alert-btn span{color:#57606a!important}
+:root[data-theme="light"] .mh30-tools button{background:#fff!important;border:1px solid #d0d7de!important;color:#1f2328!important}
+
+/* Audit : sections repliables sombres */
+:root[data-theme="light"] section:not(.mh-dashboard) details{background:#fff!important;border-color:#d0d7de!important;color:#1f2328!important}
+:root[data-theme="light"] section:not(.mh-dashboard) details>summary{color:#1f2328!important}
+:root[data-theme="light"] section:not(.mh-dashboard) details>summary.mut{color:#57606a!important}
+:root[data-theme="light"] .audit-health span,
+:root[data-theme="light"] .audit-health small{color:#57606a!important}
+
+/* Saisie : barre d'état du jour (« Repos ») et sélecteurs en pilule */
+:root[data-theme="light"] .day-state{background:#f6f8fa;border-color:#d0d7de}
+:root[data-theme="light"] .day-state.mut{background:#eef1f4!important;color:#57606a!important}
+:root[data-theme="light"] section:not(.mh-dashboard) .chips{background:#eef1f4;border-color:#d0d7de}
+:root[data-theme="light"] .mh30-typebar button{background:#fff!important;color:#57606a!important;border-color:#d0d7de!important}
+:root[data-theme="light"] .mh30-meal button{background:#fff!important;color:#57606a!important;border-color:#d0d7de!important}
+
+/* Mois */
+:root[data-theme="light"] .month-calendar-card .cal .h,
+:root[data-theme="light"] .cal .h,
+:root[data-theme="light"] .selected-day-head span,
+:root[data-theme="light"] .selected-day-body small,
+:root[data-theme="light"] .week-total span,
+:root[data-theme="light"] .week-total small{color:#57606a!important}
+:root[data-theme="light"] .selected-day-body em{color:#b4232b}
+:root[data-theme="light"] .selected-day-body em.ok{color:#1a7f37}
+:root[data-theme="light"] .day-alert-dot{background:#ffebe9;color:#b4232b}
+
+/* Paie */
+:root[data-theme="light"] .pay-sim-net strong{color:#14622a}
+:root[data-theme="light"] .pay-sim-net span{color:#31533b}
+:root[data-theme="light"] .pay-sim-total span,
+:root[data-theme="light"] .pay-sim-grid span,
+:root[data-theme="light"] .sim-disclaimer{color:#57606a!important}
+
+/* Bandeaux de page */
+:root[data-theme="light"] .mh-page-kicker{color:#57606a}
+:root[data-theme="light"] .mh-page-sub{color:#57606a}
+
+/* Saisie : la barre d'actions fixe (Aujourd'hui, Copier veille, Effacer, Imprimer) masquait ~67 px
+   du bas de la page (dernière carte « Projection fin de période » inaccessible). */
+#s-jour{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+
+/* V33.1.1 — CONTRASTE CLAIR FINAL */
+:root[data-theme="light"] #s-paie,
+:root[data-theme="light"] #s-paie .card,
+:root[data-theme="light"] #s-paie .mh-v30-card,
+:root[data-theme="light"] #s-paie .mh-v30-row,
+:root[data-theme="light"] #s-paie .mh-v30-proof,
+:root[data-theme="light"] #s-paie .mh-v30-reconciliation{
+  color:#1f2328!important;
+}
+:root[data-theme="light"] #s-paie .mut,
+:root[data-theme="light"] #s-paie small,
+:root[data-theme="light"] #s-paie label,
+:root[data-theme="light"] #s-paie .mh-v30-intel-note,
+:root[data-theme="light"] #s-paie .mh-v30-intel span,
+:root[data-theme="light"] #s-paie .mh-v30-intel small{
+  color:#57606a!important;
+}
+:root[data-theme="light"] #s-paie .mh-v30-intel .kpi b,
+:root[data-theme="light"] #s-paie .mh-v30-stat b,
+:root[data-theme="light"] #s-paie .pay-big,
+:root[data-theme="light"] #s-paie .home-value{
+  color:#1f2328!important;
+}
+:root[data-theme="light"] #s-paie .mh-v30-intel .kpi.warn b{color:#7a4b00!important}
+:root[data-theme="light"] #s-paie .mh-v30-intel .kpi.bad b{color:#b4232b!important}
+:root[data-theme="light"] #s-paie table th{
+  color:#57606a!important;background:#f8fafc!important;
+}
+:root[data-theme="light"] #s-paie table td{
+  color:#1f2328!important;background:#fff!important;border-color:#d0d7de!important;
+}

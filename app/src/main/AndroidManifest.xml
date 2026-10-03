@@ -1,0 +1,28 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ <uses-permission android:name="android.permission.INTERNET" />
+ <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+ <application android:theme="@style/Theme.MesHeures" android:enableOnBackInvokedCallback="true" android:hardwareAccelerated="true" android:name=".MesHeuresApplication" android:label="MesHeures" android:icon="@drawable/icon_512" android:allowBackup="true" android:supportsRtl="true" android:usesCleartextTraffic="false">
+  <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop">
+   <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+  </activity>
+  <activity android:name=".nativeui.NativeDashboardActivity" android:exported="false"/>
+  <provider android:name="androidx.core.content.FileProvider" android:authorities="com.mesheures.app.fileprovider" android:exported="false" android:grantUriPermissions="true">
+   <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/>
+  </provider>
+  <receiver android:name=".widget.MhWidgetProvider" android:exported="true" android:label="MesHeures">
+   <intent-filter>
+    <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+    <action android:name="com.mesheures.app.widget.REFRESH"/>
+   </intent-filter>
+   <meta-data android:name="android.appwidget.provider" android:resource="@xml/mh_widget_info"/>
+  </receiver>
+     <activity
+        android:name=".LegacyWebViewActivity"
+        android:exported="false"
+        android:label="MesHeures — ancienne interface" />
+    <activity
+        android:name=".migration.NativeMigrationActivity"
+        android:exported="false"
+        android:label="Migration MesHeures" />
+</application>
+</manifest>

@@ -1,0 +1,12 @@
+<resources>
+    <color name="widget_bg">#8A070B10</color>
+    <color name="widget_text_primary">#FFFFFF</color>
+    <color name="widget_text_secondary">#E1E7EE</color>
+    <color name="widget_text_muted">#AAB4BF</color>
+    <color name="widget_border">#45E6EDF3</color>
+    <color name="widget_ok">#3FB950</color>
+    <color name="widget_warn">#F0B429</color>
+    <color name="widget_bad">#FF6B64</color>
+    <color name="widget_unknown">#8B949E</color>
+    <color name="widget_accent">#3FB950</color>
+</resources>

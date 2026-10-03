@@ -1,0 +1,23 @@
+{
+  "name": "MesHeures",
+  "short_name": "MesHeures",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "description": "Suivi professionnel des heures, paie, audit et extensions pour ambulanciers",
+  "version": "36.2.0"
+}
