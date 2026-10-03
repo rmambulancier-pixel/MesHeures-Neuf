@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const V = '36.0.0';
+  const V = '36.2.0';
 
   function getDays() {
     return window.DB?.days || {};

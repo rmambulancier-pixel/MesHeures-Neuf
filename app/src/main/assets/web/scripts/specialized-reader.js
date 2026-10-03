@@ -6,9 +6,9 @@
 'use strict';
 
 const PDF_W=595.32, PDF_H=841.92, SCALE=4;
-const TESS=(_mhLibSrc&&_mhLibSrc.tesseractWorker)||'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js';
-const CORE=(_mhLibSrc&&_mhLibSrc.tesseractCore)||'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1';
-const LANG=(_mhLibSrc&&_mhLibSrc.tesseractLang)||'https://tessdata.projectnaptha.com/4.0.0';
+const TESS=(_mhLibSrc&&_mhLibSrc.tesseractWorker)||'vendor/tesseract/worker.min.js';
+const CORE=(_mhLibSrc&&_mhLibSrc.tesseractCore)||'vendor/tesseract/core';
+const LANG=(_mhLibSrc&&_mhLibSrc.tesseractLang)||'vendor/tesseract/lang';
 
 function num(v){
   const s=String(v==null?'':v).replace(/\s+/g,'').replace(/,/g,'.');

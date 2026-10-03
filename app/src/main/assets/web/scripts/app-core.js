@@ -42,12 +42,12 @@ const esc=s=>s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g
 // Maintenant : chargées une seule fois, seulement quand une fonction en a besoin.
 const _mhLibCache={};
 const _mhLibSrc={
-  xlsx:'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
-  pdf:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js',
-  tesseract:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
-  tesseractWorker:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
-  tesseractCore:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
-  tesseractLang:'https://tessdata.projectnaptha.com/4.0.0'
+  xlsx:'vendor/xlsx/xlsx.full.min.js',
+  pdf:'vendor/pdfjs/pdf.min.js',
+  tesseract:'vendor/tesseract/tesseract.min.js',
+  tesseractWorker:'vendor/tesseract/worker.min.js',
+  tesseractCore:'vendor/tesseract/core',
+  tesseractLang:'vendor/tesseract/lang'
 };
 function mhLoadLib(name){
   if(_mhLibCache[name])return _mhLibCache[name];

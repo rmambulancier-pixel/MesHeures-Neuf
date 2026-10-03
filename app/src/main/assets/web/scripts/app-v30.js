@@ -5,7 +5,7 @@
 (function(){
   'use strict';
 
-  const V='36.0.0';
+  const V='36.2.0';
   const SECTIONS=['home','jour','mois','paie','analyse','audit','bul','romi','reg'];
   const q=s=>document.querySelector(s);
   const el=id=>document.getElementById(id);
@@ -345,8 +345,8 @@
   function boot(){
     if(booted)return; booted=true;
     document.documentElement.dataset.mhVersion=V;
-    if($('mhVersion'))$('mhVersion').textContent='V36.0.0';
-    document.title='MesHeures V36.0.0';
+    if($('mhVersion'))$('mhVersion').textContent='V36.2.0';
+    document.title='MesHeures V36.2.0';
     patchSave();
     if(window.__mh30PendingRefresh){ const pending=window.__mh30PendingRefresh; delete window.__mh30PendingRefresh; schedule(pending); }
     /* V30 est l’unique propriétaire du runtime. */
@@ -397,7 +397,7 @@
 
 
 'use strict';
-const PDF_V='36.0.0';
+const PDF_V='36.2.0';
 function ascii(s){return String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'?')}
 function esc(s){return ascii(s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)')}
 function snapshot(){return {format:'MesHeures Probatory Dossier',version:PDF_V,createdAt:new Date().toISOString(),data:JSON.parse(JSON.stringify(window.DB||{}))}}

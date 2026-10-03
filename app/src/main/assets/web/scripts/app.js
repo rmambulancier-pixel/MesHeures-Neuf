@@ -317,7 +317,7 @@ const RG={
 /* ═══════════════════════════════════════════════
    PARSEUR BULLETIN EMPLOYEUR — v2 corrigé
 ═══════════════════════════════════════════════ */
-const PDF_WORKER='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.worker.min.js';
+const PDF_WORKER='vendor/pdfjs/pdf.worker.min.js';
 let _wset=false;
 
 
