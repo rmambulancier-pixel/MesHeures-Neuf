@@ -216,6 +216,65 @@ public final class LegacyWebViewActivity extends ComponentActivity {
         public boolean finishBinaryFileExport() {
             return finishExport();
         }
+
+        /* MH NATIVE PRINT — impression via android.print.PrintManager.
+         * Le web appelle ce pont dès qu'il existe (app-roadmap.js, app-dossier.js,
+         * app-v33-assistant.js) ; sans lui, il retombe sur window.open()+print(),
+         * qui ne crée pas de vraie fenêtre (multi-fenêtres jamais activé côté
+         * WebView) et se contente de remplacer l'app en place — jamais un vrai PDF.
+         */
+        @JavascriptInterface
+        public void printHtml(String html) {
+            if (html == null) return;
+            runOnUiThread(() -> startPrintJob(html));
+        }
+    }
+
+    private WebView printWebView;
+
+    private void startPrintJob(String html) {
+        try {
+            WebView pw = new WebView(this);
+            printWebView = pw; // référence forte : évite le GC pendant le job d'impression
+            pw.getSettings().setJavaScriptEnabled(false);
+            pw.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    android.print.PrintManager printManager =
+                            (android.print.PrintManager) getSystemService(PRINT_SERVICE);
+                    if (printManager == null) {
+                        Toast.makeText(
+                                LegacyWebViewActivity.this,
+                                "Impression indisponible sur cet appareil",
+                                Toast.LENGTH_LONG
+                        ).show();
+                        return;
+                    }
+                    String jobName = "MesHeures-Document";
+                    android.print.PrintDocumentAdapter adapter =
+                            view.createPrintDocumentAdapter(jobName);
+                    android.print.PrintAttributes attrs =
+                            new android.print.PrintAttributes.Builder()
+                                    .setMediaSize(
+                                            android.print.PrintAttributes.MediaSize.ISO_A4
+                                                    .asLandscape()
+                                    )
+                                    .setColorMode(
+                                            android.print.PrintAttributes.COLOR_MODE_MONOCHROME
+                                    )
+                                    .build();
+                    printManager.print(jobName, adapter, attrs);
+                }
+            });
+            pw.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+        } catch (Exception e) {
+            android.util.Log.e("MesHeuresPrint", "printHtml", e);
+            Toast.makeText(
+                    this,
+                    "Impression impossible : " + e.getMessage(),
+                    Toast.LENGTH_LONG
+            ).show();
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -416,6 +475,10 @@ public final class LegacyWebViewActivity extends ComponentActivity {
     protected void onDestroy() {
         if (web != null) {
             web.destroy();
+        }
+        if (printWebView != null) {
+            printWebView.destroy();
+            printWebView = null;
         }
         super.onDestroy();
     }
