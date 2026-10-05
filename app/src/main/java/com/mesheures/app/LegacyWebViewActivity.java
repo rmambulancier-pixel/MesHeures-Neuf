@@ -228,6 +228,30 @@ public final class LegacyWebViewActivity extends ComponentActivity {
             if (html == null) return;
             runOnUiThread(() -> startPrintJob(html));
         }
+
+        /* MH WIDGET BRIDGE — le web appelle updateWidgetData(json) à chaque
+         * rafraîchissement (app-pwa.js, app-v33-assistant.js) en s'attendant à
+         * ce que ce pont existe. Sans lui, le JSON n'est jamais écrit dans les
+         * SharedPreferences que MhWidgetProvider lit — le widget reste figé sur
+         * sa dernière valeur connue (ou une valeur par défaut), quelle que soit
+         * la fréquence à laquelle Android déclenche son cycle de 30 minutes :
+         * onUpdate() n'a jamais rien de neuf à afficher.
+         */
+        @JavascriptInterface
+        public void updateWidgetData(String json) {
+            if (json == null) return;
+            try {
+                getSharedPreferences(
+                        com.mesheures.app.widget.MhWidgetProvider.PREFS,
+                        MODE_PRIVATE
+                ).edit()
+                        .putString(com.mesheures.app.widget.MhWidgetProvider.KEY_PAYLOAD, json)
+                        .apply();
+                com.mesheures.app.widget.MhWidgetProvider.refreshAll(LegacyWebViewActivity.this);
+            } catch (Exception e) {
+                android.util.Log.e("MesHeuresWidget", "updateWidgetData", e);
+            }
+        }
     }
 
     private WebView printWebView;

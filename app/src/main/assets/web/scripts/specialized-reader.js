@@ -385,6 +385,25 @@ function bulletinLineMatch(lines,patterns){
   return null;
 }
 
+function bulletinRowNumbers(lines,patterns){
+  const anchor=bulletinLineMatch(lines,patterns);
+  if(!anchor)return [];
+
+  const ac=(Number(anchor.y0||0)+Number(anchor.y1||0))/2;
+  const ah=Math.max(Number(anchor.y1||0)-Number(anchor.y0||0),1);
+  const tol=Math.max(4,ah*0.9);
+
+  const row=lines
+    .filter(l=>{
+      if(Number(l.page||1)!==Number(anchor.page||1))return false;
+      const c=(Number(l.y0||0)+Number(l.y1||0))/2;
+      return Math.abs(c-ac)<=tol;
+    })
+    .sort((a,b)=>Number(a.x0||0)-Number(b.x0||0));
+
+  return bulletinNumbers(row.map(l=>String(l.text||'')).join(' '));
+}
+
 function bulletinFirstNumber(lines,patterns){
   const line=bulletinLineMatch(lines,patterns);
   if(!line)return null;
@@ -571,10 +590,55 @@ async function readBulletin(file,lib){
       ? bulletinNumbers(String(hs50.text).replace(/^.*?50 ?%/i,'')).shift() ?? null
       : null;
 
-    const habillage=bulletinFirstNumber(
+    const habillageAnchor=bulletinLineMatch(
       lines,
       [/^indemnite d'habillage et de deshabillage\b/]
     );
+
+    const habillageNums=bulletinRowNumbers(
+      lines,
+      [/^indemnite d'habillage et de deshabillage\b/]
+    );
+
+    const habillage=habillageNums[0] ?? null;
+    const habillageRate=habillageNums[1] ?? null;
+
+    /*
+     * Le montant "A payer" peut être séparé du libellé par Tesseract.
+     * On recherche donc les nombres proches verticalement, dans la
+     * partie droite du tableau, puis on prend le candidat le plus
+     * proche de la colonne A payer.
+     */
+    let habillageEur=null;
+    if(habillageAnchor){
+      const ac=(Number(habillageAnchor.y0||0)+Number(habillageAnchor.y1||0))/2;
+      const pageLines=lines.filter(l=>Number(l.page||1)===Number(habillageAnchor.page||1));
+
+      const candidates=[];
+      for(const l of pageLines){
+        const cy=(Number(l.y0||0)+Number(l.y1||0))/2;
+        const dx=Number(l.x0||0)-Number(habillageAnchor.x1||0);
+
+        if(Math.abs(cy-ac)>28)continue;
+        if(dx<70)continue;
+
+        const nums=bulletinNumbers(String(l.text||''));
+        for(const n of nums){
+          if(n==null)continue;
+          candidates.push({
+            n,
+            x:Number(l.x0||0),
+            y:cy,
+            dx
+          });
+        }
+      }
+
+      if(candidates.length){
+        candidates.sort((a,b)=>b.x-a.x);
+        habillageEur=candidates[0].n;
+      }
+    }
 
     const amplitude=bulletinFirstNumber(
       lines,
@@ -719,6 +783,8 @@ async function readBulletin(file,lib){
       ancienneteTxt:anciennete!=null ? anciennete+' ans' : null,
 
       habH:habillage,
+      habillageRate:habillageRate,
+      habillageEur:habillageEur,
 
       irN:repas,
       iruN:repasUnique,

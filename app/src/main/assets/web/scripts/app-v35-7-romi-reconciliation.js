@@ -84,6 +84,45 @@
 
   function getRomi(){return records()[0]||null}
   function rv(r,...keys){for(const k of keys){const n=num(r?.[k]);if(n!=null)return n}return null}
+  const isoMonth=s=>/^\d{4}-\d{2}$/.test(String(s||''))?s:'';
+
+  /*
+   * Rapprochement ROMI1 ↔ bulletin de paie (V37) :
+   * seul ROMI1 connaît la distinction éligible/payée/convertie en RC et le
+   * taux de prime d'ancienneté ; seul le bulletin montre ce qui a vraiment
+   * été payé en euros. Aucun des deux rapprochements existants (ROMI1 vs
+   * calcul MesHeures, calcul MesHeures vs bulletin) ne les mettait face à
+   * face — c'est ce que ce bloc ajoute, en lecture seule, sans rien deviner.
+   */
+  function monthRange(start,end){
+    const out=[];
+    const a=String(start||'').slice(0,7), b=String(end||'').slice(0,7);
+    if(!/^\d{4}-\d{2}$/.test(a)||!/^\d{4}-\d{2}$/.test(b))return out;
+    let y=Number(a.slice(0,4)),m=Number(a.slice(5,7));
+    const ey=Number(b.slice(0,4)),em=Number(b.slice(5,7));
+    for(let guard=0;guard<240;guard++){
+      out.push(String(y).padStart(4,'0')+'-'+String(m).padStart(2,'0'));
+      if(y===ey&&m===em)break;
+      m++;
+      if(m>12){m=1;y++;}
+      if(y>ey||(y===ey&&m>em))break;
+    }
+    return out;
+  }
+
+  function getBulletins(r){
+    try{
+      const list=Array.isArray(DB?.bulletins)?DB.bulletins:[];
+      if(!list.length)return [];
+      const months=monthRange(r.start,r.end);
+      return list
+        .filter(b=>months.includes(isoMonth(b?.mois)))
+        .sort((a,b)=>String(a?.mois||'').localeCompare(String(b?.mois||'')));
+    }catch(e){return []}
+  }
+  const hDelta=(a,b)=>a==null||b==null?null:Math.round((a-b)*100)/100;
+  const hClass=(d,tol)=>d==null?'':Math.abs(d)<=tol?'ok':'bad';
+  const eur=v=>v==null?'—':Number(v).toFixed(2).replace('.',',')+' €';
 
   function calcExact(r){
     if(!r)return null;
@@ -91,7 +130,7 @@
     let tte=0,presence=0,amp=0,pauses=0,alerts=0;
     const rows=[];
     for(let k=r.start;k<=r.end;k=addD(k,1)){
-      const d=window.DB?.days?.[k];
+      const d=DB?.days?.[k];
       const work=d?.t==='T'||d?.t==='NUIT'||d?.work;
       let x=null;
       try{
@@ -141,7 +180,32 @@
       ['HS période','h',local.hs,hToMin(romi.hsH)],
       ['Jours de présence','j',local.presence,romi.presence]
     ].map(([label,unit,l,s])=>({label,unit,local:l,source:s,delta:delta(l,s)}));
-    return {status:'ok',r,local,romi,checks,bad:checks.filter(x=>x.delta!=null&&Math.abs(x.delta)>TOL_MIN)};
+    const bulletins=getBulletins(r);
+    const singleMonth=String(r.start||'').slice(0,7)===String(r.end||'').slice(0,7);
+
+    const bulletinChecks=singleMonth&&bulletins[0]?[
+      ['HS 125 % payées','h',rv(r,'hs125PayeesH'),num(bulletins[0].hs25H)],
+      ['HS 150 % payées','h',rv(r,'hs150PayeesH'),num(bulletins[0].hs50H)],
+      ['Habillage / Déshabillage','eur',rv(r,'habillageEur'),num(bulletins[0].habillageEur)]
+    ].map(([label,unit,romiV,bulV])=>({
+      label,unit,romi:romiV,bulletin:bulV,delta:hDelta(romiV,bulV)
+    })):[ ];
+
+    const seniorityPct=rv(r,'seniorityPct');
+    const seniorityFlags=(seniorityPct!=null&&seniorityPct>0)
+      ?bulletins.map(b=>({
+        mois:b?.mois||'',
+        seniorityPct,
+        primeOnBulletin:num(b?.prime),
+        missing:num(b?.prime)==null||num(b?.prime)===0
+      }))
+      :[];
+
+    const hs125ToRc=rv(r,'hs125ToRcH')||0, hs150ToRc=rv(r,'hs150ToRcH')||0;
+    const rcConversion=(hs125ToRc>0.01||hs150ToRc>0.01)?{hs125ToRc,hs150ToRc}:null;
+
+    return {status:'ok',r,local,romi,checks,bad:checks.filter(x=>x.delta!=null&&Math.abs(x.delta)>TOL_MIN),
+      bulletins,bulletinChecks,singleMonth,seniorityFlags,rcConversion};
   }
 
   function render(){
@@ -161,6 +225,17 @@
       </tbody></table></div>
       <div style="margin-top:10px"><div class="al i">ROMI1 : TTE <b>${hh(b.romi.tteH)}</b> · HS <b>${hh(b.romi.hsH)}</b> · RC acquis employeur <b>${hh(b.romi.rcAcqH)}</b> · RC cumulé employeur <b>${hh(b.romi.rcCumH)}</b>.</div></div>
       <details style="margin-top:10px"><summary><b>HS ROMI1 — détail employeur</b></summary><p class="mut">125 % : ${hh(b.romi.hs125EligH)} éligibles · ${hh(b.romi.hs125PayH)} payées. 150 % : ${hh(b.romi.hs150EligH)} éligibles · ${hh(b.romi.hs150PayH)} payées.</p></details>
+      ${b.bulletins.length?`<details style="margin-top:10px" open><summary><b>🧾 Rapprochement ROMI1 ↔ bulletins (${b.bulletins.map(x=>esc(x.mois||'')).join(' · ')})</b></summary>
+        ${!b.singleMonth?`<div class="al w" style="margin-top:8px"><b>Période ROMI1 multi-mois</b><br><small>La période ${esc(b.r.start)} → ${esc(b.r.end)} chevauche plusieurs bulletins mensuels. Les valeurs ROMI1 couvrent toute la période et ne peuvent pas être soustraites directement à chaque bulletin mensuel complet. Les bulletins sont donc affichés comme références, sans fabriquer d'écart mensuel.</small></div>`:''}
+        ${b.singleMonth&&b.bulletinChecks.length?`<div style="overflow:auto;margin-top:8px"><table><thead><tr><th>Poste</th><th class="n">ROMI1</th><th class="n">Bulletin</th><th class="n">Écart</th></tr></thead><tbody>
+        ${b.bulletinChecks.map(x=>{const fmt=v=>v==null?'—':hh(v);const cls=hClass(x.delta,0.05);const dStr=x.delta==null?'—':(x.delta>0?'+':'')+x.delta.toFixed(2).replace('.',',')+' h';return `<tr><td>${esc(x.label)}</td><td class="n">${fmt(x.romi)}</td><td class="n">${fmt(x.bulletin)}</td><td class="n ${cls}">${dStr}</td></tr>`}).join('')}
+        </tbody></table></div>`:''}
+        <div style="overflow:auto;margin-top:8px"><table><thead><tr><th>Mois</th><th class="n">HS 125 %</th><th class="n">HS 150 %</th><th class="n">Habillage</th><th class="n">Prime ancienneté</th></tr></thead><tbody>
+        ${b.bulletins.map(bul=>`<tr><td>${esc(bul.mois||'—')}</td><td class="n">${hh(num(bul.hs25H))}</td><td class="n">${hh(num(bul.hs50H))}</td><td class="n">${hh(num(bul.habH))}${num(bul.habillageEur)!=null?' · '+eur(num(bul.habillageEur)):''}</td><td class="n">${eur(num(bul.prime))}</td></tr>`).join('')}
+        </tbody></table></div>
+        ${b.seniorityFlags.length?b.seniorityFlags.map(f=>`<div class="al ${f.missing?'w':'k'}" style="margin-top:8px"><b>Prime d'ancienneté — ${esc(f.mois)}</b><br><small>Taux enregistré dans ROMI1 : ${f.seniorityPct}%. ${f.missing?'Absente ou nulle sur ce bulletin — à vérifier.':'Montant présent sur le bulletin : '+eur(f.primeOnBulletin)+'.'}</small></div>`).join(''):''}
+        ${b.rcConversion?`<div class="al w" style="margin-top:8px"><b>⚠️ Conversion HS → RC à vérifier</b><br><small>${b.rcConversion.hs125ToRc>0?hh(b.rcConversion.hs125ToRc)+' converties à 125 %. ':''}${b.rcConversion.hs150ToRc>0?hh(b.rcConversion.hs150ToRc)+' converties à 150 %. ':''}Ce remplacement du paiement par du repos compensateur n'est régulier que sur demande écrite du salarié (art. 3.2, accord-cadre du 4 mai 2000, CCN IDCC 16). L'app ne sait pas si cette demande existe — à vérifier au cas par cas.</small></div>`:''}
+      </details>`:`<div class="al i" style="margin-top:10px">Aucun bulletin importé pour la période ${esc(String(b.r.start||'').slice(0,7))} → ${esc(String(b.r.end||'').slice(0,7))}.</div>`}
       <details style="margin-top:10px"><summary><b>📅 Journées MesHeures de la même période</b></summary><div style="overflow:auto;margin-top:8px"><table><thead><tr><th>Date</th><th class="n">TTE</th><th class="n">Amplitude</th><th>Alertes</th></tr></thead><tbody>${dayRows||'<tr><td colspan="4">Aucune journée travaillée.</td></tr>'}</tbody></table></div></details>
       <details style="margin-top:10px"><summary><b>ℹ️ Règle</b></summary><p class="mut">Ce bloc est un rapprochement en lecture seule. ROMI1 ne modifie jamais les journées ni les calculs MesHeures. Le RC cumulé ROMI1 est affiché comme référence employeur et n'est pas remplacé par un calcul local.</p></details>
     </div>`;
