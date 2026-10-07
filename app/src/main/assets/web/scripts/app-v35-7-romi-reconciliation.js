@@ -151,6 +151,11 @@
     // Canonical pay engine. calcPer(start,1).Q[0] is the confirmed structure.
     // The ROMI period is processed as consecutive 14-day blocks, never using DB.per.
     let hs25=0,hs50=0,hs=0,rc=null,qs=[];
+    /* V37.0-C : les HS n'existent que par quatorzaine de paie. Un relevé qui ne couvre pas des
+       quatorzaines entières (début et lendemain de fin sur le calendrier mhQuatorzaine) n'est pas
+       comparable en HS : « — » plutôt qu'un chiffre calculé sur un découpage faux. */
+    const aligned=mhQuatorzaine.isStart(r.start)&&mhQuatorzaine.isStart(addD(r.end,1));
+    if(!aligned)return {span,tte,amp,presence,pauses,alerts,hs:null,hs25:null,hs50:null,rc,rows,qs,aligned:false};
     for(let q=r.start;q<=r.end;q=addD(q,14)){
       if(typeof calcPer!=='function')break;
       try{
@@ -163,7 +168,7 @@
         }
       }catch(_){}
     }
-    return {span,tte,amp,presence,pauses,alerts,hs,hs25,hs50,rc,rows,qs};
+    return {span,tte,amp,presence,pauses,alerts,hs,hs25,hs50,rc,rows,qs,aligned:true};
   }
 
   function build(){
@@ -214,7 +219,7 @@
     if(b.status==='none'){host.innerHTML='<div class="card"><h2>🔎 Rapprochement ROMI1 ↔ MesHeures</h2><div class="al i">Aucun ROMI1 enregistré.</div></div>';return;}
     if(b.status==='error'){host.innerHTML='<div class="card"><h2>🔎 Rapprochement ROMI1 ↔ MesHeures</h2><div class="al w">⚠️ '+esc(b.error)+'</div></div>';return;}
     const ok=b.bad.length===0;
-    const row=(x,sourceFmt)=>`<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.unit==='j'?x.local:hm(x.local)}</td><td class="n">${x.source==null?'—':(x.unit==='j'?x.source:sourceFmt(x.source))}</td><td class="n ${dClass(x.delta)}">${x.delta==null?'—':x.unit==='j'?((x.delta>0?'+':'')+x.delta+' j'):dText(x.delta)}</td></tr>`;
+    const row=(x,sourceFmt)=>`<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.local==null?'—':(x.unit==='j'?x.local:hm(x.local))}</td><td class="n">${x.source==null?'—':(x.unit==='j'?x.source:sourceFmt(x.source))}</td><td class="n ${dClass(x.delta)}">${x.delta==null?'—':x.unit==='j'?((x.delta>0?'+':'')+x.delta+' j'):dText(x.delta)}</td></tr>`;
     const dayRows=b.local.rows.map(x=>`<tr><td>${x.k}</td><td class="n">${hm(x.tte)}</td><td class="n">${hm(x.amp)}</td><td>${x.alerts.length?'⚠️ '+x.alerts.length:'✓'}</td></tr>`).join('');
     host.innerHTML=`<div class="card mh-romi35-card">
       <h2>🔎 Rapprochement ROMI1 ↔ MesHeures</h2>

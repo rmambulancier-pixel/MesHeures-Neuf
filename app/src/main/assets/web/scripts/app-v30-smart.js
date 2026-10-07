@@ -252,8 +252,7 @@
 
       const start =
         p.start ||
-        DB.s?.anchor ||
-        today();
+        mhQuatorzaine.start(today());
 
       const nb = Math.max(
         2,
@@ -297,13 +296,7 @@
     try {
       if (typeof calcPer !== 'function') return null;
 
-      const anchor = DB.s?.anchor || today();
-      const diff = nDays(anchor, today());
-
-      const start = addD(
-        anchor,
-        Math.floor(diff / 14) * 14
-      );
+      const start = mhQuatorzaine.start(today());
 
       const result = calcPer(start, 1);
       const q = result?.Q?.[0];

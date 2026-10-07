@@ -55,7 +55,11 @@
 
   function createFromAudit(){
   init();
-  const start=DB.s?.emb||DB.per?.start||today();
+  /* V37.0-C : la plage d'analyse part de la quatorzaine de la première journée saisie (calendrier de paie),
+     et non de la date d'embauche (2019) : mêmes constats, aucune journée oubliée. */
+  const firstDay=Object.keys(DB.days||{}).sort()[0];
+  if(!firstDay)return 0;
+  const start=mhQuatorzaine.start(firstDay);
   const finish=today();
   if(start>finish)return 0;
 
@@ -167,29 +171,37 @@
     DB.events.sort((a,b)=>a.date.localeCompare(b.date));save();return true;
   }
 
+  /* V37.0-C — Journal de preuves sur le calendrier de paie (source unique mhQuatorzaine).
+     Avant : quatorzaines reconstruites depuis la date d'embauche (décalage de 7 jours avec la paie)
+     et rattachées en entier au mois de leur DÉBUT.
+     Maintenant : quatorzaines de la paie, rattachées au mois de paie de leur relevé de 4 semaines
+     (mhQuatorzaine.payMonth : 27/07 → 23/08 = août ; 24/08 → 20/09 = septembre). Aucun prorata :
+     une quatorzaine est payée une seule fois, sur un seul mois. */
   function monthEvidence(){
-    init(); const by={}; const start=DB.s?.emb||today(), end=today();
-    let qStart=start, guard=0;
-    while(qStart<=end && guard++<1000){
-      const qEnd=addD(qStart,13);
-      const {G}=calcPer(qStart,1);
-      const key=qStart.slice(0,7);
-      by[key]=by[key]||{calcMin:0,nor:0,h25:0,h50:0,periods:0};
-      let frac=14; if(qEnd>end)frac=nDays(qStart,end)+1;
-      const ratio=frac/14;
-      by[key].calcMin+=G.tte*ratio;by[key].nor+=G.nor*ratio;by[key].h25+=G.h25*ratio;by[key].h50+=G.h50*ratio;by[key].periods++;
-      qStart=addD(qStart,14);
+    init(); const by={};
+    const keys=Object.keys(DB.days||{}).sort();
+    if(keys.length){
+      mhQuatorzaine.between(keys[0],today()).forEach(qStart=>{
+        const {G}=calcPer(qStart,1);
+        const key=mhQuatorzaine.payMonth(qStart);
+        by[key]=by[key]||{calcMin:0,tteMin:0,nor:0,h25:0,h50:0,periods:0,quatorzaines:[]};
+        /* Heures dues = normales + HS25 + HS50 (TTE + CP + RC, base des HS) : c'est ce que le bulletin paie.
+           Comparer le TTE seul aux heures payées créait un faux écart égal aux CP/RC du mois. */
+        by[key].calcMin+=G.nor+G.h25+G.h50;by[key].tteMin+=G.tte;by[key].nor+=G.nor;by[key].h25+=G.h25;by[key].h50+=G.h50;by[key].periods++;
+        by[key].quatorzaines.push(qStart);
+      });
     }
     (DB.bulletins||[]).forEach(b=>{
-      const key=b.mois;if(!key)return; const x=by[key]||{calcMin:0,nor:0,h25:0,h50:0,periods:0};
+      const key=b.mois;if(!key)return; const x=by[key]||{calcMin:0,tteMin:0,nor:0,h25:0,h50:0,periods:0,quatorzaines:[]};
       const paidH25=Number(b.hs25H)||0,paidH50=Number(b.hs50H)||0,paidNorm=Number(b.hNorm)||0;
       const paidMin=(paidNorm+paidH25+paidH50)*60;
-      const calcPay=brutOf({nor:Math.round(x.nor),h25:Math.round(x.h25),h50:Math.round(x.h50),amp:0,tte:Math.round(x.calcMin),seuil:Math.round(x.calcMin),trav:0,idaj:0,ir:0,iru:0,rc:0,fer:0,dim:0,nuit:0,hab:0,ferJ:[],dimJ:[]});
+      const calcPay=brutOf({nor:Math.round(x.nor),h25:Math.round(x.h25),h50:Math.round(x.h50),amp:0,tte:Math.round(x.tteMin),seuil:Math.round(x.calcMin),trav:0,idaj:0,ir:0,iru:0,rc:0,fer:0,dim:0,nuit:0,hab:0,ferJ:[],dimJ:[]});
       x.paidMin=paidMin;x.ecartMin=Math.round(x.calcMin-paidMin);x.paidGross=Number(b.brut)||0;x.calcGross=Number((calcPay.tot||0).toFixed(2));x.ecartEur=Number((x.calcGross-x.paidGross).toFixed(2));x.bulletin=b;
       by[key]=x;
     });
     return Object.entries(by).sort((a,b)=>a[0].localeCompare(b[0])).map(([mo,x])=>({mois:mo,...x}));
   }
+  window.mhV30MonthEvidence=monthEvidence;
 
   function buildCache(){
     if(cacheVersion===dataVersion && cache)return cache;
@@ -212,7 +224,7 @@
     const empty=list.filter(x=>Math.round(x.calcMin||0)===0&&!x.bulletin).length;
     const row=x=>{const e=Math.round(x.calcMin||0)===0&&!x.bulletin;
       return `<div class="mh-v30-row${e?' mh-empty':''}"><b>${x.mois}</b><span>${F(x.calcMin)}</span><span>${x.bulletin?F(x.paidMin||0):'—'}</span><strong class="${(x.ecartMin||0)>0?'bad':'ok'}">${x.bulletin?F(x.ecartMin||0):'—'}</strong><span>${x.bulletin?EUR(x.ecartEur):'—'}</span></div>`};
-    return `<div class="mh-v30-table mh-journal"><div class="mh-v30-row mh-head"><b>Mois</b><span>Calcul</span><span>Payé</span><span>Écart</span><span>Écart brut</span></div>${list.map(row).join('')}</div>`+
+    return `<div class="mut" style="font-size:11px;margin:2px 0 6px">Quatorzaines de paie (ancre 19/05/2025) rattachées au mois de fin de leur relevé de 4 semaines · Dû = heures normales + HS (TTE, CP, RC).</div><div class="mh-v30-table mh-journal"><div class="mh-v30-row mh-head"><b>Mois</b><span title="Heures dues selon MesHeures : normales + HS (TTE, CP et RC compris), quatorzaines payées ce mois">Dû</span><span>Payé</span><span>Écart</span><span>Écart brut</span></div>${list.map(row).join('')}</div>`+
       (empty?`<button type="button" class="g mh-empty-toggle" onclick="const t=this.previousElementSibling;t.classList.toggle('mh-show-empty');this.textContent=t.classList.contains('mh-show-empty')?'▾ Masquer les ${empty} mois sans donnée':'▸ Afficher les ${empty} mois sans donnée'">▸ Afficher les ${empty} mois sans donnée</button>`:'');
   }
 

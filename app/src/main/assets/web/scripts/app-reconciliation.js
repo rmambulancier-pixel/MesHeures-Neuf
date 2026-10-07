@@ -29,7 +29,7 @@
     });
     // Rejoue les quatorzaines qui touchent le mois et attribue les heures selon les journées présentes.
     const byDay={};
-    let q=DB.s?.emb||r.start, guard=0;
+    let q=mhQuatorzaine.start(r.start), guard=0; // V37.0-C : calendrier de paie, pas la date d'embauche
     while(q<=r.end&&guard++<1000){
       const qEnd=addD(q,13); const relevant=[];
       for(let i=0;i<14;i++){const k=addD(q,i);if(k>=r.start&&k<=r.end&&DB.days?.[k])relevant.push(k)}

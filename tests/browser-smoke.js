@@ -83,6 +83,19 @@ srv.listen(0,async()=>{
   ok(per.tab==='s-paie'&&per.pS==='2026-08-24'&&per.start==='2026-08-24','action « ouvrir la période » : Paie sur la quatorzaine du 24/08 (via l\'écran Paie)');
   const rm=await pg.evaluate(async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));MHControl.open('romi',null);await w(300);return document.querySelector('section.on')?.id});
   ok(rm==='s-romi','action « ouvrir ROMI1 » : onglet ROMI1');
+  /* V37.0-C — calendrier des quatorzaines dans l'application réelle */
+  const qz=await pg.evaluate(async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));
+    mhOpenDay('2026-08-30');await w(300);const dq=document.getElementById('dQuat')?.innerText||'';
+    tab('reg');await w(300);const inp=[...document.querySelectorAll('#rg2 input')].find(i=>i.type==='date');
+    tab('paie');const el=document.getElementById('pS');el.value='2026-08-24';el.dispatchEvent(new Event('change'));await w(300);
+    const align=document.getElementById('pAlign').innerText;
+    const sep=mhV30MonthEvidence().find(r=>r.mois==='2026-09');
+    return {dq,anchorVal:inp&&inp.value,anchorDisabled:inp&&inp.disabled,align,sep:sep&&{q:sep.quatorzaines,tte:F(sep.tteMin),du:F(sep.calcMin)},api:typeof mhQuatorzaine}});
+  ok(qz.api==='object','mhQuatorzaine disponible dans l\'application');
+  ok(/24\/08 → 06\/09/.test(qz.dq),'onglet Saisie, 30/08 : quatorzaine 24/08 → 06/09');
+  ok(qz.anchorVal==='2025-05-19'&&qz.anchorDisabled,'Réglages : ancrage 19/05/2025 affiché en lecture seule');
+  ok(/alignée/.test(qz.align),'Paie : période du 24/08 alignée sur les quatorzaines');
+  ok(qz.sep&&qz.sep.q.join()==='2026-08-24,2026-09-07'&&qz.sep.tte==='167h55'&&qz.sep.du==='202h55','journal de preuves, septembre : 24/08 + 07/09, TTE 167h55, dû 202h55 (CP compris)');
   ok(errs.length===0,'0 erreur JavaScript après les actions'+(errs.length?' : '+errs.slice(0,3).join(' | '):''));
   console.log(fails?`\n${fails} ÉCHEC(S)`:'\nTous les tests navigateur passent.');
   await b.close();srv.close();process.exit(fails?1:0);

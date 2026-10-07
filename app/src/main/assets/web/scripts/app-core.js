@@ -129,6 +129,32 @@ function numsOfLine(l){
   return matches.map(m=>parseNum(m[0])).filter(n=>!isNaN(n)&&n>0);
 }
 
+/* V37.0-C — CALENDRIER DES QUATORZAINES : source unique.
+   Ancre métier : 19/05/2025, déduite de la feuille de décompte et corroborée par le décompte de
+   septembre 2026 (24/08 → 06/09 et 07/09 → 20/09 = 33e et 34e quatorzaines après l'ancre).
+   Le calendrier ne dépend ni de la date d'embauche, ni du réglage DB.s.anchor, ni des journées saisies.
+   Rattachement mensuel (paie) : les relevés ROMI1 couvrent 4 semaines = 2 quatorzaines, la première
+   d'indice impair depuis l'ancre (27/07/2026 = 31e, 24/08/2026 = 33e). Un relevé est payé sur le mois
+   de sa date de fin (27/07 → 23/08 = août ; 24/08 → 20/09 = septembre). Règle déduite de ces deux
+   relevés, à confirmer sur un relevé de novembre 2025 à avril 2026 (seuls mois où une autre lecture,
+   « mois de fin de chaque quatorzaine », donnerait un rattachement différent). */
+const MH_QZ_ANCHOR='2025-05-19';
+const mhQuatorzaine=Object.freeze({
+  anchor:MH_QZ_ANCHOR,
+  offset:k=>((nDays(MH_QZ_ANCHOR,k)%14)+14)%14,
+  start:k=>addD(k,-(((nDays(MH_QZ_ANCHOR,k)%14)+14)%14)),
+  end:k=>addD(addD(k,-(((nDays(MH_QZ_ANCHOR,k)%14)+14)%14)),13),
+  isStart:k=>((nDays(MH_QZ_ANCHOR,k)%14)+14)%14===0,
+  // Débuts des quatorzaines qui touchent l'intervalle [from, to]
+  between:(from,to)=>{const out=[];if(!from||!to||from>to)return out;for(let q=mhQuatorzaine.start(from);q<=to;q=addD(q,14))out.push(q);return out},
+  index:k=>Math.round(nDays(MH_QZ_ANCHOR,mhQuatorzaine.start(k))/14),
+  // Période de relevé ROMI1 (4 semaines) contenant la date k
+  payPeriod:k=>{const i=mhQuatorzaine.index(k),p=(i%2!==0)?i:i-1,start=addD(MH_QZ_ANCHOR,p*14);return {start,end:addD(start,27)}},
+  // Mois de paie d'une quatorzaine = mois de fin de son relevé de 4 semaines
+  payMonth:qs=>mhQuatorzaine.payPeriod(qs).end.slice(0,7)
+});
+if(typeof window!=='undefined')window.mhQuatorzaine=mhQuatorzaine;
+
 function easterOf(y){
   const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,
   f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,
@@ -491,7 +517,7 @@ function brutOfRaw(G){
 window.mhCurrentPaySummary=function(){
   try{
     if(typeof calcPer!=='function'||typeof brutOf!=='function'||typeof DB==='undefined')return null;
-    const st=DB.per?.start||DB.s?.anchor||'2025-05-19';
+    const st=DB.per?.start||mhQuatorzaine.start(today());
     const raw=Number(DB.per?.nb)||2;
     const nb=Math.max(2,Math.min(3,Math.round(raw)));
     const result=calcPer(st,nb),G=result.G,br=brutOf(G);

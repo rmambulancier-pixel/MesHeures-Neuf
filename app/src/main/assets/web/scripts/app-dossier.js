@@ -23,12 +23,17 @@
     const constats=Array.isArray(data.constats)?data.constats:[];
     const events=Array.isArray(data.events)?data.events:[];
     const intel=window.mhV30IntelligenceData?.()||{};
-    const audit=window.mhLegalAudit?(window.mhLegalAudit(data.s?.emb||data.per?.start||today(),1)||[]):[];
+    /* V37.0-C : l'audit couvre toutes les quatorzaines de paie depuis la première journée saisie.
+       Avant : mhLegalAudit(date d'embauche, 1), soit les 14 jours suivant le 09/09/2019 : audit vide. */
+    const firstKey=Object.keys(data.days||{}).sort()[0];
+    const auditStart=firstKey?mhQuatorzaine.start(firstKey):mhQuatorzaine.start(today());
+    const auditNb=Math.max(1,mhQuatorzaine.between(auditStart,today()).length);
+    const audit=window.mhLegalAudit?(window.mhLegalAudit(auditStart,auditNb)||[]):[];
     const worked=days.filter(d=>Number(d.computed?.tte||0)>0);
     const totalTte=worked.reduce((s,d)=>s+Number(d.computed?.tte||0),0);
     const anomalies=worked.reduce((s,d)=>s+(Array.isArray(d.computed?.alerts)?d.computed.alerts.length:0),0);
     return {
-      meta:{application:'MesHeures',version:VERSION,generatedAt:new Date().toISOString(),periodStart:data.s?.emb||data.per?.start||'',periodEnd:today()},
+      meta:{application:'MesHeures',version:VERSION,generatedAt:new Date().toISOString(),periodStart:auditStart,periodEnd:today()},
       identity:{nom:data.s?.nom||'',emb:data.s?.emb||'',taux:Number(data.s?.taux||0),base:Number(data.s?.base||0)},
       summary:{days:days.length,workedDays:worked.length,totalTteMinutes:totalTte,anomalies,constats:constats.length,events:events.length,bulletins:bulletins.length},
       days,bulletins,constats,events,intelligence:intel,auditCurrent:audit,settings:data.s||{},

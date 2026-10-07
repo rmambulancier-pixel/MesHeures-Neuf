@@ -217,10 +217,7 @@ function afficherBulletin(bul){
     }
     calcHab=calcTrav*S.hab;
 
-    const anchor=S.anchor;
-    const diffFirst=nDays(anchor,first);
-    let qStart=addD(anchor,Math.floor(diffFirst/14)*14);
-    if(qStart>first)qStart=addD(qStart,-14);
+    let qStart=mhQuatorzaine.start(first);
 
     let qc=qStart;
     while(qc<=last){
@@ -813,7 +810,7 @@ async function parseExcel(file){
     });
     if(!n){out.innerHTML='<div class="al b">❌ Aucune journée exploitable.</div>';return}
     dates.sort();const first=dates[0],last=dates[dates.length-1];
-    let qs=addD(S.anchor,Math.floor(nDays(S.anchor,first)/14)*14),nbPer=0;
+    let qs=mhQuatorzaine.start(first),nbPer=0;
     while(qs<=last){if(!DB.periods.some(p=>p.start===qs)){DB.periods.push({start:qs,nb:1});nbPer++}gb(qs);qs=addD(qs,14);}
     DB.periods.sort((a,b)=>a.start<b.start?-1:1);
     DB.per={start:DB.periods[DB.periods.length-1].start,nb:1};save();

@@ -1,9 +1,7 @@
 /* MesHeures — projection planning-aware */
 (function(){
   function currentPeriodStart(){
-    const anchor=DB?.s?.anchor||today();
-    const diff=nDays(anchor,today());
-    return addD(anchor,Math.floor(diff/14)*14);
+    return mhQuatorzaine.start(today());
   }
   function recentAverage(start){
     const vals=[];

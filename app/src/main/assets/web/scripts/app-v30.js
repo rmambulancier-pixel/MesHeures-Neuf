@@ -107,7 +107,7 @@
   }
 
   function periodInfo(){
-    const k=day(),diff=nDays(DB.s.anchor,k),qs=addD(DB.s.anchor,Math.floor(diff/14)*14);
+    const k=day(),qs=mhQuatorzaine.start(k);
     const q=calcPer(qs,1).Q[0],N=DB.s.base*120,pc=N?Math.min(100,q.seuil/N*100):0;
     return {qs,q,N,pc};
   }
@@ -229,7 +229,7 @@
   }
 
   function periodInfo(){
-    const k=today(),diff=nDays(DB.s.anchor,k),qs=addD(DB.s.anchor,Math.floor(diff/14)*14);
+    const k=today(),qs=mhQuatorzaine.start(k);
     const qd=window.MH30DataEngine?.period?.(qs,1),q=qd.Q?.[0]||{},N=(DB.s.base||0)*120,pc=N?Math.min(100,(q.seuil||0)/N*100):0;
     return {qs,q,N,pc,qG:qd.G||{}};
   }
@@ -334,7 +334,7 @@
   async function syncBackgroundSnapshot(reg){
     try{
       if(!window.DB||!('indexedDB' in window))return;
-      const intel=window.mhV30IntelligenceData?.(); const todayKey=today(); const todayRec=window.MH30DataEngine?.day(todayKey)||{}; const pauseDue=!!(window.MH30Live?.active?.() && Number(todayRec.tte||0)>=360 && Number(todayRec.pz||0)<20); const payload={version:V,updatedAt:new Date().toISOString(),days:DB.days||{},settings:{base:DB.s?.base||0,anchor:DB.s?.anchor||''},alerts:{firstRisk:intel?.projection?.firstRisk||null,pauseDue}};
+      const intel=window.mhV30IntelligenceData?.(); const todayKey=today(); const todayRec=window.MH30DataEngine?.day(todayKey)||{}; const pauseDue=!!(window.MH30Live?.active?.() && Number(todayRec.tte||0)>=360 && Number(todayRec.pz||0)<20); const payload={version:V,updatedAt:new Date().toISOString(),days:DB.days||{},settings:{base:DB.s?.base||0,anchor:mhQuatorzaine.anchor},alerts:{firstRisk:intel?.projection?.firstRisk||null,pauseDue}};
       const req=indexedDB.open('mesheures-v30',1);
       req.onupgradeneeded=()=>{try{req.result.createObjectStore('state')}catch(e){}};
       req.onsuccess=()=>{try{const db=req.result,tx=db.transaction('state','readwrite');tx.objectStore('state').put(payload,'snapshot');}catch(e){}};

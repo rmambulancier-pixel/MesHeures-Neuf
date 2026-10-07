@@ -161,8 +161,7 @@ function renderDay(){
     ['H. nuit',r.nuit?F(r.nuit):'—']
   ].map(x=>`<div class="kpi"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
   $('dAl').innerHTML=r.al.map(a=>`<div class="al ${a.lvl}">${a.m}</div>`).join('');
-  const diff=nDays(DB.s.anchor,k);
-  const qs=addD(DB.s.anchor,Math.floor(diff/14)*14);
+  const qs=mhQuatorzaine.start(k);
   const o=calcPer(qs,1).Q[0],N=DB.s.base*120,pc=Math.min(100,o.seuil/N*100);
   const barCls=pc>=100?'bar bad':pc>=85?'bar warn':'bar';
   $('dQuat').innerHTML=`<div class="mut">${short(qs)} → ${short(addD(qs,13))}</div>
@@ -239,7 +238,7 @@ function renderPayBase(){
   $('pP25').value=B.p25??'';$('pP50').value=B.p50??'';
   $('pRC').value=B.rcOld??'';$('pRCA').value=B.rcAcq??'';
   $('pLbl').textContent=short(st)+' → '+short(addD(st,nb*14-1));
-  const off=((nDays(S.anchor,st)%14)+14)%14;
+  const off=mhQuatorzaine.offset(st);
   const reg=DB.periods.some(p=>p.start===st);
   $('pAlign').innerHTML=(off===0
     ?'<div class="al k">✅ Période alignée sur tes quatorzaines</div>'
@@ -453,8 +452,11 @@ function renderAuditBase(){
     if(!seenPeriods.has(key)){seenPeriods.add(key);rawPeriods.push(p)}
   });
   rawPeriods.sort((a,b)=>a.start.localeCompare(b.start));
-  const auditPeriods=[],overlaps=[];
+  const auditPeriods=[],overlaps=[],misaligned=[];
   rawPeriods.forEach(p=>{
+    // V37.0-C : une période qui ne démarre pas sur le calendrier de paie (mhQuatorzaine) a des HS
+    // calculées sur un découpage faux : exclue des cumuls et signalée, comme un chevauchement.
+    if(!mhQuatorzaine.isStart(p.start)){misaligned.push(p);return}
     const pEnd=addD(p.start,p.nb*14-1);
     const prev=auditPeriods[auditPeriods.length-1];
     if(prev){
@@ -580,9 +582,11 @@ function renderAuditBase(){
   const uniqueDim=[...new Set(T.dim)].sort();
   const uniqueAlerts=[];const seenAlerts=new Set();
   AA.forEach(a=>{const key=a.k+'|'+a.lvl+'|'+a.m;if(!seenAlerts.has(key)){seenAlerts.add(key);uniqueAlerts.push(a)}});
-  const overlapNote=overlaps.length
+  const overlapNote=(overlaps.length
     ?`<div class="al w audit-overlap">⚠️ ${overlaps.length} période${overlaps.length>1?'s':''} chevauchante${overlaps.length>1?'s':''} ignorée${overlaps.length>1?'s':''} du cumul : les mêmes journées ne sont comptées qu’une seule fois.</div>`
-    :'';
+    :'')+(misaligned.length
+    ?`<div class="al w audit-overlap">⚠️ ${misaligned.length} période${misaligned.length>1?'s':''} enregistrée${misaligned.length>1?'s':''} hors calendrier des quatorzaines (ancre 19/05/2025) ignorée${misaligned.length>1?'s':''} du cumul : ${misaligned.map(p=>short(p.start)+' (décalage '+mhQuatorzaine.offset(p.start)+' j)').join(', ')}.</div>`
+    :'');
   $('aFer').innerHTML=overlapNote+(uniqueFer.length?uniqueFer.map(k=>{const r=cd(k);
     return `<div class="al w">☀️ <b>${shortY(k)}</b> — ${F(r.tte)} → maj. 100% = <b>${EUR(r.tte/60*S.taux)}</b></div>`}).join('')
     +`<div class="al i">Total fériés : <b>${EUR(uniqueFer.reduce((a,k)=>a+cd(k).tte/60*S.taux,0))}</b></div>`
@@ -609,6 +613,8 @@ function renderRegBase(){
   for(const g in RG)$(g).innerHTML=RG[g].map(([k,l])=>{
     const ty=['anchor','panDeb','panFin','panSoirDeb','panSoirFin','nuitDeb','nuitFin'].includes(k)?
       (k==='anchor'?'date':'time'):'number';
+    // V37.0-C : l'ancre des quatorzaines est fixe (mhQuatorzaine) ; le réglage n'a plus d'effet, il est affiché en lecture seule.
+    if(k==='anchor')return `<div><label>${l} (fixe)</label><input type="date" value="${mhQuatorzaine.anchor}" disabled title="Ancre métier des quatorzaines : 19/05/2025"></div>`;
     return `<div><label>${l}</label><input type="${ty}" step="any" value="${DB.s[k]??''}" onchange="DB.s['${k}']=this.type==='number'?parseFloat(this.value)||0:this.value;save();mhRefresh()"></div>`;
   }).join('');
   $('rMin').checked=DB.s.min;

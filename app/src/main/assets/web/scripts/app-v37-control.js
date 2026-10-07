@@ -229,8 +229,7 @@
       if(kind==='paie')return tab('paie');
       if(kind==='period'){
         tab('paie');
-        const S=hasDB()?DB.s:{},anchor=S.anchor||'2025-05-19';
-        const q=addD(anchor,Math.floor(nDays(anchor,target)/14)*14);
+        const q=mhQuatorzaine.start(target);
         const el=document.getElementById('pS');
         if(el&&el.value!==q){el.value=q;el.dispatchEvent(new Event('change'))} // écriture faite par l'écran Paie (onchange)
       }
