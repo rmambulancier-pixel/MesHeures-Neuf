@@ -86,6 +86,27 @@
     return 'browser';
   };
 
+  /* V37.0-D : export binaire (PDF). Pont natif en base64 par blocs de 24 576 octets (multiple de 3 : chaque bloc se décode seul).
+     Sans pont (navigateur), repli Blob. Retourne 'android' ou 'browser'. */
+  window.mhDownloadBinary=function(name,bytes,type){
+    const data=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes||[]);
+    try{
+      const A=window.MesHeuresAndroid;
+      if(A && typeof A.beginBinaryFileExport==='function' && typeof A.appendBinaryFileExportChunk==='function' && typeof A.finishBinaryFileExport==='function'){
+        if(A.beginBinaryFileExport(String(name),String(type||'application/octet-stream'))){
+          const step=24576;
+          for(let i=0;i<data.length;i+=step){let s='';const part=data.subarray(i,i+step);for(let j=0;j<part.length;j++)s+=String.fromCharCode(part[j]);A.appendBinaryFileExportChunk(btoa(s))}
+          A.finishBinaryFileExport();
+          return 'android';
+        }
+      }
+    }catch(e){console.warn('Export binaire natif indisponible, fallback navigateur',e)}
+    const blob=new Blob([data],{type:type||'application/octet-stream'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.style.display='none';
+    document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
+    return 'browser';
+  };
+
   window.mhV30Backup=function(reason){
     try{
       const s=snapshot();s.reason=reason||'manual';

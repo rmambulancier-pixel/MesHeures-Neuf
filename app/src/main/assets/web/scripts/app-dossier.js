@@ -63,28 +63,34 @@
     <footer>Ce document est un export des données locales de MesHeures. Les estimations et contrôles doivent être confrontés aux documents originaux, au contrat, au planning et aux règles applicables à la situation concernée.</footer>
     </body></html>`;
   }
+  /* V37.0-D : JSON et imprimable reprennent le même dossier que le PDF signé (MHDossier : lecture seule, moteur existant).
+     L'ancien snapshot() reste disponible en repli si le module n'est pas chargé. */
+  function dossierData(){return window.MHDossier?window.MHDossier.data():snapshot()}
   async function makeDossier(print){
-    const s=snapshot(); const canonical=compact(s); const hash=await digestText(canonical); const recipient=prompt('Objet / destinataire du dossier (facultatif) :','');
+    const d=dossierData(); const canonical=compact(d); const hash=await digestText(canonical);
+    const recipient=prompt('Objet / destinataire du dossier (facultatif) :','');
     if(print){
-      const html=reportHtml(s,hash,'MesHeures — Dossier complet',recipient);
+      const html=window.MHDossier?window.MHDossier.html(d,{dataHash:hash,objet:recipient||''}):reportHtml(d,hash,'MesHeures — Dossier complet',recipient);
       try{
         if(window.MesHeuresAndroid && typeof window.MesHeuresAndroid.printHtml==='function'){
           window.MesHeuresAndroid.printHtml(html);
-          return;
+          return 'android';
         }
       }catch(e){console.warn('Impression dossier Android',e)}
-      const w=window.open('','_blank');if(!w)return alert('Autorise les fenêtres contextuelles pour générer le dossier.');w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);return
+      const w=window.open('','_blank');if(!w){alert('Autorise les fenêtres contextuelles pour générer le dossier.');return null}w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);return 'browser'
     }
-    const out={...s,integrity:{algorithm:'SHA-256',hash,canonicalization:'JSON.stringify(snapshot)'}};download('MesHeures-dossier-complet-'+today()+'.json',JSON.stringify(out,null,2),'application/json');alert('✅ Dossier JSON exporté.\nEmpreinte SHA-256 : '+hash);
+    const out={...d,integrity:{algorithm:'SHA-256',hash,canonicalization:'JSON.stringify(dossier sans ce bloc integrity)'}};
+    const mode=download('MesHeures-dossier-complet-'+today()+'.json',JSON.stringify(out,null,2),'application/json');
+    alert((mode==='android'?'📁 Choisis où enregistrer le dossier JSON.':'✅ Dossier JSON exporté.')+'\nEmpreinte SHA-256 : '+hash);return mode;
   }
   function render(){
     const target=document.getElementById('s-audit')||document.body;if(document.getElementById('mhV30Dossier'))return;
-    const sec=document.createElement('section');sec.id='mhV30Dossier';sec.innerHTML=`<div class="card mh-v30-card"><h2>📁 Dossier complet</h2><p class="mut">Regroupe l'historique, les constats, les événements, les bulletins et l'intelligence locale dans un export unique.</p><div class="row"><button onclick="mhV30ExportDossier()">⬇️ Export dossier JSON</button><button class="g" onclick="mhV30PrintDossier()">🖨️ Dossier imprimable / PDF</button><button class="g" onclick="mhV30ExportSignedPDF()">🔏 PDF probatoire signé</button></div><div id="mhV30DossierHash" class="mut" style="margin-top:8px"></div></div>`;target.appendChild(sec);refreshHash();
+    const sec=document.createElement('section');sec.id='mhV30Dossier';sec.innerHTML=`<div class="card mh-v30-card"><h2>📁 Dossier complet</h2><p class="mut">Périodes de paie, journées, Smart Control, anomalies, ROMI1, bulletins, rapprochement, constats et chronologie : mêmes valeurs que l’application, aucun recalcul.</p><div class="row"><button onclick="mhV30ExportDossier()">⬇️ Export dossier JSON</button><button class="g" onclick="mhV30PrintDossier()">🖨️ Dossier imprimable / PDF</button><button class="g" onclick="mhV30ExportSignedPDF()">🔏 PDF probatoire signé</button></div><div id="mhV30DossierHash" class="mut" style="margin-top:8px"></div></div>`;target.appendChild(sec);if('IntersectionObserver' in window)new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting))refreshHash()}).observe(sec);else refreshHash();
   }
-  async function refreshHash(){try{const h=await digestText(compact(snapshot()));const el=document.getElementById('mhV30DossierHash');if(el)el.textContent='Empreinte actuelle SHA-256 : '+h}catch(e){}}
+  async function refreshHash(){try{const sec=document.getElementById('mhV30Dossier');if(!sec||!sec.offsetParent)return;const h=await digestText(compact(dossierData()));const el=document.getElementById('mhV30DossierHash');if(el)el.textContent='Empreinte actuelle SHA-256 : '+h}catch(e){}}
   window.mhV30ExportDossier=()=>makeDossier(false);
   window.mhV30PrintDossier=()=>makeDossier(true);
-  window.mhV30DossierSnapshot=snapshot;
+  window.mhV30DossierSnapshot=dossierData;
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render,{once:true});else setTimeout(render,0);
-  setInterval(refreshHash,30000);
+  setInterval(refreshHash,30000); /* V37.0-D : sans effet tant que l'onglet Audit n'est pas affiché */
 })();

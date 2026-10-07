@@ -178,7 +178,8 @@
      (mhQuatorzaine.payMonth : 27/07 → 23/08 = août ; 24/08 → 20/09 = septembre). Aucun prorata :
      une quatorzaine est payée une seule fois, sur un seul mois. */
   function monthEvidence(){
-    init(); const by={};
+    /* V37.0-D : lecture seule (utilisé par le dossier probatoire) ; plus d'init() qui réécrivait DB.constats/DB.events. */
+    const by={};
     const keys=Object.keys(DB.days||{}).sort();
     if(keys.length){
       mhQuatorzaine.between(keys[0],today()).forEach(qStart=>{
@@ -202,6 +203,7 @@
     return Object.entries(by).sort((a,b)=>a[0].localeCompare(b[0])).map(([mo,x])=>({mois:mo,...x}));
   }
   window.mhV30MonthEvidence=monthEvidence;
+  window.mhV30ConstatType=constatType;
 
   function buildCache(){
     if(cacheVersion===dataVersion && cache)return cache;
