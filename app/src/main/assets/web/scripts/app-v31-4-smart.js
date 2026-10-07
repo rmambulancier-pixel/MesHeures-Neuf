@@ -10,7 +10,8 @@
   const V = '36.2.0';
 
   function getDays() {
-    return window.DB?.days || {};
+    // V37.0-A : DB est une variable globale (let) d'app-core.js, absente de window.
+    return (typeof DB !== 'undefined' && DB && DB.days) || {};
   }
 
   function isWork(day) {
@@ -213,6 +214,25 @@
   }
 
   function audit() {
+    /* V37.0-A : le score vient de MHControl (règles explicables, données réelles).
+       Aucun jour analysé : score null et « Données insuffisantes », jamais 100/100. */
+    const C = window.MHControl;
+    if (C && typeof C.analyze === 'function') {
+      const s = C.analyze();
+      const tone = s.status === 'insufficient' ? 'mut' : s.status;
+      return {
+        version: V,
+        score: s.score,
+        status: { tone, label: s.label },
+        explanation: s.explanation,
+        counts: s.counts,
+        control: s,
+        priority: s.groups.slice(0, 3).map(g => ({
+          k: g.key, level: g.level === 'bad' ? 'bad' : 'warn',
+          title: g.label, text: g.alerts.map(a => a.title).join(' · ')
+        }))
+      };
+    }
     const d = dossier();
     const r = reconciliation();
     const value = score(d, r);

@@ -51,6 +51,39 @@ srv.listen(0,async()=>{
   ok(o.legacyPause&&o.legacyPause.calcul_montant_du===0&&o.legacyPause.calcul_brut===0,'constat hérité « pause » conservé mais rechiffré à 0 € (était 4,92 €)');
   ok(o.pauseEuros===0,'aucun montant en euros sur les constats de pause');
   ok(o.road===true,'feuille de route générée (semaine 24/08 : 54h15)');
+  /* V37.0-A — Smart Control sur l'Accueil */
+  await pg.setViewportSize({width:390,height:2400});
+  const sc=await pg.evaluate(async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));
+    const before=localStorage.getItem('mesheures_v3');
+    tab('home');await w(400);const s=MHControl.analyze();MH31.renderHome();await w(200);
+    const card=document.querySelector('#s-home .mh37-card');const txt=card?card.innerText:'';
+    const after=localStorage.getItem('mesheures_v3');
+    const det=card&&card.querySelector('details.mh37-g');if(det)det.open=true;await w(100);
+    const detTxt=det?det.innerText:'';
+    const homeTxt=document.getElementById('s-home').innerText;
+    return {present:!!card,status:card&&card.dataset.mh37,label:s.label,score:s.score,counts:s.counts,txt,
+      groupsShown:card?card.querySelectorAll(':scope > details.mh37-g').length:0,groups:s.groups.length,
+      hasLabel:txt.includes(s.label),has100:/100\s*\/\s*100/.test(homeTxt),explanation:txt.includes(s.counts.ok+'/'+s.counts.total),
+      detTxt,unchanged:before===after,mh314:MH314.audit().score,firstAction:s.groups[0]&&s.groups[0].alerts[0].actions[0]}});
+  ok(sc.present,'Accueil : carte Smart Control affichée');
+  ok(!sc.has100,'Accueil : plus de « 100/100 » affiché');
+  ok(sc.hasLabel&&sc.explanation,'carte : niveau « '+sc.label+' » et explication du score ('+sc.counts.ok+'/'+sc.counts.total+', '+sc.score+' %)');
+  ok(sc.mh314===sc.score,'MH314.audit (ancien score) = score MHControl');
+  ok(/Date/.test(sc.detTxt)&&/Règle/.test(sc.detTxt)&&/Données/.test(sc.detTxt)&&/Résultat/.test(sc.detTxt)&&/Classement/.test(sc.detTxt)&&/→/.test(sc.detTxt),'détail d\'une alerte : date, règle, données, résultat, classement, action');
+  ok(sc.unchanged,'analyse + rendu de l\'Accueil : données enregistrées inchangées');
+  await pg.screenshot({path:path.join(require('os').tmpdir(),'mh37-home.png'),fullPage:true});
+  if(sc.firstAction){
+    const nav=await pg.evaluate(async a=>{const w=ms=>new Promise(r=>setTimeout(r,ms));MHControl.open(a.kind,a.target);await w(300);
+      return {tab:document.querySelector('section.on')?.id,curDate:typeof curDate!=='undefined'?curDate:null,pS:document.getElementById('pS')?.value,per:DB.per.start}},sc.firstAction);
+    if(sc.firstAction.kind==='day')ok(nav.tab==='s-jour'&&nav.curDate===sc.firstAction.target,'action « '+sc.firstAction.label+' » : journée ouverte');
+    else ok(nav.tab==='s-paie','action « '+sc.firstAction.label+' » : onglet Paie ouvert');
+  }
+  const per=await pg.evaluate(async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));MHControl.open('period','2026-09-01');await w(400);
+    return {tab:document.querySelector('section.on')?.id,pS:document.getElementById('pS').value,start:DB.per.start}});
+  ok(per.tab==='s-paie'&&per.pS==='2026-08-24'&&per.start==='2026-08-24','action « ouvrir la période » : Paie sur la quatorzaine du 24/08 (via l\'écran Paie)');
+  const rm=await pg.evaluate(async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));MHControl.open('romi',null);await w(300);return document.querySelector('section.on')?.id});
+  ok(rm==='s-romi','action « ouvrir ROMI1 » : onglet ROMI1');
+  ok(errs.length===0,'0 erreur JavaScript après les actions'+(errs.length?' : '+errs.slice(0,3).join(' | '):''));
   console.log(fails?`\n${fails} ÉCHEC(S)`:'\nTous les tests navigateur passent.');
   await b.close();srv.close();process.exit(fails?1:0);
 });

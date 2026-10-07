@@ -190,41 +190,21 @@
     };
   }
 
-  /* État du dossier : réutilise MH302.anomalies() (28 derniers jours) */
-  function collectDossier(now, days, live) {
-    const anomalies = safe(() => window.MH302?.anomalies?.(), []);
-    const byDay = new Map();
-
-    anomalies.forEach(a => {
-      if (a.level === 'info') return;
-      if (a.k === now && live) return;
-      const e = byDay.get(a.k) || { incomplete: false, bad: false, warn: false, reason: '' };
-      if (a.title === 'Journée incomplète') e.incomplete = true;
-      else if (a.level === 'bad') e.bad = true;
-      else e.warn = true;
-      e.reason = e.reason || a.text || a.title || '';
-      byDay.set(a.k, e);
+  /* État du dossier : V37.0-A, source unique MHControl (app-v37-control.js), en lecture seule.
+     Les blocs Intelligence, État du dossier et Prochaine action lisent la même analyse. */
+  function collectDossier() {
+    const sc = window.MHControl?.analyze?.() || null;
+    const out = { sc, total: sc ? sc.workedDays : 0, critical: 0, toComplete: 0, toCheck: 0, items: [] };
+    if (!sc) return Object.assign(out, { todo: 0 });
+    sc.groups.forEach(g => {
+      const kind = g.alerts.some(a => a.code === 'HORAIRES') ? 'toComplete' : g.level === 'bad' ? 'critical' : 'toCheck';
+      out[kind]++;
+      const a = g.alerts[0].actions[0];
+      out.items.push({ k: g.key, label: g.label, kind, reason: g.alerts.map(x => x.title).join(' · '),
+        title: 'Contrôler ' + (g.scope === 'day' ? 'le ' + g.key.slice(8) + '/' + g.key.slice(5, 7) : g.label.charAt(0).toLowerCase() + g.label.slice(1)),
+        go: "MHControl.open('" + a.kind + "'," + (a.target == null ? 'null' : "'" + esc(a.target) + "'") + ")" });
     });
-
-    const out = { total: 0, complete: 0, toComplete: 0, toCheck: 0, critical: 0, items: [] };
-
-    for (let i = 0; i < WINDOW_DAYS; i++) {
-      const k = addD(now, -i);
-      if (!isWork(days[k])) continue;
-      if (k === now && live) continue;
-      out.total++;
-
-      const e = byDay.get(k);
-      if (!e) { out.complete++; continue; }
-
-      if (e.incomplete) { out.toComplete++; out.items.push({ k, kind: 'toComplete', reason: 'Horaires incomplets' }); }
-      else if (e.bad) { out.critical++; out.items.push({ k, kind: 'critical', reason: e.reason }); }
-      else { out.toCheck++; out.items.push({ k, kind: 'toCheck', reason: e.reason }); }
-    }
-
-    const rank = { critical: 0, toComplete: 1, toCheck: 2 };
-    out.items.sort((a, b) => rank[a.kind] - rank[b.kind] || (a.k < b.k ? 1 : -1));
-    out.todo = out.toComplete + out.toCheck + out.critical;
+    out.todo = out.critical + out.toComplete + out.toCheck;
     return out;
   }
 
@@ -257,11 +237,10 @@
       now, days, live, d, r,
       per: safe(() => collectPeriod(now, days), null),
       month: collectMonth(now, days),
-      dossier: collectDossier(now, days, live),
+      dossier: collectDossier(),
       next: collectNextService(now, days),
       intel: safe(() => window.mhV30IntelligenceData?.(), null),
       smart: safe(() => window.MH302?.insights?.(), null),
-      smartControl: safe(() => window.MH314?.audit?.(), null),
       anomalies: safe(() => window.MH302?.anomalies?.(), []),
       backupAge: backupAgeDays()
     };
@@ -312,20 +291,20 @@
 
     if (dossier.critical) {
       const it = dossier.items.find(x => x.kind === 'critical');
-      out.push({ lvl: 'bad', icon: '🔴', title: plural(dossier.critical, 'journée critique', 'journées critiques'),
-        text: shortDate(it.k) + ' · ' + it.reason, go: goDay(it.k) });
+      out.push({ lvl: 'bad', icon: '🔴', title: plural(dossier.critical, 'point critique', 'points critiques'),
+        text: it.label + ' · ' + it.reason, go: it.go });
     }
 
     if (dossier.toComplete) {
       const it = dossier.items.find(x => x.kind === 'toComplete');
       out.push({ lvl: 'warn', icon: '🟠', title: plural(dossier.toComplete, 'journée à compléter', 'journées à compléter'),
-        text: 'Début ou fin manquant, par exemple le ' + shortDate(it.k) + '.', go: goDay(it.k) });
+        text: 'Début ou fin manquant, par exemple le ' + shortDate(it.k) + '.', go: it.go });
     }
 
     if (dossier.toCheck) {
       const it = dossier.items.find(x => x.kind === 'toCheck');
-      out.push({ lvl: 'warn', icon: '🔎', title: plural(dossier.toCheck, 'journée à vérifier', 'journées à vérifier'),
-        text: shortDate(it.k) + ' · ' + it.reason, go: goTab('audit') });
+      out.push({ lvl: 'warn', icon: '🔎', title: plural(dossier.toCheck, 'point à vérifier', 'points à vérifier'),
+        text: it.label + ' · ' + it.reason, go: it.go });
     }
 
     const todayAmp = anomalies.find(a => a.k === now && a.title === 'Amplitude inhabituelle');
@@ -360,16 +339,7 @@
 
     out.sort((a, b) => RANK[a.lvl] - RANK[b.lvl]);
 
-    const smartPriority = c.smartControl?.priority?.[0];
-    if (smartPriority) {
-      out.unshift({
-        lvl: smartPriority.level === 'bad' ? 'bad' : 'warn',
-        icon: '🧠',
-        title: smartPriority.title || 'Contrôle prioritaire',
-        text: smartPriority.text || 'Contrôle prioritaire détecté par Smart Control.',
-        go: goTab('audit')
-      });
-    }
+    /* V37.0-A : plus d'insertion « priorité MH314 » : elle doublait les points ci-dessus. */
 
     if (!out.length) {
       if (month.doneDays < 3 && !(proj && proj.avg > 0)) {
@@ -408,22 +378,13 @@
       main = { tone: 'warn', icon: '＋', title: 'Saisir la journée', text: 'Aucune donnée pour aujourd’hui.', go: goTab('jour') };
     } else if (dossier.critical) {
       const it = dossier.items.find(x => x.kind === 'critical');
-      main = { tone: 'bad', icon: '🔴', title: 'Vérifier une anomalie', text: shortDate(it.k) + ' · ' + it.reason, go: goDay(it.k) };
+      main = { tone: 'bad', icon: '🔴', title: it.title, text: it.reason, go: it.go };
     } else if (dossier.toComplete) {
       const it = dossier.items.find(x => x.kind === 'toComplete');
-      main = { tone: 'warn', icon: '✎', title: 'Compléter une journée', text: shortDate(it.k) + ' · début ou fin manquant.', go: goDay(it.k) };
-    } else if (c.smartControl?.priority?.[0]) {
-      const p = c.smartControl.priority[0];
-      main = {
-        tone: p.level === 'bad' ? 'bad' : 'warn',
-        icon: '🧠',
-        title: p.title || 'Contrôle prioritaire',
-        text: p.text || 'Une priorité a été détectée par Smart Control.',
-        go: goTab('audit')
-      };
+      main = { tone: 'warn', icon: '✎', title: 'Compléter une journée', text: shortDate(it.k) + ' · début ou fin manquant.', go: it.go };
     } else if (dossier.toCheck) {
       const it = dossier.items.find(x => x.kind === 'toCheck');
-      main = { tone: 'warn', icon: '🔎', title: 'Contrôler le dossier', text: shortDate(it.k) + ' · ' + it.reason, go: goTab('audit') };
+      main = { tone: 'warn', icon: '🔎', title: it.title, text: it.reason, go: it.go };
     } else if (service) {
       main = service;
     } else {
@@ -523,12 +484,11 @@
         '<i>' + x.icon + '</i><div><b>' + esc(x.title) + '</b><small>' + esc(x.text) + '</small></div><em>›</em></button>'
     ).join('');
 
-    const smart = c.smartControl;
-    const smartNote = smart
-      ? '<div class="mh31-note">🧠 Smart Control · ' +
-        esc(smart.status?.label || 'Contrôle actif') +
-        ' · score ' + esc(String(smart.score ?? '—')) + '/100</div>'
-      : '<div class="mh31-note">🧠 Smart Control · moteur indisponible</div>';
+    const sc = c.dossier.sc;
+    const smartNote = sc
+      ? '<div class="mh31-note">🧠 Smart Control · ' + esc(sc.label) +
+        (sc.score == null ? '' : ' · ' + sc.score + NB + '% des contrôles conformes (' + sc.counts.ok + '/' + sc.counts.total + ')') + '</div>'
+      : '<div class="mh31-note">🧠 Smart Control · module indisponible</div>';
 
     const metrics = proj && proj.avg > 0
       ? '<div class="mh31-note">Moyenne sur 12 semaines ' + fmt(proj.avg) + ' / 46' + NB + 'h · marge ' + fmt(proj.margin) + '</div>'
@@ -546,35 +506,14 @@
   }
 
   function dossierBlock(c) {
-    const s = c.dossier;
-    const title = s.total === 0
-      ? 'Aucune journée travaillée'
-      : s.todo ? plural(s.todo, 'point à traiter', 'points à traiter') : 'Dossier cohérent';
-    const tone = s.critical ? 'bad' : s.todo ? 'warn' : 'ok';
-
-    const count = (tn, n, label) =>
-      '<div class="mh31-count" data-tone="' + tn + '"><strong>' + n + '</strong><span>' + label + '</span></div>';
-
-    const rows = '';
-
     const backup = c.backupAge == null || c.backupAge >= 14
       ? '<button class="mh31-row" data-tone="warn" onclick="' + goTab('reg') + '"><i>🛡️</i><div><b>Sauvegarde externe</b><small>' +
         (c.backupAge == null ? 'Aucune sauvegarde exportée sur cet appareil.' : 'Dernier export il y a ' + plural(c.backupAge, 'jour', 'jours') + '.') +
         '</small></div><em>›</em></button>'
       : '';
-
-    return '<div class="mh31-card">' +
-      '<div class="mh31-card-head"><div><span class="mh31-eyebrow">ÉTAT DU DOSSIER · ' + WINDOW_DAYS + ' DERNIERS JOURS</span><b>' + esc(title) + '</b></div>' +
-      '<strong class="mh31-badge" data-tone="' + tone + '">' + (s.todo || '✓') + '</strong></div>' +
-      '<div class="mh31-counts">' +
-        count('ok', s.complete, 'complètes') +
-        count('warn', s.toComplete, 'à compléter') +
-        count('warn', s.toCheck, 'à vérifier') +
-        count('bad', s.critical, 'critiques') +
-      '</div>' +
-      rows + backup +
-      '<button class="mh31-link" onclick="' + goTab('audit') + '">Contrôler le dossier <em>›</em></button>' +
-    '</div>';
+    if (!c.dossier.sc || typeof window.MHControl?.cardHtml !== 'function')
+      return '<div class="mh31-card"><div class="mh31-card-head"><div><span class="mh31-eyebrow">SMART CONTROL</span><b>Module indisponible</b></div></div>' + backup + '</div>';
+    return window.MHControl.cardHtml(c.dossier.sc, backup);
   }
 
   function nextBlock(c) {
@@ -602,7 +541,7 @@
       block('Aujourd’hui', () => heroBlock(c)) +
       block('Pilotage', () => pilotBlock(c)) +
       block('Intelligence', () => intelBlock(c)) +
-      block('État du dossier', () => dossierBlock(c)) +
+      block('Smart Control', () => dossierBlock(c)) +
       block('Prochaine action', () => nextBlock(c)) +
       footerBlock() +
     '</div>';

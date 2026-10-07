@@ -384,3 +384,25 @@
     grid-template-columns:repeat(3,minmax(0,1fr));
   }
 }
+
+/* V37.0-A — Smart Control explicable (mêmes variables et proportions que les lignes mh31) */
+.mh37-card .mh31-counts{grid-template-columns:repeat(3,1fr)}
+.mh37-sec{margin-top:12px;color:var(--dim);font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.mh37-g{margin-top:6px}
+.mh37-g>summary.mh31-row{list-style:none;cursor:pointer;width:100%;padding:8px;border-radius:11px;border:1px solid var(--line);
+  border-left:3px solid var(--tone,var(--line));color:var(--txt);display:grid;grid-template-columns:23px 1fr 13px;align-items:center;gap:7px}
+.mh37-g>summary::-webkit-details-marker{display:none}
+.mh37-g>summary em{transition:transform .15s ease}
+.mh37-g[open]>summary em{transform:rotate(90deg)}
+.mh37-item{margin:6px 0 0 10px;padding:9px 10px;border-radius:11px;background:var(--tint);border-left:3px solid var(--tone)}
+.mh37-k{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:800}
+.mh37-k em{font-style:normal;color:var(--tone);font-size:11px;white-space:nowrap}
+.mh37-item dl{display:grid;grid-template-columns:72px 1fr;gap:4px 8px;margin:8px 0 0;font-size:11px;line-height:1.35}
+.mh37-item dt{color:var(--dim);font-weight:700}
+.mh37-item dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.mh37-item dd span{display:block}
+.mh37-item dd small{display:block;margin-top:2px;color:var(--dim);font-size:10px}
+.mh37-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.mh37-more{margin-top:6px}
+.mh37-more>summary{list-style:none;cursor:pointer;display:inline-block;margin-top:2px;padding:6px 2px;color:var(--dim);font-size:11px;font-weight:700}
+.mh37-more>summary::-webkit-details-marker{display:none}
