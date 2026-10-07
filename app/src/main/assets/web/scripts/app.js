@@ -416,7 +416,7 @@ document.addEventListener('touchend',e=>{
   else if(curTab==='mois'){dx<0?goMonth(1):goMonth(-1)}
 });
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=37.0-H',{scope:'./'}).then(reg=>{
+  navigator.serviceWorker.register('./sw.js?v=37.0.0',{scope:'./'}).then(reg=>{
     try{
       window.mhServiceWorkerReady=!!reg;
       if(typeof reg.update==='function') reg.update().catch(()=>{});
@@ -428,7 +428,7 @@ if('serviceWorker' in navigator){
    V15 — INTELLIGENCE / SÉCURITÉ / MODE PRO
    Couche additive : ne modifie pas les règles de calcul historiques.
 ═══════════════════════════════════════════════ */
-const MH_V='36.2.0';
+const MH_V='37.0.0';
 
 function mhMonthStatsRaw(ym){
   const [y,m]=ym.split('-').map(Number), last=isoOf(new Date(y,m+1,0));
@@ -578,7 +578,14 @@ function renderAudit(){
   const periods=DB.periods||[], seen=new Set(), all=[];periods.forEach(p=>{const pk=p.start+'|'+p.nb;if(seen.has(pk))return;seen.add(pk);all.push(...calcPer(p.start,p.nb).AL)});
   const unique=[];const ua=new Set();all.forEach(a=>{const k=a.k+'|'+a.lvl+'|'+a.m;if(!ua.has(k)){ua.add(k);unique.push(a)}});
   const hard=unique.filter(a=>a.lvl==='b').length,warn=unique.filter(a=>a.lvl==='w').length;
-  const total=hard*4+warn; const score=Math.max(0,Math.min(100,100-total*5)); host.innerHTML=`<div class="audit-health"><div><span>ÉTAT DES PÉRIODES</span><b>${score}/100</b></div><strong>${score>=90?'🟢 Planning cohérent':score>=70?'🟠 Points à vérifier':'🔴 Contrôle nécessaire'}</strong><small>${unique.length?unique.length+' point(s) détecté(s)':'Aucune anomalie détectée'}</small></div><div class="audit-strip"><span>🔎 ${seen.size} période(s)</span><span class="${hard?'bad-text':'ok-text'}">🔴 ${hard} critique(s)</span><span class="${warn?'warn-text':'ok-text'}">🟠 ${warn} attention(s)</span><span>🔵 contrôle effectué</span></div>`+host.innerHTML;
+  /* V37.0.0 : « État des périodes » = journées conformes / journées évaluées (journées de travail des périodes enregistrées,
+     conformes = aucune alerte du moteur sur la journée). Ancienne formule (100 − 5 × pénalités) retirée : elle affichait 100/100
+     sans aucune donnée. Le statut reste celui des alertes réglementaires réelles. Périmètre distinct du Smart Control. */
+  const evalDays=new Set();let conf=0;
+  periods.forEach(p=>{for(let i=0;i<p.nb*14;i++){const k=addD(p.start,i),d=DB.days[k];if(!d||!['T','NUIT'].includes(d.t)||evalDays.has(k))continue;evalDays.add(k);if(!(cd(k).al||[]).length)conf++}});
+  const evals=evalDays.size,score=evals?Math.round(conf/evals*100):null;
+  const etat=!evals?'⚪ Données insuffisantes':hard?'🔴 Contrôle nécessaire':warn?'🟠 Points à vérifier':'🟢 Planning cohérent';
+  host.innerHTML=`<div class="audit-health" data-score="${score==null?'':score}"><div><span>ÉTAT DES PÉRIODES</span><b>${score==null?'—':score+' %'}</b></div><strong>${etat}</strong><small>${evals?'Journées conformes : '+conf+' / '+evals+' évaluées · '+(unique.length?unique.length+' point(s) détecté(s)':'aucune anomalie détectée'):'Aucune journée de travail dans les périodes enregistrées : aucun score.'}</small></div><div class="audit-strip"><span>🔎 ${seen.size} période(s)</span><span class="${hard?'bad-text':'ok-text'}">🔴 ${hard} critique(s)</span><span class="${warn?'warn-text':'ok-text'}">🟠 ${warn} attention(s)</span><span>🔵 contrôle effectué</span></div>`+host.innerHTML;
 }
 
 /* Export V15 : enveloppe versionnée, import compatible avec les anciens JSON. */
@@ -659,7 +666,7 @@ function mhDecoratePages(){
   });
 }
 
-if($('mhVersion'))$('mhVersion').textContent='V36.2.0';
+if($('mhVersion'))$('mhVersion').textContent='V37.0.0';
 mhDecoratePages();
 mhAutoBackup();
 setTimeout(()=>{try{if(typeof mhRefresh==='function')mhRefresh('boot-legacy');else window.__mh30PendingRefresh='boot-legacy'}catch(e){console.error('V15 render',e)}},0);

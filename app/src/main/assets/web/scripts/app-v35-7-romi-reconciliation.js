@@ -9,7 +9,14 @@
 (function(){
   'use strict';
   const ID='mhRomiReconciliation';
-  const TOL_MIN=1;
+  /* V37.0.0 : une seule règle pour la même comparaison ROMI1 ↔ MesHeures.
+     - TTE et HS période (minutes) : ±15 min, tolérance du rapprochement V37 (MHRomiRecon.TOLERANCE, Smart Control, Compteur).
+     - Jours de présence (jours) : comparaison différente (un compte de jours, pas une durée) ; règle historique conservée,
+       écart toléré ≤ 1 jour, inchangée.
+     - ROMI1 ↔ bulletin (HS payées, en heures décimales) : comparaison entre deux documents employeur, tolérance 0,05 h conservée. */
+  const TOL_JOURS=1;
+  const tolMin=()=>(window.MHRomiRecon&&Number.isFinite(window.MHRomiRecon.TOLERANCE))?window.MHRomiRecon.TOLERANCE:15;
+  const tolOf=unit=>unit==='j'?TOL_JOURS:tolMin();
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const num=v=>{const n=Number(v);return Number.isFinite(n)?n:null};
   const dateRE=/^\d{4}-\d{2}-\d{2}$/;
@@ -20,7 +27,7 @@
   const hToMin=h=>h==null?null:Math.round(Number(h)*60);
   const delta=(a,b)=>a==null||b==null?null:a-b;
   const dText=m=>m==null?'—':(m>0?'+':m<0?'−':'')+hm(Math.abs(m));
-  const dClass=m=>m==null?'':Math.abs(m)<=TOL_MIN?'ok':Math.abs(m)<=30?'warn':'bad';
+  const dClass=(m,unit)=>m==null?'':Math.abs(m)<=tolOf(unit)?'ok':unit==='j'?'warn':Math.abs(m)<=30?'warn':'bad';
 
   function records(){
     /*
@@ -209,7 +216,7 @@
     const hs125ToRc=rv(r,'hs125ToRcH')||0, hs150ToRc=rv(r,'hs150ToRcH')||0;
     const rcConversion=(hs125ToRc>0.01||hs150ToRc>0.01)?{hs125ToRc,hs150ToRc}:null;
 
-    return {status:'ok',r,local,romi,checks,bad:checks.filter(x=>x.delta!=null&&Math.abs(x.delta)>TOL_MIN),
+    return {status:'ok',r,local,romi,checks,bad:checks.filter(x=>x.delta!=null&&Math.abs(x.delta)>tolOf(x.unit)),
       bulletins,bulletinChecks,singleMonth,seniorityFlags,rcConversion};
   }
 
@@ -219,7 +226,7 @@
     if(b.status==='none'){host.innerHTML='<div class="card"><h2>🔎 Rapprochement ROMI1 ↔ MesHeures</h2><div class="al i">Aucun ROMI1 enregistré.</div></div>';return;}
     if(b.status==='error'){host.innerHTML='<div class="card"><h2>🔎 Rapprochement ROMI1 ↔ MesHeures</h2><div class="al w">⚠️ '+esc(b.error)+'</div></div>';return;}
     const ok=b.bad.length===0;
-    const row=(x,sourceFmt)=>`<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.local==null?'—':(x.unit==='j'?x.local:hm(x.local))}</td><td class="n">${x.source==null?'—':(x.unit==='j'?x.source:sourceFmt(x.source))}</td><td class="n ${dClass(x.delta)}">${x.delta==null?'—':x.unit==='j'?((x.delta>0?'+':'')+x.delta+' j'):dText(x.delta)}</td></tr>`;
+    const row=(x,sourceFmt)=>`<tr><td><b>${esc(x.label)}</b></td><td class="n">${x.local==null?'—':(x.unit==='j'?x.local:hm(x.local))}</td><td class="n">${x.source==null?'—':(x.unit==='j'?x.source:sourceFmt(x.source))}</td><td class="n ${dClass(x.delta,x.unit)}">${x.delta==null?'—':x.unit==='j'?((x.delta>0?'+':'')+x.delta+' j'):dText(x.delta)}</td></tr>`;
     const dayRows=b.local.rows.map(x=>`<tr><td>${x.k}</td><td class="n">${hm(x.tte)}</td><td class="n">${hm(x.amp)}</td><td>${x.alerts.length?'⚠️ '+x.alerts.length:'✓'}</td></tr>`).join('');
     host.innerHTML=`<div class="card mh-romi35-card">
       <h2>🔎 Rapprochement ROMI1 ↔ MesHeures</h2>

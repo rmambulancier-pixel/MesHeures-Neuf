@@ -11,7 +11,7 @@
  */
 (function(){
   'use strict';
-  const V='37.0-D';
+  const V='37.0.0';   // version de l'application inscrite dans le dossier (format inchangé depuis V37.0-D)
   const NR='non renseigné';
   const NC='non comparable';
   const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];

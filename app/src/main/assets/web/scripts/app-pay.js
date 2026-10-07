@@ -46,7 +46,7 @@
   function syncVersion() {
     document.title = document.title.replace(/V16\.1(?:\.0)?|V16\.2(?:\.0)?|V17(?:\.0\.1)?/g, 'V30.2.3');
     const meta = document.querySelector('meta[name="application-version"]');
-    if (meta) meta.setAttribute('content','36.2.0');
+    if (meta) meta.setAttribute('content','37.0.0');
 
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const nodes = [];
