@@ -514,9 +514,13 @@ function renderAuditBase(){
     };
   }
 
-  let h='<tr><th>Période</th><th class="n">TTE</th><th class="n">HS25</th><th class="n">HS50</th><th class="n">RC exact</th><th class="n">RC bulletin</th><th class="n">Écart</th></tr>';
+  let h='<tr><th>Période</th><th class="n">TTE</th><th class="n">HS25</th><th class="n">HS50</th><th class="n">RC<br>exact</th><th class="n">RC<br>bull.</th><th class="n">Écart</th></tr>';
   const byYear={};
-  auditPeriods.forEach(p=>{
+  /* V37.0-B — affichage mobile : les quatorzaines anciennes restent dans le tableau (et dans le TOTAL)
+     mais sont repliées ; un bouton les affiche. Aucun calcul n'est modifié. */
+  const AUDIT_VISIBLE=8,auditHidden=Math.max(0,auditPeriods.length-AUDIT_VISIBLE);
+  if(auditHidden)h+=`<tr class="mh-old-toggle"><td colspan="7"><button type="button" class="g" onclick="this.closest('table').classList.toggle('mh-show-old');this.textContent=this.closest('table').classList.contains('mh-show-old')?'▾ Masquer les ${auditHidden} périodes antérieures':'▸ Afficher les ${auditHidden} périodes antérieures'">▸ Afficher les ${auditHidden} périodes antérieures</button></td></tr>`;
+  auditPeriods.forEach((p,auditIdx)=>{
     auditAddUniqueDays(p.start,p.nb);
     const{G,AL}=calcPer(p.start,p.nb),B=auditBulletin(p.start);
     const hasPayRef=B.p25!=null&&B.p50!=null;
@@ -551,7 +555,7 @@ function renderAuditBase(){
     }
     byYear[y].trav+=G.trav;byYear[y].nor+=G.nor;
     auditLastKeptEnd=(auditLastKeptEnd===null||pEnd>auditLastKeptEnd)?pEnd:auditLastKeptEnd;
-    h+=`<tr><td><a href="#" onclick="DB.per={start:'${p.start}',nb:${p.nb}};save();tab('paie');return false" style="color:var(--blue)">${short(p.start)}→${short(addD(p.start,p.nb*14-1))}</a></td>
+    h+=`<tr${auditIdx<auditHidden?' class="mh-old"':''}><td><a href="#" onclick="DB.per={start:'${p.start}',nb:${p.nb}};save();tab('paie');return false" style="color:var(--blue)">${short(p.start)}→${short(addD(p.start,p.nb*14-1))}</a></td>
 <td class="n">${F(G.tte)}</td><td class="n">${C2(G.h25)}</td><td class="n">${C2(G.h50)}</td>
 <td class="n">${acq!=null?acq.toFixed(2):'—'}</td><td class="n">${B.rcAcq!=null?B.rcAcq.toFixed(2):'—'}</td>
 <td class="n ${ec===null?'':Math.abs(ec)<0.1?'ok':'bad'}">${ec===null?'—':Math.abs(ec)<0.1?'✓':ec.toFixed(2)}</td></tr>`;

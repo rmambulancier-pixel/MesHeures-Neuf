@@ -74,7 +74,7 @@
   }
   function render(){
     const target=document.getElementById('s-audit')||document.body;if(document.getElementById('mhV30Dossier'))return;
-    const sec=document.createElement('section');sec.id='mhV30Dossier';sec.innerHTML=`<div class="card mh-v30-card"><h2>📁 Dossier complet V30.2.3</h2><p class="mut">Regroupe l'historique, les constats, les événements, les bulletins et l'intelligence locale dans un export unique.</p><div class="row"><button onclick="mhV30ExportDossier()">⬇️ Export dossier JSON</button><button class="g" onclick="mhV30PrintDossier()">🖨️ Dossier imprimable / PDF</button><button class="g" onclick="mhV30ExportSignedPDF()">🔏 PDF probatoire signé</button></div><div id="mhV30DossierHash" class="mut" style="margin-top:8px"></div></div>`;target.appendChild(sec);refreshHash();
+    const sec=document.createElement('section');sec.id='mhV30Dossier';sec.innerHTML=`<div class="card mh-v30-card"><h2>📁 Dossier complet</h2><p class="mut">Regroupe l'historique, les constats, les événements, les bulletins et l'intelligence locale dans un export unique.</p><div class="row"><button onclick="mhV30ExportDossier()">⬇️ Export dossier JSON</button><button class="g" onclick="mhV30PrintDossier()">🖨️ Dossier imprimable / PDF</button><button class="g" onclick="mhV30ExportSignedPDF()">🔏 PDF probatoire signé</button></div><div id="mhV30DossierHash" class="mut" style="margin-top:8px"></div></div>`;target.appendChild(sec);refreshHash();
   }
   async function refreshHash(){try{const h=await digestText(compact(snapshot()));const el=document.getElementById('mhV30DossierHash');if(el)el.textContent='Empreinte actuelle SHA-256 : '+h}catch(e){}}
   window.mhV30ExportDossier=()=>makeDossier(false);

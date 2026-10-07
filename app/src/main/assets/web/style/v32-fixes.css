@@ -150,3 +150,88 @@ html:root:not([data-theme="light"]){--dim:#9ba5b0;--bad:#ff7b72}
 :root[data-theme="light"] #s-paie table td{
   color:#1f2328!important;background:#fff!important;border-color:#d0d7de!important;
 }
+
+/* ==========================================================================
+   V37.0-B — Audit réglementaire, Dossier & preuves : densité mobile.
+   Référence : Pixel 10 Pro XL (≈ 412–448 px CSS) ; vérifié aussi à 360 px.
+   Affichage uniquement, limité à #s-audit. Aucune donnée masquée : les lignes
+   repliées restent dans le DOM et un bouton les affiche.
+   ========================================================================== */
+#s-audit{overflow-wrap:anywhere}
+#s-audit .card{padding:12px!important;margin-bottom:10px!important}
+#s-audit .card h2{font-size:15px;margin-bottom:9px}
+#s-audit .mh-page-hero{padding:4px 2px 10px}
+
+/* Vue globale et RC : tuiles compactes sur 4 colonnes, état et bandeau sur toute la largeur */
+#s-audit #aKpi.kpis,#s-audit #aRc .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:6px!important}
+#s-audit #aKpi>.audit-health,#s-audit #aKpi>.audit-strip,#s-audit #aKpi>.audit-empty{grid-column:1/-1}
+#s-audit .kpi{min-height:0!important;padding:8px 3px!important;border-radius:11px!important}
+#s-audit .kpi b{font-size:14px!important;line-height:1.15;white-space:nowrap}
+#s-audit .kpi span{font-size:9.5px!important;line-height:1.2;margin-top:3px}
+#s-audit .audit-health{padding:10px 12px!important;margin-bottom:0!important;gap:2px 12px;border-radius:13px!important}
+#s-audit .audit-health b{font-size:24px}
+#s-audit .audit-health strong{font-size:13px}
+#s-audit .audit-strip{padding:2px 0 0;gap:5px}
+#s-audit .audit-strip span{padding:4px 6px;font-size:10.5px;flex:1 1 auto}
+
+/* Tableaux : toutes les colonnes visibles à la largeur du téléphone, chiffres sur une ligne */
+#s-audit table{width:100%;font-size:11.5px;border-radius:11px}
+#s-audit th{font-size:9.5px;padding:6px 4px!important;line-height:1.15;vertical-align:bottom}
+#s-audit td{padding:5px 4px!important;line-height:1.25}
+#s-audit td.n,#s-audit th.n{white-space:nowrap}
+#s-audit #aTab td:first-child{white-space:nowrap}
+#s-audit table:not(.mh-show-old) tr.mh-old{display:none}
+#s-audit tr.mh-old-toggle td{padding:6px!important}
+#s-audit tr.mh-old-toggle button,#s-audit .mh-empty-toggle{width:100%;min-height:38px;padding:6px 10px;font-size:12px;border-radius:10px}
+:root[data-theme="light"] #s-audit table{border:1px solid var(--mh-light-border,#d0d7de)!important}
+
+/* Alertes : une à deux lignes, sans marges excessives */
+#s-audit .al{padding:7px 9px!important;margin:5px 0!important;font-size:12px;line-height:1.35;border-radius:10px!important}
+#s-audit .card>div>.mut,#s-audit .card>.mut{font-size:11px}
+
+/* Dossier & preuves */
+#s-audit .mh-v30-card h2{display:flex;align-items:center;gap:6px}
+#s-audit .mh-v30-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:9px}
+#s-audit .mh-v30-kpis>div{display:flex;flex-direction:column;align-items:center;text-align:center;padding:8px 4px;border:1px solid var(--line);border-radius:11px;min-width:0}
+#s-audit .mh-v30-kpis b{display:block;font-size:15px;line-height:1.15;white-space:nowrap}
+#s-audit .mh-v30-kpis span{display:block;margin-top:3px;font-size:10px;color:var(--dim)}
+#s-audit .mh-v30-card .row,#s-audit .mh-v30-dossier .row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0 0 9px}
+#s-audit .mh-v30-card .row button{width:100%;min-height:40px;padding:8px 6px;font-size:12.5px;margin:0}
+#s-audit details{margin-top:8px;border:1px solid var(--line);border-radius:11px;padding:0 9px}
+#s-audit details>summary{padding:9px 0;font-size:13px;font-weight:800;cursor:pointer}
+#s-audit .mh-journal{display:block;margin-bottom:6px}
+#s-audit .mh-journal .mh-v30-row{display:grid;grid-template-columns:56px repeat(3,minmax(0,1fr)) minmax(0,1.25fr);gap:4px;align-items:baseline;padding:5px 0;border-top:1px solid var(--line);font-size:11.5px;white-space:nowrap}
+#s-audit .mh-journal .mh-v30-row>*{overflow:hidden;text-overflow:ellipsis;text-align:right}
+#s-audit .mh-journal .mh-v30-row>b{text-align:left}
+#s-audit .mh-journal .mh-head{border-top:0;color:var(--dim);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.03em}
+#s-audit .mh-journal .mh-head>*{font-weight:800}
+#s-audit .mh-journal:not(.mh-show-empty) .mh-empty{display:none}
+#s-audit .mh-empty-toggle{margin-bottom:9px}
+#s-audit .mh-v30-proof{padding:7px 9px!important;margin:6px 0!important;font-size:11.5px;line-height:1.35;border-radius:10px!important;box-shadow:none!important}
+#s-audit .mh-v30-proof small{display:block;margin-top:3px;color:var(--dim);font-size:10px}
+#s-audit .mh-v30-timeline>div{padding:7px 9px;margin:6px 0;border-radius:10px;font-size:11.5px}
+
+/* Dossier complet : boutons en grille, empreinte SHA-256 coupée proprement (débordement corrigé) */
+#s-audit #mhV30Dossier p.mut{font-size:11.5px;margin:0 0 9px}
+#s-audit #mhV30Dossier .row button{width:100%;min-height:40px;padding:8px 6px;font-size:12.5px;margin:0}
+#s-audit #mhV30Dossier .row button:first-child{grid-column:1/-1}
+#s-audit #mhV30DossierHash{font-family:ui-monospace,Menlo,monospace;font-size:10px;line-height:1.35;word-break:break-all}
+
+/* Petits écrans (< 360 px) : tuiles sur 2 colonnes, journal sans la colonne en euros tronquée */
+@media (max-width:359px){
+  #s-audit #aKpi.kpis,#s-audit #aRc .kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  #s-audit .mh-journal .mh-v30-row{grid-template-columns:50px repeat(3,minmax(0,1fr)) minmax(0,1.1fr);font-size:10.5px}
+  #s-audit table{font-size:10.5px}
+}
+#s-audit table{overflow-wrap:normal;word-break:normal}
+@media (max-width:400px){
+  #s-audit table{font-size:10.5px}
+  #s-audit th{font-size:9px;padding:5px 3px!important}
+  #s-audit td{padding:4px 3px!important}
+}
+@media (max-width:379px){
+  #s-audit .card{padding:10px!important}
+  #s-audit #aTab td:first-child{white-space:normal;line-height:1.15}
+  #s-audit #aTab td:first-child a{word-break:normal;overflow-wrap:normal}
+  #s-audit table{font-size:10px}
+}

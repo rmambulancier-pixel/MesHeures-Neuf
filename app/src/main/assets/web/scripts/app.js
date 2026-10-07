@@ -416,7 +416,7 @@ document.addEventListener('touchend',e=>{
   else if(curTab==='mois'){dx<0?goMonth(1):goMonth(-1)}
 });
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=37.0-A',{scope:'./'}).then(reg=>{
+  navigator.serviceWorker.register('./sw.js?v=37.0-B',{scope:'./'}).then(reg=>{
     try{
       window.mhServiceWorkerReady=!!reg;
       if(typeof reg.update==='function') reg.update().catch(()=>{});
@@ -589,7 +589,7 @@ function renderAudit(){
   const periods=DB.periods||[], seen=new Set(), all=[];periods.forEach(p=>{const pk=p.start+'|'+p.nb;if(seen.has(pk))return;seen.add(pk);all.push(...calcPer(p.start,p.nb).AL)});
   const unique=[];const ua=new Set();all.forEach(a=>{const k=a.k+'|'+a.lvl+'|'+a.m;if(!ua.has(k)){ua.add(k);unique.push(a)}});
   const hard=unique.filter(a=>a.lvl==='b').length,warn=unique.filter(a=>a.lvl==='w').length;
-  const total=hard*4+warn; const score=Math.max(0,Math.min(100,100-total*5)); host.innerHTML=`<div class="audit-health"><div><span>ÉTAT DU MOIS</span><b>${score}/100</b></div><strong>${score>=90?'🟢 Planning cohérent':score>=70?'🟠 Points à vérifier':'🔴 Contrôle nécessaire'}</strong><small>${unique.length?unique.length+' point(s) détecté(s)':'Aucune anomalie détectée'}</small></div><div class="audit-strip"><span>🔎 ${seen.size} période(s)</span><span class="${hard?'bad-text':'ok-text'}">🔴 ${hard} critique(s)</span><span class="${warn?'warn-text':'ok-text'}">🟠 ${warn} attention(s)</span><span>🟢 contrôle terminé</span></div>`+host.innerHTML;
+  const total=hard*4+warn; const score=Math.max(0,Math.min(100,100-total*5)); host.innerHTML=`<div class="audit-health"><div><span>ÉTAT DES PÉRIODES</span><b>${score}/100</b></div><strong>${score>=90?'🟢 Planning cohérent':score>=70?'🟠 Points à vérifier':'🔴 Contrôle nécessaire'}</strong><small>${unique.length?unique.length+' point(s) détecté(s)':'Aucune anomalie détectée'}</small></div><div class="audit-strip"><span>🔎 ${seen.size} période(s)</span><span class="${hard?'bad-text':'ok-text'}">🔴 ${hard} critique(s)</span><span class="${warn?'warn-text':'ok-text'}">🟠 ${warn} attention(s)</span><span>🟢 contrôle terminé</span></div>`+host.innerHTML;
 }
 
 /* Export V15 : enveloppe versionnée, import compatible avec les anciens JSON. */
