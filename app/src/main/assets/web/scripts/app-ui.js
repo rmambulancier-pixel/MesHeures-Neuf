@@ -76,12 +76,12 @@ function bindMonthLongPress(){
 function setD(f,v){
   const d=gd(curDate);
   if(f==='t'&&d.t!==v)pushUndo('Changement type '+d.t+'→'+v+' le '+short(curDate));
-  d[f]=v; save(); mhRefresh('day-field');
+  d[f]=v; if(f==='panier')d.mealV=3; save(); mhRefresh('day-field');
 }
 
-function setP(i,f,v){const d=gd(curDate);if(!d.p[i])d.p[i]={ty:'ENT'};d.p[i][f]=v;save();mhRefresh('day-pause');}
+function setP(i,f,v){const d=gd(curDate);if(!d.p[i])d.p[i]={};d.p[i][f]=v;save();mhRefresh('day-pause');}
 
-function addP(){gd(curDate).p.push({d:'',f:'',ty:'ENT'});save();mhRefresh('day-pause');}
+function addP(){gd(curDate).p.push({d:'',f:''});save();mhRefresh('day-pause');}
 
 function clearDay(){
   const d=DB.days[curDate];
@@ -133,30 +133,18 @@ function renderDay(){
 <div><label>Fin</label><input type="time" value="${d.fin||''}" onchange="setD('fin',this.value)"></div>
 </div>
 <div style="margin-top:11px"><label>Pauses</label>`;
-    const _a=P(d.deb),_b0=P(d.fin);
-    let _b=_b0;
-    if(_a!=null&&_b!=null&&_b<=_a)_b+=1440;
-    const _pd=P(DB.s.panDeb),_pf=P(DB.s.panFin);
-    const _panOK=_a!=null&&_b!=null&&_a<=_pd&&_b>=_pf;
-    d.p.forEach((p,i)=>h+=`<div class="pz"><div class="row">
-<input type="time" value="${p.d||''}" onchange="setP(${i},'d',this.value)" style="flex:1">
-<input type="time" value="${p.f||''}" onchange="setP(${i},'f',this.value)" style="flex:1">
-<button class="r" onclick="delP(${i})" style="padding:8px 11px">✕</button></div>
-<div class="row" style="margin-top:7px;align-items:center">
-<select onchange="setP(${i},'ty',this.value)" style="flex:1">
-<option value="ENT"${p.ty==='ENT'?' selected':''}>Intérieur (IRU)</option>
-<option value="EXT"${p.ty==='EXT'?' selected':''}>Extérieur (IR)</option>
-</select>
-<span class="mut">${_panOK?'🍽️ panier':'—'}</span></div></div>`);
+    const _mealChoice = typeof mhMealChoice==='function' ? mhMealChoice(d) : (d.panier ?? null);
+    const _mealExplicit = Object.prototype.hasOwnProperty.call(d,'panier');
+    d.p.forEach((p,i)=>h+=`<div class="pz"><div class="row"><input type="time" value="${p.d||''}" onchange="setP(${i},'d',this.value)" style="flex:1"><input type="time" value="${p.f||''}" onchange="setP(${i},'f',this.value)" style="flex:1"><button class="r" onclick="delP(${i})" style="padding:8px 11px">✕</button></div></div>`);
     h+=`<button class="g" onclick="addP()" style="width:100%">+ Ajouter une pause</button></div>
 <div style="margin-top:11px"><label>Panier repas</label>
 <div class="chips">
-<button class="${!d.panier?'on':''}" onclick="setD('panier',null)">Auto</button>
-<button class="${d.panier==='EXT'?'on':''}" onclick="setD('panier','EXT')">🍽️ Extérieur</button>
-<button class="${d.panier==='ENT'?'on':''}" onclick="setD('panier','ENT')">🍽️ Intérieur</button>
-<button class="${d.panier==='NON'?'on':''}" onclick="setD('panier','NON')">Aucun</button>
+<button class="${!_mealChoice?'on':''}" onclick="setD('panier',null)">Auto</button>
+<button class="${_mealChoice==='EXT'?'on':''}" onclick="setD('panier','EXT')">🍽️ Extérieur (IR)</button>
+<button class="${_mealChoice==='ENT'?'on':''}" onclick="setD('panier','ENT')">🍽️ Intérieur (IRU)</button>
+<button class="${_mealExplicit&&d.panier==='NON'?'on':''}" onclick="setD('panier','NON')">Aucun</button>
 </div>
-<div class="mut">${!d.panier?(_panOK?'Auto : service couvrant la plage repas → 1 panier extérieur compté sans rien saisir.':'Auto : le service ne couvre pas toute la plage repas → aucun panier.'):'Choix forcé pour cette journée.'}</div>
+<div class="mut">Extérieur (IR) = repas pris hors du bureau · Intérieur (IRU) = repas pris au bureau. En Auto, l'IR extérieur est compté si le service couvre une plage 11h00–14h30 ou 18h30–22h00.</div>
 </div>
 <div style="margin-top:11px">
 <label style="text-transform:none;font-size:14px;color:var(--txt)">
@@ -276,7 +264,7 @@ function renderPayBase(){
   $('pAl').innerHTML=AL.length
     ?AL.map(a=>`<div class="al ${a.lvl}"><b>${short(a.k)}</b> — ${esc(a.m)}</div>`).join('')
     :'<div class="al k">✅ Aucune anomalie détectée sur cette période</div>';
-  const{L,tot,panIR,panIRU,panIRUT}=brutOf(G);
+  const{L,tot,netEst,panIR,panIRTax,panIRU,panIRExon,panIRUT}=brutOf(G);
   /*
    * V36 HABILLAGE FIX
    * La fiche de paie officielle enregistre l'habillage/déshabillage
@@ -289,17 +277,18 @@ function renderPayBase(){
   const habBul=(DB.bulletins||[]).find(b=>b && b.mois===habMois);
   let habRef='';
   if(habBul && Number.isFinite(Number(habBul.habH))){
-    const habH=Number(habBul.habH);
+    const habBulMin=Math.round(Number(habBul.habH)*60);   // bulletin : heures décimales -> minutes
     const habT=Number(habBul.habT)||0;
     const habM=Number(habBul.habM)||0;
-    const habCalc=Number(G.hab);
-    const habDiff=Number.isFinite(habCalc)?(habCalc-habH):null;
-    const habOk=habDiff===null || Math.abs(habDiff*60)<0.1;
-    const calcTxt=habDiff===null?'':` · Référence bulletin uniquement — l'habillage ne modifie pas le TTE.<b>${F(habCalc*60)}</b>${Math.abs(habDiff*60)>0.1?` · écart <b>${F(Math.abs(habDiff*60))}</b>`:''}`;
+    const habCalcMin=Math.round(Number(G.hab)||0);        // G.hab est DÉJÀ en minutes (jours travaillés × min/jour)
+    const habDiffMin=habCalcMin-habBulMin;
+    const habOk=Math.abs(habDiffMin)<=1;
+    const calcTxt=` · MesHeures : <b>${F(habCalcMin)}</b> (${G.trav} j × ${S.hab} min)`
+      +(habOk?'':` · écart <b>${habDiffMin>0?'+':'-'}${F(Math.abs(habDiffMin))}</b>`);
     habRef=`<tr><td colspan="4" style="padding:10px 8px">
       <div class="al ${habOk?'k':'w'}">
         👕 <b>Habillage / déshabillage — bulletin ${habMois}</b><br>
-        Payé : <b>${F(habH*60)}</b> · taux <b>${habT.toFixed(4)} €/h</b> · montant <b>${EUR(habM)}</b>
+        Bulletin : <b>${F(habBulMin)}</b>${habT>0?` · taux <b>${habT.toFixed(4)} €/h</b>`:''}${habM>0?` · montant <b>${EUR(habM)}</b>`:''}
         ${calcTxt}
         ${habOk?' · ✅ conforme au bulletin':' · ⚠️ écart à rapprocher'}
       </div>
@@ -309,11 +298,10 @@ function renderPayBase(){
     +L.map(x=>`<tr><td>${esc(x[0])}</td><td class="n">${x[1]}</td><td class="n mut">${x[2]}</td><td class="n">${EUR(x[3])}</td></tr>`).join('')
     +habRef
     +`<tr class="t"><td>Brut soumis à cotisations</td><td colspan="2"></td><td class="n">${EUR(tot)}</td></tr>`
-    +`<tr><td>Net estimé</td><td colspan="2" class="n mut">× ${S.net}</td><td class="n">${EUR(tot*S.net)}</td></tr>`
-    +`<tr><td>IR (${G.ir} repas ext.)</td><td colspan="2" class="n mut">${S.ir} €/repas</td><td class="n">+ ${EUR(panIR)}</td></tr>`
-    +`<tr><td>IRU brut (${G.iru} repas int.)</td><td colspan="2" class="n mut">${S.iru} €</td><td class="n">+ ${EUR(panIRU)}</td></tr>`
-    +`<tr><td>IRU taux plein (${G.iru} repas)</td><td colspan="2" class="n mut">${S.irT} €</td><td class="n">(${EUR(panIRUT)} si taux plein)</td></tr>`
-    +`<tr class="t"><td>Total versé estimé</td><td colspan="2"></td><td class="n">${EUR(tot*S.net+panIR+panIRU)}</td></tr>`;
+    +`<tr><td>Net estimé (brut × ${S.net})</td><td colspan="2" class="n mut"></td><td class="n">${EUR(tot*S.net)}</td></tr>`
+    +`<tr><td>+ IR extérieur — part exonérée (${G.ir} repas)</td><td colspan="2" class="n mut">${S.irT} €/repas</td><td class="n">+ ${EUR(panIRExon)}</td></tr>`
+    +`<tr><td>+ IRU intérieur (${G.iru} repas)</td><td colspan="2" class="n mut">${S.iru} €/repas</td><td class="n">+ ${EUR(panIRU)}</td></tr>`
+    +`<tr class="t"><td>Total versé estimé</td><td colspan="2"></td><td class="n">${EUR(netEst)}</td></tr>`;
   /*
    * V36 RC — distinction stricte entre donnée absente et zéro.
    * Une absence de référence employeur ne signifie pas « aucune heure payée ».

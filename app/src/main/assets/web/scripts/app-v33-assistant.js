@@ -10,8 +10,7 @@ const dur=(a,b)=>{a=mm(a);b=mm(b);if(a==null||b==null)return null;return b>=a?b-
 const Fm=m=>typeof F==='function'?F(Math.round(m||0)):`${Math.floor((m||0)/60)}h${String(Math.abs(Math.round(m||0))%60).padStart(2,'0')}`;
 const dateLabel=k=>typeof shortY==='function'?shortY(k):k;
 const get=k=>{const d=days()[k]||{t:'REPOS',p:[]};let r={};try{r=typeof cd==='function'?cd(k):{amp:0,tte:0,pz:0,meal:null}}catch(e){};return {k,d,r,work:isWork(k)};};
-function pauseList(d){return (d.p||[]).map((p,i)=>({i,d:p.d||'',f:p.f||'',ty:p.ty||'ENT',min:dur(p.d,p.f)})).filter(p=>p.min!=null)}
-function mealRequired(d){const a=mm(d.deb),b=mm(d.fin);if(a==null||b==null)return false;const end=b>=a?b:b+1440;return (a<=660&&end>=870)||(a<=1110&&end>=1320)}
+function pauseList(d){return (d.p||[]).map((p,i)=>({i,d:p.d||'',f:p.f||'',min:dur(p.d,p.f)})).filter(p=>p.min!=null)}function mealRequired(d){const a=mm(d.deb),b=mm(d.fin);if(a==null||b==null)return false;return typeof mhCoveredMealWindow==='function'?mhCoveredMealWindow(a,b,DB.s):false}
 function scan(){
  const out=[]; const ks=Object.keys(days()).filter(isWork).sort();
  for(const k of ks){
@@ -26,9 +25,10 @@ function scan(){
   if(short.length)out.push({lvl:'warn',code:'SHORT_PAUSE',k,msg:`${short.length} pause(s) de moins de 20 min : ne pas les compter automatiquement comme pause légale.`});
   if(tte>=360 && (Number(r.pz)||0)<C.pauseMin)out.push({lvl:'warn',code:'NO_PAUSE20',k,msg:'Au moins 6 h de TTE et aucune pause d’au moins 20 min détectée.'});
   if(mealRequired(d)){
-    const ok=p.some(x=>x.min>=C.mealMin && ((mm(x.d)>=660&&mm(x.f)<=870)||(mm(x.d)>=1110&&mm(x.f)<=1320))) || !!(r.meal&&r.meal.auto);
-    if(!ok)out.push({lvl:'warn',code:'MEAL_MISSING',k,msg:'Journée couvrant une plage repas : aucune pause repas de 30 min détectée dans la plage concernée.'});
-    else if(r.meal?.auto)out.push({lvl:'info',code:'MEAL_AUTO',k,msg:'Repas automatique de 30 min appliqué au calcul TTE.'});
+    const mealPause=p.some(x=>x.min>=C.mealMin && mhMealWindows(DB.s).some(w=>mm(x.d)>=w.deb&&mm(x.f)<=w.fin));
+    const choice=typeof mhMealChoice==='function'?mhMealChoice(d):null;
+    if(choice!=='NON'&&!mealPause)out.push({lvl:'warn',code:'MEAL_MISSING',k,msg:'Journée couvrant une plage repas : aucune pause repas de 30 min détectée dans la plage concernée.'});
+    else if(!Object.prototype.hasOwnProperty.call(d,'panier'))out.push({lvl:'info',code:'MEAL_AUTO',k,msg:'Mode Auto : panier extérieur selon la couverture d’une plage repas. Aucune pause fictive n’est retirée du TTE.'});
   }
   if(d.panier&&d.panier!=='NON'&&!p.some(x=>x.min>=30))out.push({lvl:'info',code:'BASKET_WITHOUT_PAUSE',k,msg:`Panier ${d.panier} renseigné sans pause de 30 min enregistrée : vérifier la saisie.`});
  }

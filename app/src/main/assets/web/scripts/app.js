@@ -311,7 +311,7 @@ function loadArchive(){
 const RG={
   rg1:[['taux','Taux horaire (€)'],['net','Coef brut→net'],['dimPrime','Prime dimanche (€)']],
   rg2:[['base','Base hebdo (h)'],['pl','Plafond HS 25%'],['anchor','Ancrage quatorzaine'],['rc','Durée RC (min)'],['cp','Durée CP (min)'],['maxAmp','Alerte amplitude (h)'],['rcAlerte','Seuil alerte RC (h)']],
-  rg3:[['hab','Habillage (min/j)'],['habT','Taux habillage (€/h)'],['idaj','Seuil IDAJ (h)'],['ir','IR pause ext. (€)'],['iru','IRU taux réduit (€)'],['irT','IRU taux plein (€)'],['panDeb','Plage repas début'],['panFin','Plage repas fin'],['nuitDeb','Nuit début'],['nuitFin','Nuit fin'],['nuitMaj','Majoration nuit (%)']]
+  rg3:[['hab','Habillage (min/j)'],['habT','Taux habillage (€/h)'],['idaj','Seuil IDAJ (h)'],['ir','IR extérieur (€)'],['iru','IRU intérieur (€)'],['irT','Part exonérée IR extérieur (€)'],['panDeb','Repas midi début'],['panFin','Repas midi fin'],['panSoirDeb','Repas soir début'],['panSoirFin','Repas soir fin'],['nuitDeb','Nuit début'],['nuitFin','Nuit fin'],['nuitMaj','Majoration nuit (%)']]
 };
 
 /* ═══════════════════════════════════════════════
@@ -542,7 +542,7 @@ function renderPay(){
   const st=DB.per.start,nb=DB.per.nb,{G}=calcPer(st,nb),br=brutOf(G),tot=br.tot;
   const host=$('pKpi'); if(!host)return;
   const anc=calcAnc(DB.s.emb||DEF.emb), ancPct=DB.s.anc||anc.pct;
-  const netEst=tot*DB.s.net+br.panIR+br.panIRU;
+  const netEst=tot*DB.s.net+br.panIRExon+br.panIRU;
   const sim=$('pSim'); if(sim){sim.innerHTML=`<div class="pay-sim-total"><strong>${EUR(tot)}</strong><span>BRUT ESTIMÉ</span></div><div class="pay-sim-grid"><div><span>Heures normales</span><b>${F(G.nor)}</b></div><div><span>HS 25 %</span><b>${F(G.h25)}</b></div><div><span>HS 50 %</span><b>${F(G.h50)}</b></div><div><span>Heures de nuit</span><b>${C2(G.nuit)} h</b></div><div><span>Dimanches</span><b>${G.dim}</b></div><div><span>Ancienneté</span><b>${ancPct}%</b></div></div><div class="pay-sim-net"><span>Net estimé</span><strong>${EUR(netEst)}</strong></div>`;}
   const old=host.parentElement;
   if(old&&!document.getElementById('pProSummary')){
@@ -609,7 +609,7 @@ function impo(i){
     const raw=JSON.parse(e.target.result),j=raw.data&&raw.format==='MesHeures Backup'?raw.data:raw;
     if(!j.days)throw new Error('Pas de données journalières');
     if(!confirm('Importer cette sauvegarde et remplacer les données actuelles ?'))return;
-    DB={...DB,...j};DB.s={...DEF,...(j.s||{})};DB.periods=j.periods||[];DB.bul=j.bul||{};DB.bulletins=j.bulletins||[];DB.romi=j.romi||{};
+    DB={...DB,...j};DB.s={...DEF,...(j.s||{})};DB.periods=j.periods||[];DB.bul=j.bul||{};DB.bulletins=j.bulletins||[];DB.romi=j.romi||{};if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();
     save();mhRefresh();alert('✅ Import réussi.');
   }catch(x){alert('Fichier illisible : '+x.message)}finally{i.value=''}};r.readAsText(f);
 }

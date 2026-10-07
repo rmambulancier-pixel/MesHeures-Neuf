@@ -45,7 +45,7 @@ function pushWidgetData(){
           const br=brutOf(G);
           if(br&&Number.isFinite(Number(br.tot))){
             grossCents=Math.round(Number(br.tot)*100);
-            const net=Number(br.tot)*Number(DB.s?.net||0)+Number(br.panIR||0)+Number(br.panIRU||0);
+            const net=Number(br.tot)*Number(DB.s?.net||0)+Number(br.panIRExon||0)+Number(br.panIRU||0);
             if(Number.isFinite(net))netCents=Math.round(net*100);
             payReady=Number.isFinite(grossCents)&&(netCents!==null);
           }
@@ -155,6 +155,7 @@ function load(){
       DB.constats=Array.isArray(r.constats)?r.constats:[];
       DB.events=Array.isArray(r.events)?r.events:[];
       DB.reconciliation=Array.isArray(r.reconciliation)?r.reconciliation:[];
+      if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();localStorage.setItem(LS,JSON.stringify(DB));
     }
   }catch(e){console.warn('Chargement local impossible',e)}
   scheduleWidgetSync();

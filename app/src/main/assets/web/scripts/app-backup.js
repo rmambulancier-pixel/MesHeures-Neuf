@@ -106,7 +106,7 @@
         const safety=window.mhV30Backup('before-import');
         if(!safety.ok)throw new Error('Impossible de créer la sauvegarde de sécurité avant import.');
         DB={s:{...DEF,...(data.s||{})},days:{...(data.days||{})},cmp:{...(data.cmp||{})},periods:Array.isArray(data.periods)?data.periods:[],bul:{...(data.bul||{})},bulletins:Array.isArray(data.bulletins)?data.bulletins:[],romi:{...(data.romi||{})},per:{start:DEF.anchor,nb:1,...(data.per||{})},exp:data.exp??null,constats:Array.isArray(data.constats)?data.constats:[],events:Array.isArray(data.events)?data.events:[],reconciliation:Array.isArray(data.reconciliation)?data.reconciliation:[]};
-        save();mhRefresh();
+        if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();save();mhRefresh();
         alert('✅ Import réussi. '+keys.length+' bloc(s) de données restauré(s).');
       }catch(err){alert('❌ Import impossible : '+err.message)}
       finally{input.value=''}
@@ -130,7 +130,7 @@
       const safety=window.mhV30Backup('before-restore');
       if(!safety.ok)throw new Error('Impossible de créer la sauvegarde de sécurité avant restauration.');
       DB={s:{...DEF,...(data.s||{})},days:{...(data.days||{})},cmp:{...(data.cmp||{})},periods:Array.isArray(data.periods)?data.periods:[],bul:{...(data.bul||{})},bulletins:Array.isArray(data.bulletins)?data.bulletins:[],romi:{...(data.romi||{})},per:{start:DEF.anchor,nb:1,...(data.per||{})},exp:data.exp??null,constats:Array.isArray(data.constats)?data.constats:[],events:Array.isArray(data.events)?data.events:[],reconciliation:Array.isArray(data.reconciliation)?data.reconciliation:[]};
-      save();mhRefresh();alert('✅ Restauration terminée.');return true;
+      if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();save();mhRefresh();alert('✅ Restauration terminée.');return true;
     }catch(e){alert('❌ Restauration impossible : '+e.message);return false;}
   };
 

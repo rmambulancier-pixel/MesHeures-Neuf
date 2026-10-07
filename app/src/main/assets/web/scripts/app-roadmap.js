@@ -13,28 +13,32 @@ const H=m=>m==null?'—':Math.floor(Math.round(m)/60)+"h"+String(Math.round(m)%6
 const SD=s=>{let d=dt(s);return String(d.getDate()).padStart(2,'0')+"/"+String(d.getMonth()+1).padStart(2,'0')+"/"+d.getFullYear()};
 function pm(d){let n=0;(d.p||[]).forEach(p=>{let a=min(p.d),b=min(p.f);if(a!=null&&b!=null)n+=(b<a?b+1440:b)-a});return n}
 function mc(d){let a=min(d.deb),b=min(d.fin);if(a==null||b==null)return 0;b=b<=a?b+1440:b;let cur=a,max=0,ps=(d.p||[]).map(p=>{let x=min(p.d),y=min(p.f);if(x==null||y==null)return null;if(y<=x)y+=1440;while(x<a){x+=1440;y+=1440}return{x,y}}).filter(Boolean).sort((x,y)=>x.x-y.x);ps.forEach(p=>{max=Math.max(max,p.x-cur);cur=Math.max(cur,p.y)});return Math.max(max,b-cur)}
-function meal(d){let a=min(d.deb),b=min(d.fin);if(a==null||b==null)return null;b=b<=a?b+1440:b;let w=[min(DB.s.panDeb),min(DB.s.panFin)];if(w[0]===null||w[1]===null)return null;if(w[1]<=w[0])w[1]+=1440;if(a<=w[0]&&b>=w[1]){let ok=(d.p||[]).some(p=>{let x=min(p.d),y=min(p.f);if(x===null||y===null)return false;if(y<=x)y+=1440;while(x<a){x+=1440;y+=1440}return (x>=w[0]&&y<=w[1])||(y-x>=30)});return ok?null:{auto:true,duration:30}}return null}
-function rows(s){let o=[];for(let i=0;i<7;i++){let k=add(s,i),d=DB.days[k]||{t:'REPOS',p:[]},r=typeof cd==='function'?cd(k):{tte:0},a=min(d.deb),b=min(d.fin),work=(d.t==='T'||d.t==='NUIT')&&a!=null&&b!=null,amp=work?((b<=a?b+1440:b)-a):0;o.push({k,d,r,work,label:D[i]+" "+SD(k),status:{
-  CP:'CONGÉS PAYÉS',
-  RC:'REPOS COMPENSATEUR',
-  MAL:'MALADIE',
-  FORMATION:'FORMATION',
-  MISE_A_NIVEAU:'MISE À NIVEAU DIPLÔME',
-  VISITE_MEDICALE:'VISITE MÉDICALE',
-  REUNION:'RÉUNION',
-  AUTRE_ACTIVITE:'AUTRE ACTIVITÉ',
-  NUIT:'NUIT',
-  T:'TRAVAIL',
-  REPOS:'REPOS'
-}[d.t]||String(d.t||'REPOS').replaceAll('_',' '),amp,tte:work?Math.max(0,+r.tte||0):0,pause:pm(d),max:mc(d),meal:work?meal(d):null,sa:work?a+i*1440:null,ea:work?((b<=a?b+1440:b)+i*1440):null,holiday:!!d.fer,perm:d.perm||d.permanence||'',tasks:d.tasks||d.taches||d.activites||'',note:d.note||''})}return o}
+function meal(d){
+  let a=min(d.deb),b=min(d.fin);
+  if(a==null||b==null)return null;
+  b=b<=a?b+1440:b;
+  const windows=typeof mhMealWindows==='function'?mhMealWindows(DB.s):[];
+  const covered=windows.some(w=>a<=w.deb&&b>=w.fin);
+  if(!covered)return null;
+  const choice=typeof mhMealChoice==='function'?mhMealChoice(d):null;
+  let pauseOk=false;
+  (d.p||[]).forEach(p=>{
+    let x=min(p.d),y=min(p.f);
+    if(x==null||y==null)return;
+    if(y<=x)y+=1440;
+    const dur=y-x;
+    if(dur>=30&&windows.some(w=>x>=w.deb&&y<=w.fin))pauseOk=true;
+  });
+  return {choice:choice==='NON'?'NON':(choice||'EXT'),covered:true,pauseOk,auto:!Object.prototype.hasOwnProperty.call(d,'panier')&&!choice,duration:pauseOk?30:0};
+}
 function dailyTTE(x){
   if(!x.work)return 0;
-  return Math.max(0,(+x.tte||0)-(x.meal&&x.meal.auto?30:0));
+  return Math.max(0,+x.tte||0);
 }
 function dailyAmp(x){
   return x.work?Math.max(0,+x.amp||0):0;
 }
-function checks(r){let a=[];r.forEach(x=>{if(!x.work)return;if(x.amp>840)a.push(["critical",x.label+" : amplitude > 14 h — dépassement à justifier."]);else if(x.amp>720)a.push(["warn",x.label+" : amplitude > 12 h — motif réglementaire/contrepartie à vérifier."]);if(x.max>=360&&x.pause<20)a.push(["warn",x.label+" : aucune pause de 20 min ou plus détectée."]);if(x.meal&&!x.meal.auto&&!x.meal.ok)a.push(["warn",x.label+" : pause repas d'au moins 30 min dans la plage concernée à vérifier."])});let w=r.filter(x=>x.work).sort((a,b)=>a.ea-b.ea);for(let i=1;i<w.length;i++)if(w[i].sa-w[i-1].ea<660)a.push(["warn",w[i].label+" : repos entre services < 11 h — vérifier la dérogation."]);let t=r.reduce((s,x)=>s+dailyTTE(x),0);if(t>2880)a.push(["critical","Cumul hebdomadaire TTE > 48 h — anomalie à traiter."]);return a}
+function checks(r){let a=[];r.forEach(x=>{if(!x.work)return;if(x.amp>840)a.push(["critical",x.label+" : amplitude > 14 h — dépassement à justifier."]);else if(x.amp>720)a.push(["warn",x.label+" : amplitude > 12 h — motif réglementaire/contrepartie à vérifier."]);if(x.max>=360&&x.pause<20)a.push(["warn",x.label+" : aucune pause de 20 min ou plus détectée."]);if(x.meal&&!x.meal.auto&&!x.meal.pauseOk)a.push(["warn",x.label+" : pause repas d'au moins 30 min dans la plage concernée à vérifier."] )});let w=r.filter(x=>x.work).sort((a,b)=>a.ea-b.ea);for(let i=1;i<w.length;i++)if(w[i].sa-w[i-1].ea<660)a.push(["warn",w[i].label+" : repos entre services < 11 h — vérifier la dérogation."]);let t=r.reduce((s,x)=>s+dailyTTE(x),0);if(t>2880)a.push(["critical","Cumul hebdomadaire TTE > 48 h — anomalie à traiter."]);return a}
 function make(s){let r=rows(s),a=checks(r),amp=r.reduce((x,y)=>x+y.amp,0),tte=r.reduce((x,y)=>x+dailyTTE(y),0),alerts=a.length?a.map(x=>`<div class="a ${x[0]}"><b>${x[0]==='critical'?'ANOMALIE':'À VÉRIFIER'}</b> · ${E(x[1])}</div>`).join(''):'<div class="a ok"><b>OK</b> · Aucun contrôle de base en anomalie.</div>';
 let d=dt(s);d.setDate(d.getDate()+3);let y=d.getFullYear(),ys=new Date(y,0,1),wn=Math.ceil((((d-ys)/86400000)+1)/7);let weekTitle=`Feuille de route — Semaine ${wn} — ${SD(s)} au ${SD(add(s,6))}`;
 let body=r.map(x=>{
@@ -42,10 +46,10 @@ let body=r.map(x=>{
     let detail=x.note||x.tasks||'';
     return '<tr class="off status-'+(x.d.t||'REPOS')+'"><td colspan="8"><div class="status-row"><span class="status-date">'+E(x.label)+'</span><span class="status-sep">—</span><span class="status-name">'+E(x.status)+'</span></div>'+(x.holiday?'<div class="status-note">JOUR FÉRIÉ</div>':'')+(detail?'<div class="status-detail">'+E(detail)+'</div>':'')+'</td></tr>';
   }
-  let pauseText=(x.d.p||[]).filter(p=>p&&(p.d||p.f)).map(p=>(p.d||'??')+'–'+(p.f||'??')+(p.ty?' · '+p.ty:'')).join('<br>');
-  if(!pauseText && x.work && !x.d.panier && x.meal && x.meal.auto) pauseText='Repas automatique · 30 min · EXT';
-  else if(!pauseText && x.work && x.d.panier==='EXT') pauseText='Repas · EXT';
-  else if(!pauseText && x.work && x.d.panier==='ENT') pauseText='Repas · ENT';
+  let pauseText=(x.d.p||[]).filter(p=>p&&(p.d||p.f)).map(p=>(p.d||'??')+'–'+(p.f||'??')).join('<br>');
+  if(x.meal&&x.meal.choice==='EXT')pauseText+=(pauseText?'<br>':'')+'Repas · EXTÉRIEUR';
+  else if(x.meal&&x.meal.choice==='ENT')pauseText+=(pauseText?'<br>':'')+'Repas · INTÉRIEUR';
+  else if(x.meal&&x.meal.choice==='NON')pauseText+=(pauseText?'<br>':'')+'Repas · AUCUN';
   let amp=x.work?H(dailyAmp(x)):'—';
   let tte=x.work?H(dailyTTE(x)):'—';
   let perm=E(x.perm)||'—';

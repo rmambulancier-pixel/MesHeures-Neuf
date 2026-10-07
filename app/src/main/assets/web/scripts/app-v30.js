@@ -133,8 +133,8 @@
     const k=curDate||day(),d=ensureDay(k),host=el('mh30Editor');if(!host)return;
     if(d.t==='T'||d.t==='NUIT'){
       host.innerHTML=`<div class="mh30-card"><div class="mh30-row2"><label>Début<input type="text" inputmode="numeric" data-time-smart value="${d.deb||''}" onchange="mh30SetTime('${k}','deb',this.value)"></label><label>Fin<input type="text" inputmode="numeric" data-time-smart value="${d.fin||''}" onchange="mh30SetTime('${k}','fin',this.value)"></label></div>
-      <div class="mh30-meal"><span>🍽️ Panier repas</span><div>${[['', 'Auto'],['EXT','Extérieur'],['ENT','Intérieur'],['NON','Aucun']].map(([v,l])=>`<button class="${(d.panier||'')===v?'on':''}" onclick="mh30SetPanier('${v}')">${l}</button>`).join('')}</div></div>
-      <div class="mh30-pauses"><div class="mh30-cardtitle"><span>Pauses</span><button onclick="mh30AddPause()">＋ Ajouter</button></div>${(d.p||[]).map((p,i)=>`<div class="mh30-pause"><input type="time" value="${p.d||''}" onchange="mh30SetPause(${i},'d',this.value)"><span>→</span><input type="time" value="${p.f||''}" onchange="mh30SetPause(${i},'f',this.value)" ><select onchange="mh30SetPause(${i},'ty',this.value)"><option value="ENT" ${p.ty==='ENT'?'selected':''}>Intérieur</option><option value="EXT" ${p.ty==='EXT'?'selected':''}>Extérieur</option></select><button onclick="mh30DelPause(${i})">×</button></div>`).join('')}</div>
+      <div class="mh30-meal"><span>🍽️ Panier repas</span><div>${[['', 'Auto'],['EXT','Extérieur'],['ENT','Intérieur'],['NON','Aucun']].map(([v,l])=>`<button class="${((typeof mhMealChoice==='function'?mhMealChoice(d):d.panier)||'')===v?'on':''}" onclick="mh30SetPanier('${v}')">${l}</button>`).join('')}</div></div>
+      <div class="mh30-pauses"><div class="mh30-cardtitle"><span>Pauses</span><button onclick="mh30AddPause()">＋ Ajouter</button></div>${(d.p||[]).map((p,i)=>`<div class="mh30-pause"><input type="time" value="${p.d||''}" onchange="mh30SetPause(${i},'d',this.value)"><span>→</span><input type="time" value="${p.f||''}" onchange="mh30SetPause(${i},'f',this.value)" ><button onclick="mh30DelPause(${i})">×</button></div>`).join('')}</div>
       <label class="mh30-note">Note<input maxlength="120" value="${escapeHtml(d.note||'')}" onchange="mh30SetNote(this.value)" placeholder="Remarque, incident…"></label>
       <label class="mh30-check"><input type="checkbox" ${d.fer?'checked':''} onchange="mh30SetField('fer',this.checked)"> Jour férié travaillé · majoration 100 %</label></div>`;
     }else{
@@ -142,10 +142,10 @@
     }
   }
   window.mh30SetType=function(v){const d=ensureDay(curDate||day());d.t=v;d.p=d.p||[];if(v!=='T'&&v!=='NUIT'){d.running=false;d.startEpoch=0;}if(typeof save==='function')save();mhRefresh('live-field');};
-  window.mh30SetPanier=function(v){const d=ensureDay(curDate||day());d.panier=v||null;save();mhRefresh('live-mutation');};
-  window.mh30AddPause=function(){ensureDay(curDate||day()).p.push({d:'',f:'',ty:'ENT'});save();mhRefresh('live-mutation');};
+  window.mh30SetPanier=function(v){const d=ensureDay(curDate||day());d.panier=v||null;d.mealV=3;save();mhRefresh('live-mutation');};
+  window.mh30AddPause=function(){ensureDay(curDate||day()).p.push({d:'',f:''});save();mhRefresh('live-mutation');};
   window.mh30DelPause=function(i){ensureDay(curDate||day()).p.splice(i,1);save();mhRefresh('live-mutation');};
-  window.mh30SetPause=function(i,f,v){const d=ensureDay(curDate||day());d.p[i]=d.p[i]||{ty:'ENT'};d.p[i][f]=v;save();mhRefresh('live-mutation');};
+  window.mh30SetPause=function(i,f,v){const d=ensureDay(curDate||day());d.p[i]=d.p[i]||{};d.p[i][f]=v;save();mhRefresh('live-mutation');};
   window.mh30SetNote=function(v){ensureDay(curDate||day()).note=v;save();};
   window.mh30SetField=function(f,v){ensureDay(curDate||day())[f]=v;save();mhRefresh('live-mutation');};
 

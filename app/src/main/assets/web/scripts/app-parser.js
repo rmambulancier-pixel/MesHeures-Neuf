@@ -304,7 +304,7 @@ function afficherBulletin(bul){
     addRow('Salaire brut',bul.brut,calcBrut,'€',ancPct?'Inclut RC payé + prime ancienneté '+ancPct+'%':'Inclut RC payé');
   }
   if(bul.net!=null){
-    const calcNet=(bul.brut||0)*S.net+(calcIR*S.ir)+(calcIRU*S.irT);
+    const calcNet=(bul.brut||0)*S.net+(calcIR*S.irT)+(calcIRU*S.iru);
     addRow('Net payé',bul.net,calcNet,'€','Brut × '+S.net+' + paniers');
   }
 
@@ -737,7 +737,7 @@ function parseBlock(b,st,en){
       RX_HOR.lastIndex=0;const hh=txt.match(RX_HOR);
       if(hh){d.deb=hh[1];d.fin=hh[2]}else warn.push(short(k)+' horaires illisibles');
       const a=P(d.deb),z=P(d.fin);RX_PZ.lastIndex=0;
-      [...txt.matchAll(RX_PZ)].forEach(p=>d.p.push({d:p[1],f:p[2],ty:p[3]}));
+      const mealTypes=[]; [...txt.matchAll(RX_PZ)].forEach(p=>{d.p.push({d:p[1],f:p[2]});mealTypes.push(p[3])}); if(mealTypes.includes('ENT'))d.panier='ENT'; else if(mealTypes.includes('EXT'))d.panier='EXT';
       if(isFerie(k)){d.fer=true;fer.push(k)}
     }
     rep[ty]++;DB.days[k]=d;n++;
@@ -777,7 +777,7 @@ async function parseExcel(file){
     if(!rows.length){out.innerHTML='<div class="al b">❌ Aucune ligne.</div>';return}
     const S=DB.s,pdMin=P(S.panDeb),pfMin=P(S.panFin);
     const rep={T:0,REPOS:0,RC:0,CP:0,MAL:0},fer=[],warnNuit=[],warnH=[],dates=[];
-    let iru=0,n=0;
+    let n=0;
     pushUndo('Import Excel');
     rows.forEach(row=>{
       const k=excelDate(row['Date']);if(!k)return;
@@ -802,7 +802,7 @@ async function parseExcel(file){
         if(pz&&pz!=='-'){
           const pm=pz.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):?(\d{2})$/);
           if(pm){const pS=pad(+pm[1])+':'+pm[2],pE=pad(+pm[3])+':'+pm[4];
-            d.p.push({d:pS,f:pE,ty:'ENT'});if(panOK)iru++;}
+            d.p.push({d:pS,f:pE});}
         }
         if(isFerie(k)){d.fer=true;fer.push(k)}
       }
@@ -816,7 +816,6 @@ async function parseExcel(file){
     DB.periods.sort((a,b)=>a.start<b.start?-1:1);
     DB.per={start:DB.periods[DB.periods.length-1].start,nb:1};save();
     out.innerHTML=`<div class="al k"><b>✅ ${n} journées importées</b> du ${shortY(first)} au ${shortY(last)}</div>`
-      +(iru?`<div class="al w">🍽️ ${iru} pauses → IRU par défaut. Corrige si repas dehors.</div>`:'')
       +(fer.length?'<div class="al w">☀️ Fériés : '+fer.map(shortY).join(', ')+'</div>':'')
       +(warnNuit.length?'<div class="al b">🌙 '+warnNuit.length+' nuit(s) 00:00-00:00 à corriger manuellement.</div>':'')
       +(warnH.length?'<div class="al w">⚠️ Horaires illisibles : '+warnH.map(shortY).join(', ')+'</div>':'');

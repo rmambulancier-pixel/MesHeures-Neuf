@@ -4,11 +4,11 @@ const DEF={
   taux:14.20,net:0.787,
   hab:10,habT:12.9688,
   idaj:12,base:35,pl:16,
-  ir:5.30,iru:9.69,irT:10.40,
+  ir:15.70,iru:9.69,irT:10.40,
   rc:420,cp:420,anc:0,
   min:false,maxAmp:14,
   anchor:'2025-05-19',
-  panDeb:'11:45',panFin:'14:15',
+  panDeb:'11:00',panFin:'14:30',panSoirDeb:'18:30',panSoirFin:'22:00',
   dimPrime:0,
   nuitDeb:'21:00',nuitFin:'06:00',nuitMaj:0,
   rcAlerte:400
@@ -36,6 +36,70 @@ const EUR=n=>typeof n==='number'?n.toFixed(2).replace('.',',')+' €':'—';
 const short=s=>s.slice(8)+'/'+s.slice(5,7);
 const shortY=s=>s.slice(8)+'/'+s.slice(5,7)+'/'+s.slice(2,4);
 const esc=s=>s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):'';
+
+/* Règles repas — fonctionnement des feuilles de route.
+   EXT = repas pris hors du bureau -> IR 15,70 €.
+   ENT = repas pris au bureau      -> IRU 9,69 €.
+   IR extérieur : 10,40 € exonérés + 5,30 € intégrés au brut.
+*/
+function mhMealWindows(S){
+  S=S||DB.s||DEF;
+  return [
+    {key:'midi',deb:P(S.panDeb),fin:P(S.panFin)},
+    {key:'soir',deb:P(S.panSoirDeb),fin:P(S.panSoirFin)}
+  ].filter(w=>w.deb!=null&&w.fin!=null).map(w=>({...w,fin:w.fin<=w.deb?w.fin+1440:w.fin}));
+}
+function mhCoveredMealWindow(a,b,S){
+  if(a==null||b==null)return false;
+  let aa=a,bb=b;if(bb<=aa)bb+=1440;
+  return mhMealWindows(S).some(w=>aa<=w.deb&&bb>=w.fin);
+}
+function mhLegacyMealChoice(d){
+  const p=Array.isArray(d?.p)?d.p:[];
+  if(p.some(x=>x&&x.ty==='ENT'))return 'ENT';
+  if(p.some(x=>x&&x.ty==='EXT'))return 'EXT';
+  return null;
+}
+/* Version du schéma repas. Un jour portant d.mealV>=3 a déjà été interprété :
+   son champ panier est alors la seule référence (null = Auto, sans retour au
+   vieux champ p[].ty). Un jour sans mealV vient d'une ancienne donnée : le ty
+   des pauses n'est lu que pour en déduire le choix JOUR, sans jamais être modifié. */
+const MH_MEAL_SCHEMA=3;
+function mhMealChoice(d){
+  if(!d)return null;
+  if(['EXT','ENT','NON'].includes(d.panier))return d.panier;
+  if(Number(d.mealV)>=MH_MEAL_SCHEMA)return null;
+  return mhLegacyMealChoice(d);
+}
+function mhMigrateLegacyMealChoices(){
+  if(!DB||!DB.days)return false;
+  let changed=false;
+  Object.keys(DB.days).forEach(k=>{
+    const d=DB.days[k]; if(!d||d.t!=='T'||Number(d.mealV)>=MH_MEAL_SCHEMA)return;
+    const legacy=mhLegacyMealChoice(d);
+    if(legacy&&!['EXT','ENT','NON'].includes(d.panier))d.panier=legacy;
+    d.mealV=MH_MEAL_SCHEMA;changed=true;
+  });
+  return changed;
+}
+function mhNormalizeMealSettings(){
+  if(!DB||!DB.s)return false;
+  const s=DB.s;
+  if(Number(s.mealV)>=MH_MEAL_SCHEMA)return false;
+  // Migration unique de l'ancienne sémantique (ir = 5,30 part taxable, panDeb 11:45-14:15).
+  // Les valeurs déjà conformes ou personnalisées par l'utilisateur ne sont jamais écrasées.
+  const num=x=>Number.isFinite(Number(x))&&x!==''&&x!=null;
+  if(!num(s.irT)||Number(s.irT)<=0)s.irT=10.40;
+  if(!num(s.ir)||Number(s.ir)<=Number(s.irT))s.ir=15.70;
+  if(!num(s.iru)||Number(s.iru)<=0)s.iru=9.69;
+  if(s.panDeb==='11:45'&&s.panFin==='14:15'){s.panDeb='11:00';s.panFin='14:30';}
+  if(!s.panDeb)s.panDeb='11:00';if(!s.panFin)s.panFin='14:30';
+  if(!s.panSoirDeb)s.panSoirDeb='18:30';if(!s.panSoirFin)s.panSoirFin='22:00';
+  s.mealV=MH_MEAL_SCHEMA;
+  return true;
+}
+window.mhMealRules={windows:mhMealWindows,covered:mhCoveredMealWindow,legacyChoice:mhLegacyMealChoice,choice:mhMealChoice,migrateLegacy:mhMigrateLegacyMealChoices,normalizeSettings:mhNormalizeMealSettings};
+
 // Chargement paresseux des libs lourdes (xlsx, pdf.js, tesseract) :
 // avant, les 3 étaient chargées à CHAQUE démarrage de l'app même sans import/OCR
 // (plusieurs Mo de JS téléchargés et parsés pour rien à chaque ouverture).
@@ -125,24 +189,21 @@ function cdRaw(k){
     if(b0==null && d.running && d.startEpoch){ const now=new Date(); b0=now.getHours()*60+now.getMinutes(); }
     if(a==null||b0==null){r.al.push({lvl:'b',m:'Horaires incomplets'});return r}
     const b=b0<=a?b0+1440:b0, br=b-a;
-    const pd=P(S.panDeb),pf=P(S.panFin),panOK=a<=pd&&b>=pf;
+    const mealCovered=mhCoveredMealWindow(a,b,S);
+    const mealChoice=mhMealChoice(d);
     (d.p||[]).forEach(p=>{
       const x=P(p.d); let y=P(p.f);
       if(x!=null&&y!=null){if(y<x)y+=1440;r.pz+=y-x}
     });
-    // Panier repas : plus besoin de saisir une pause pour qu'il soit compté.
-    // d.panier ('EXT'/'ENT'/'NON') = choix explicite en 1 tap qui prévaut toujours.
-    // Sans choix explicite : si des pauses ENT/EXT sont déjà saisies (import AmbuTrack), on les garde ;
-    // sinon, dès que le service couvre toute la plage repas, un panier extérieur est compté automatiquement.
-    if(d.panier==='NON'){/* aucun panier, forcé */}
-    else if(d.panier==='ENT')r.iru=1;
-    else if(d.panier==='EXT')r.ir=1;
-    else if(panOK&&(d.p||[]).length){
-      // Un seul panier par jour, même si plusieurs pauses sont saisies : priorité au repas intérieur si les deux types coexistent.
-      const hasEnt=(d.p||[]).some(p=>p.ty==='ENT');
-      if(hasEnt)r.iru=1;else r.ir=1;
-    }
-    else if(panOK)r.ir=1;
+    // Panier repas : le sélecteur JOUR est la référence.
+    // EXT = repas pris hors du bureau (IR 15,70 €).
+    // ENT = repas pris au bureau (IRU 9,69 €).
+    // Auto = extérieur si le service couvre une fenêtre 11:00-14:30 ou 18:30-22:00.
+    if(mealChoice==='NON'){/* aucun panier */}
+    else if(mealChoice==='ENT')r.iru=1;
+    else if(mealChoice==='EXT')r.ir=1;
+    else if(mealCovered)r.ir=1;
+    if(mealChoice&&mealChoice!=='NON'&&!mealCovered)r.al.push({lvl:'w',m:'Repas déclaré, mais le service ne couvre pas une plage repas complète (11h00–14h30 ou 18h30–22h00).'});
     r.amp=br; r.tte=br-r.pz;
     if(S.min&&r.tte<270)r.tte=270;
     r.seuil=r.tte; r.trav=1;
@@ -401,9 +462,17 @@ function brutOfRaw(G){
   if(G.nuit&&S.nuitMaj)L.push(['Majoration heures de nuit',C2(G.nuit)+' h',(S.nuitMaj)+'%',G.nuit/60*T*S.nuitMaj/100]);
   const sub=L.reduce((a,x)=>a+x[3],0);
   if(ancPct)L.push(["Prime d'ancienneté",ancPct+' %','sur brut',sub*ancPct/100]);
+  const irFull=Number.isFinite(Number(S.ir))?Number(S.ir):15.70, irExon=Number.isFinite(Number(S.irT))?Number(S.irT):10.40;
+  const irTax=Math.max(0,irFull-irExon);
+  const iruFull=Number.isFinite(Number(S.iru))?Number(S.iru):9.69;
+  const panIRTax=G.ir*irTax,panIRExon=G.ir*irExon,panIRU=G.iru*iruFull;
+  /* Bulletin : la part taxable de l'IR (5,30 €) figure dans le salaire brut (ligne « Indemnité de Repas »),
+     donc elle supporte les cotisations. Elle n'entre PAS dans la base de la prime d'ancienneté. */
+  if(G.ir&&irTax)L.push(['Indemnité de repas IR (part taxable)',G.ir+' repas',irTax.toFixed(2)+' €/repas',panIRTax]);
   const tot=L.reduce((a,x)=>a+x[3],0);
-  const panIR=G.ir*S.ir, panIRU=G.iru*S.iru, panIRUT=G.iru*S.irT;
-  return{L,tot,panIR,panIRU,panIRUT};
+  /* Net estimé = brut × coefficient net + parts NON soumises (IR exonéré + IRU), comme sous « Net à payer » du bulletin. */
+  const netEst=tot*Number(S.net||0)+panIRExon+panIRU;
+  return{L,tot,netEst,panIR:panIRTax,panIRTax,panIRExon,panIRUT:panIRExon,panIRFull:G.ir*irFull,panIRU};
 }
 
 /* Current — source unique paie pour toutes les surfaces (Web/PWA/widget).
@@ -415,7 +484,7 @@ window.mhCurrentPaySummary=function(){
     const raw=Number(DB.per?.nb)||2;
     const nb=Math.max(2,Math.min(3,Math.round(raw)));
     const result=calcPer(st,nb),G=result.G,br=brutOf(G);
-    const netEst=br.tot*Number(DB.s.net||0)+Number(br.panIR||0)+Number(br.panIRU||0);
+    const netEst=br.netEst;
     return {grossEst:br.tot,netEst,hs25:G.h25,hs50:G.h50,tte:G.tte,start:st,nb};
   }catch(e){return null}
 };
