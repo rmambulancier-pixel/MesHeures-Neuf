@@ -15,7 +15,6 @@
   'use strict';
   const V='37.0-E';
   const NR='non renseigné';
-  const ROMI_TOL=15; // minutes : même tolérance que le Smart Control (écart TTE ROMI1)
   const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
   const isoDay=k=>/^\d{4}-\d{2}-\d{2}$/.test(String(k||''));
   const num=v=>v!==null&&v!==''&&v!==undefined&&Number.isFinite(Number(v));
@@ -39,21 +38,10 @@
     return past.length?mhQuatorzaine.payPeriod(past[past.length-1]).start:cur;
   }
 
-  function romiFor(ps,pe,G){
-    let list=[];
-    try{if(window.MH_ROMI&&typeof window.MH_ROMI.list==='function')list=(window.MH_ROMI.list()||[]).filter(x=>x&&isoDay(x.periodStart)&&isoDay(x.periodEnd))}catch(e){list=[]}
-    const same=list.find(x=>x.periodStart===ps&&x.periodEnd===pe);
-    if(same){
-      const tteR=hDec(same.ttePeriodH),ecart=tteR==null?null:G.tte-tteR;
-      return {statut:'comparable',debut:ps,fin:pe,
-        mesheures:{tte:G.tte,hs:G.h25+G.h50,jours:G.trav},
-        employeur:{tte:tteR,hs:hDec(same.hsPeriodH),presence:num(same.presenceDays)?Number(same.presenceDays):null,
-          hs125Payees:hDec(same.hs125PaidH),hs125Rc:hDec(same.hs125ToRcH),hs150Payees:hDec(same.hs150PaidH),hs150Rc:hDec(same.hs150ToRcH),rcCumul:hDec(same.rcBalanceH)},
-        ecartTte:ecart,aVerifier:ecart!=null&&Math.abs(ecart)>ROMI_TOL};
-    }
-    const overlap=list.filter(x=>x.periodStart<=pe&&x.periodEnd>=ps).sort((a,b)=>String(a.periodStart).localeCompare(String(b.periodStart)));
-    if(overlap.length)return {statut:'non_comparable',releves:overlap.map(x=>({debut:x.periodStart,fin:x.periodEnd}))};
-    return {statut:'absent'};
+  /* V37.0-F : la comparaison ROMI1 vient du module de rapprochement (MHRomiRecon), seule source. */
+  function romiFor(ps,pe){
+    try{if(window.MHRomiRecon&&typeof window.MHRomiRecon.analyze==='function')return window.MHRomiRecon.analyze({start:ps,end:pe})}catch(e){console.warn('Rapprochement ROMI1',e)}
+    return {statut:'indisponible'};
   }
 
   /* ---------- données (lecture seule) ---------- */
@@ -73,10 +61,11 @@
     const bul=(typeof DB!=='undefined'&&DB&&DB.bul&&DB.bul[ps])||null;          // lecture directe : gb() créerait l'entrée
     const bulletin=((typeof DB!=='undefined'&&DB&&Array.isArray(DB.bulletins))?DB.bulletins:[]).find(b=>b&&b.mois===mhQuatorzaine.payMonth(ps))||null;
     let paie=null;try{if(typeof window.mhCurrentPaySummary==='function')paie=window.mhCurrentPaySummary()}catch(e){paie=null}
-    const romi=romiFor(ps,pe,G);
+    const romi=romiFor(ps,pe);
     const alertes={critiques:R.AL.filter(a=>a.lvl==='b').length,aVerifier:R.AL.filter(a=>a.lvl!=='b').length};
     const controle=[];
     if(romi.statut==='comparable'&&romi.aVerifier)controle.push({niveau:'warn',texte:'Écart TTE avec le relevé ROMI1 : '+hm(romi.ecartTte)+'. Écart à analyser.'});
+    if(romi.statut==='partiel')controle.push({niveau:'mut',texte:'Relevé ROMI1 partiel ('+dShort(romi.releve.debut)+' → '+dShort(romi.releve.fin)+') : comparaison limitée à ses dates.'+(romi.aVerifier?' Écart TTE '+hm(romi.ecartTte)+' à analyser.':'')});
     if(romi.statut==='non_comparable')controle.push({niveau:'mut',texte:'Relevé ROMI1 non comparable à ce relevé de 4 semaines.'});
     if(romi.statut==='absent'&&keys.length)controle.push({niveau:'mut',texte:'Pas de relevé ROMI1 disponible pour cette période.'});
     if(alertes.critiques)controle.push({niveau:'bad',texte:alertes.critiques+' alerte'+(alertes.critiques>1?'s':'')+' critique'+(alertes.critiques>1?'s':'')+' sur la période (voir Paie et Audit).'});
@@ -101,6 +90,39 @@
 
   /* ---------- rendu (bloc de l'Accueil) ---------- */
   const row=(label,value,sub)=>'<div class="mh37c-row"><span>'+label+(sub?'<small>'+sub+'</small>':'')+'</span><b>'+value+'</b></div>';
+  /* V37.0-F : synthèse, décomposition et détail journalier du rapprochement ROMI1 (affichage seul). */
+  const WD=['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
+  const wd=k=>WD[new Date(k+'T12:00:00Z').getUTCDay()];
+  const sgn=m=>m==null?'—':(m>0?'+':m<0?'−':'±')+F(Math.abs(Math.round(m)));
+  function romiDetail(r){
+    const j=r.journalier,tol=r.tolerance;
+    let h='';
+    if(r.statut==='partiel')h+='<div class="mh37c-note" data-romi="partiel"><b>Relevé ROMI1 partiel — comparaison limitée</b><br>Le relevé couvre du '+dFr(r.releve.debut)+' au '+dFr(r.releve.fin)+' ('+r.releve.jours+' jours). La comparaison porte uniquement sur ces dates'+(r.mesheures.hs==null?' ; HS non comparables (hors quatorzaines entières)':'')+'.'+(r.autresPartiels?' '+r.autresPartiels+' autre(s) relevé(s) partiel(s) non affiché(s).':'')+'</div>';
+    h+='<div class="mh37c-cmp" data-romi="'+r.statut+'"><div><span>MesHeures</span><b>'+hm(r.mesheures.tte)+'</b><small>HS '+hm(r.mesheures.hs)+' · '+r.mesheures.jours+' j</small></div>'+
+      '<div><span>ROMI1 (employeur)</span><b>'+hm(r.employeur.tte)+'</b><small>HS '+hm(r.employeur.hs)+' · '+(r.employeur.presence!=null?r.employeur.presence+' j':'présence —')+'</small></div>'+
+      '<div data-tone="'+(r.ecartTte==null?'mut':r.aVerifier?'warn':'ok')+'"><span>Écart TTE</span><b>'+hm(r.ecartTte)+'</b><small>'+(r.ecartTte==null?'non comparable — donnée manquante':r.aVerifier?'⚠️ À vérifier · écart à analyser':'✓ concordant (±'+tol+' min)')+'</small></div></div>';
+    h+='<div class="mh37c-dec">'+row('Journées comparables','<span data-k="jc">'+j.comparables+' / '+j.total+'</span>',j.disponible?'écart journalier au-delà de ±'+tol+' min : '+j.aVerifier:'détail journalier ROMI1 absent')+
+      row('Écart expliqué par les journées comparées','<span data-k="ex">'+(j.ecartExplique==null?'—':sgn(j.ecartExplique))+'</span>')+
+      row('Écart restant à analyser','<span data-k="rest">'+(j.ecartRestant==null?'—':sgn(j.ecartRestant))+'</span>')+'</div>';
+    if(!j.disponible){
+      h+='<div class="mh37c-note" data-detail="absent">Le relevé ROMI1 ne contient que les totaux de la période : l’écart ne peut pas encore être localisé jour par jour. Aucune cause n’est déduite (absence, CP, pause, saisie ou relevé).</div>';
+      return h;
+    }
+    const shown=j.lignes.filter(l=>!(l.statut==='concordant'&&!l.mh.presence&&!(l.romi&&l.romi.presence)));
+    const hidden=j.lignes.length-shown.length;
+    const side=(lab,x)=>{if(!x)return '';const p=[];if(x.debut||x.fin)p.push((x.debut||'?')+'–'+(x.fin||'?'));
+      if(x.pauses&&x.pauses.length)p.push('pause '+x.pauses.join(', '));else if(x.pauseMin!=null&&(x.presence||x.pauseMin))p.push('pause '+F(x.pauseMin));
+      return p.length?'<i>'+lab+' '+esc(p.join(' · '))+'</i>':''};
+    h+='<details class="mh37c-days"><summary>Détail journalier · '+shown.length+' jour'+(shown.length>1?'s':'')+'</summary>'+
+      '<div class="mh37c-dh"><span>Date</span><span>MesHeures</span><span>ROMI1</span><span>Écart</span></div>'+
+      shown.map(l=>{const tone=l.statut==='concordant'?'ok':l.statut==='a_verifier'?'warn':'mut';
+        const mh=l.mh.saisie?(l.mh.presence?hm(l.mh.tte):'0h00'):'—',ro=l.romi&&l.romi.tte!=null?hm(l.romi.tte):'—';
+        const sub=l.statut==='non_comparable'?'<i>Non comparable — donnée manquante ('+esc(l.motif)+')</i>':side('MesHeures',l.mh)+side('ROMI1',l.romi);
+        return '<div class="mh37c-dr" data-statut="'+l.statut+'" data-date="'+l.date+'"><span>'+wd(l.date)+' '+dShort(l.date)+'</span><span>'+mh+'</span><span>'+ro+'</span><b data-tone="'+tone+'">'+(l.diff==null?'—':sgn(l.diff))+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div>'}).join('')+
+      (hidden?'<div class="mh37c-note">'+hidden+' jour'+(hidden>1?'s':'')+' sans travail des deux côtés non affiché'+(hidden>1?'s':'')+'.</div>':'')+'</details>';
+    return h;
+  }
+
   function html(opts){
     const c=data(opts),p=c.periode,a=c.autres,r=c.romi;
     let h='<div class="mh31-card mh37c" id="mh37Compteur">'+
@@ -136,14 +158,13 @@
     const fold=(key,label,resume,tone,body)=>'<details class="mh37c-q mh37c-fold" data-fold="'+key+'"><summary><span>'+label+'</span><b data-tone="'+tone+'">'+resume+'</b></summary><div class="mh37c-body">'+body+'</div></details>';
     /* Comparaison : MesHeures et référence employeur, jamais mélangées */
     let romiBody,romiRes,romiTone;
-    if(r.statut==='absent'){romiRes='pas de relevé';romiTone='mut';romiBody='<div class="mh37c-note" data-romi="absent">Pas de relevé ROMI1 disponible.</div>'}
-    else if(r.statut==='non_comparable'){romiRes='non comparable';romiTone='mut';romiBody='<div class="mh37c-note" data-romi="non_comparable">Non comparable : relevé'+(r.releves.length>1?'s':'')+' du '+r.releves.map(x=>dShort(x.debut)+' au '+dShort(x.fin)).join(', ')+' (périodes différentes).</div>'}
-    else{
-      romiRes=r.aVerifier?'écart '+hm(r.ecartTte)+' ⚠️':'concordant ✓';romiTone=r.aVerifier?'warn':'ok';
-      romiBody='<div class="mh37c-cmp" data-romi="comparable"><div><span>MesHeures</span><b>'+hm(r.mesheures.tte)+'</b><small>HS '+hm(r.mesheures.hs)+' · '+r.mesheures.jours+' j</small></div>'+
-        '<div><span>ROMI1 (employeur)</span><b>'+hm(r.employeur.tte)+'</b><small>HS '+hm(r.employeur.hs)+' · '+(r.employeur.presence!=null?r.employeur.presence+' j':'présence —')+'</small></div>'+
-        '<div data-tone="'+(r.aVerifier?'warn':'ok')+'"><span>Écart TTE</span><b>'+hm(r.ecartTte)+'</b><small>'+(r.aVerifier?'⚠️ À vérifier · écart à analyser':'✓ concordant (±'+ROMI_TOL+' min)')+'</small></div></div>';
-    }
+    if(r.statut==='comparable'||r.statut==='partiel'){
+      romiRes=r.statut==='partiel'?'partiel'+(r.aVerifier?' · écart '+hm(r.ecartTte)+' ⚠️':''):r.aVerifier?'écart '+hm(r.ecartTte)+' ⚠️':r.ecartTte==null?'TTE ROMI1 absent':'concordant ✓';
+      romiTone=r.aVerifier?'warn':r.statut==='partiel'||r.ecartTte==null?'mut':'ok';
+      romiBody=romiDetail(r);
+    }else if(r.statut==='non_comparable'){romiRes='non comparable';romiTone='mut';romiBody='<div class="mh37c-note" data-romi="non_comparable"><b>Non comparable</b><br>Périodes différentes : relevé'+(r.releves.length>1?'s':'')+' du '+r.releves.map(x=>dShort(x.debut)+' au '+dShort(x.fin)).join(', ')+'. Aucun écart n’est calculé.</div>'}
+    else if(r.statut==='indisponible'){romiRes='indisponible';romiTone='mut';romiBody='<div class="mh37c-note" data-romi="indisponible">Module de rapprochement ROMI1 indisponible.</div>'}
+    else{romiRes='pas de relevé';romiTone='mut';romiBody='<div class="mh37c-note" data-romi="absent">Pas de relevé ROMI1 disponible.</div>'}
     h+=fold('romi','Comparaison ROMI1',romiRes,romiTone,romiBody);
     /* Déjà payé : uniquement ce qui est renseigné */
     const s=c.paye.saisie,b=c.paye.bulletin,e=r.statut==='comparable'?r.employeur:null;

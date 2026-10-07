@@ -443,4 +443,15 @@
 .mh37c-body{padding-bottom:10px}
 .mh37c-body .mh37c-cmp{margin-top:0}
 .mh37c-q summary{list-style:none}
+/* V37.0-F — rapprochement ROMI1 : décomposition et détail journalier */
+.mh37c-dec{margin-top:10px;padding-top:6px;border-top:1px dashed var(--line)}
+.mh37c-days{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:0 8px}
+.mh37c-days summary{min-height:44px;display:flex;align-items:center;font-size:12.5px;font-weight:700;cursor:pointer}
+.mh37c-dh,.mh37c-dr{display:grid;grid-template-columns:minmax(0,1.25fr) repeat(3,minmax(0,1fr));gap:4px;align-items:baseline;font-variant-numeric:tabular-nums}
+.mh37c-dh{padding:4px 0;color:var(--dim);font-size:9.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
+.mh37c-dr{padding:7px 0;border-top:1px solid var(--line);font-size:12px}
+.mh37c-dh span:not(:first-child),.mh37c-dr>span:not(:first-child),.mh37c-dr>b{text-align:right;white-space:nowrap}
+.mh37c-dr>b{color:var(--tone,var(--txt))}
+.mh37c-dr>small{grid-column:1/-1;color:var(--dim);font-size:10.5px;line-height:1.35}
+.mh37c-dr>small i{display:block;font-style:normal;overflow-wrap:anywhere}
 @media (max-width:380px){.mh37c-cmp{grid-template-columns:1fr 1fr}.mh37c-cmp>div:last-child{grid-column:1/-1}.mh37c-qr{font-size:11px}}

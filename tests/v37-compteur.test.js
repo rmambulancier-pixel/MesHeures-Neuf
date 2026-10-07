@@ -27,6 +27,7 @@ function load(days,opts={}){
     ';globalThis.__x={get DB(){return DB},cd,calcPer,brutOf,F,Q:mhQuatorzaine};',ctx);
   if(opts.romi)win.MH_ROMI={list:()=>clone(opts.romi)};
   if(opts.freeze){vm.runInContext('Object.freeze(DB);',ctx);deepFreeze(ctx.__x.DB)}
+  vm.runInContext(fs.readFileSync(path.join(WEB,'app-v37-romi-reconciliation.js'),'utf8'),ctx,{filename:'app-v37-romi-reconciliation.js'});   // V37.0-F : source de la comparaison ROMI1
   vm.runInContext(fs.readFileSync(path.join(WEB,'app-v37-compteur.js'),'utf8'),ctx,{filename:'app-v37-compteur.js'});
   return {C:win.MHCompteur,X:ctx.__x,win,writes,ctx};
 }
@@ -96,7 +97,7 @@ t('valeurs MesHeures et ROMI1 dans des blocs séparés, TTE MesHeures inchangé 
   assert.notEqual(c.romi.mesheures.tte,c.romi.employeur.tte)});
 t('ROMI1 absent : « Pas de relevé ROMI1 disponible », aucune valeur employeur',()=>{const A=load(fx.days),h=text(A.C.html(REF));
   assert.equal(A.C.data(REF).romi.statut,'absent');assert.ok(h.includes('Pas de relevé ROMI1 disponible'));assert.ok(!h.includes('150h15'))});
-t('ROMI1 non comparable (période différente) : « Non comparable », aucun écart',()=>{const A=load(fx.days,{romi:[{...ROMI_REF,periodStart:'2026-08-26'}]});
+t('ROMI1 non comparable (période différente) : « Non comparable », aucun écart',()=>{const A=load(fx.days,{romi:[{...ROMI_REF,periodStart:'2026-08-26',periodEnd:'2026-09-27'}]});
   const d=A.C.data(REF),h=text(A.C.html(REF));assert.equal(d.romi.statut,'non_comparable');assert.ok(h.includes('Non comparable'));assert.ok(!h.includes('Écart TTE'));assert.ok(!h.includes('150h15'))});
 t('ROMI1 différent mais dans la tolérance (±15 min) : « concordant »',()=>{const A=load(fx.days,{romi:[{...ROMI_REF,ttePeriodH:167.75}]});
   const d=A.C.data(REF);assert.equal(F(d.romi.ecartTte),'0h10');assert.equal(d.romi.aVerifier,false);assert.ok(text(A.C.html(REF)).includes('concordant'))});
@@ -129,7 +130,7 @@ t('titres des volets : l’essentiel reste visible replié',()=>{
   assert.equal(fold(H,'paye').resume,'1 source')});
 t('titres sans ROMI1, non comparable, concordant, sans paiement',()=>{
   assert.equal(fold(load(fx.days).C.html(REF),'romi').resume,'pas de relevé');
-  assert.equal(fold(load(fx.days,{romi:[{...ROMI_REF,periodStart:'2026-08-26'}]}).C.html(REF),'romi').resume,'non comparable');
+  assert.equal(fold(load(fx.days,{romi:[{...ROMI_REF,periodStart:'2026-08-26',periodEnd:'2026-09-27'}]}).C.html(REF),'romi').resume,'non comparable');
   const ok=fold(load(fx.days,{romi:[{...ROMI_REF,ttePeriodH:167.75}]}).C.html(REF),'romi');assert.deepEqual([ok.resume,ok.tone],['concordant ✓','ok']);
   assert.equal(fold(load(fx.days).C.html(REF),'paye').resume,'non renseigné')});
 t('chiffres principaux toujours hors des volets (TTE, HS, autres temps)',()=>{
