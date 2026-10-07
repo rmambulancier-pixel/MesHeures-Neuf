@@ -45,7 +45,7 @@ function pushWidgetData(){
           const br=brutOf(G);
           if(br&&Number.isFinite(Number(br.tot))){
             grossCents=Math.round(Number(br.tot)*100);
-            const net=Number(br.tot)*Number(DB.s?.net||0)+Number(br.panIRExon||0)+Number(br.panIRU||0);
+            const net=Number(br.netEst);
             if(Number.isFinite(net))netCents=Math.round(net*100);
             payReady=Number.isFinite(grossCents)&&(netCents!==null);
           }

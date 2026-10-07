@@ -264,7 +264,7 @@ function renderPayBase(){
   $('pAl').innerHTML=AL.length
     ?AL.map(a=>`<div class="al ${a.lvl}"><b>${short(a.k)}</b> — ${esc(a.m)}</div>`).join('')
     :'<div class="al k">✅ Aucune anomalie détectée sur cette période</div>';
-  const{L,tot,netEst,panIR,panIRTax,panIRU,panIRExon,panIRUT}=brutOf(G);
+  const{L,tot,netSal,netEst,panIR,panIRTax,panIRU,panIRExon,panIRUT}=brutOf(G);
   /*
    * V36 HABILLAGE FIX
    * La fiche de paie officielle enregistre l'habillage/déshabillage
@@ -298,7 +298,7 @@ function renderPayBase(){
     +L.map(x=>`<tr><td>${esc(x[0])}</td><td class="n">${x[1]}</td><td class="n mut">${x[2]}</td><td class="n">${EUR(x[3])}</td></tr>`).join('')
     +habRef
     +`<tr class="t"><td>Brut soumis à cotisations</td><td colspan="2"></td><td class="n">${EUR(tot)}</td></tr>`
-    +`<tr><td>Net estimé (brut × ${S.net})</td><td colspan="2" class="n mut"></td><td class="n">${EUR(tot*S.net)}</td></tr>`
+    +`<tr><td>Net estimé (brut × ${S.net})</td><td colspan="2" class="n mut"></td><td class="n">${EUR(netSal)}</td></tr>`
     +`<tr><td>+ IR extérieur — part exonérée (${G.ir} repas)</td><td colspan="2" class="n mut">${S.irT} €/repas</td><td class="n">+ ${EUR(panIRExon)}</td></tr>`
     +`<tr><td>+ IRU intérieur (${G.iru} repas)</td><td colspan="2" class="n mut">${S.iru} €/repas</td><td class="n">+ ${EUR(panIRU)}</td></tr>`
     +`<tr class="t"><td>Total versé estimé</td><td colspan="2"></td><td class="n">${EUR(netEst)}</td></tr>`;
@@ -603,7 +603,7 @@ ${rcSol>S.rcAlerte?`<div class="al b" style="margin-top:6px">🚨 Solde RC théo
 
 function renderRegBase(){
   for(const g in RG)$(g).innerHTML=RG[g].map(([k,l])=>{
-    const ty=['anchor','panDeb','panFin','nuitDeb','nuitFin'].includes(k)?
+    const ty=['anchor','panDeb','panFin','panSoirDeb','panSoirFin','nuitDeb','nuitFin'].includes(k)?
       (k==='anchor'?'date':'time'):'number';
     return `<div><label>${l}</label><input type="${ty}" step="any" value="${DB.s[k]??''}" onchange="DB.s['${k}']=this.type==='number'?parseFloat(this.value)||0:this.value;save();mhRefresh()"></div>`;
   }).join('');

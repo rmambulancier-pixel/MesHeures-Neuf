@@ -178,6 +178,41 @@ function calcAnc(emb,refDate){
 }
 
 
+/* Pauses effectivement déduites du TTE — uniquement les pauses saisies, jamais modifiées en base.
+   a,b = début/fin du service en minutes (b peut dépasser 1440 si le service franchit minuit).
+   - pause incomplète : ignorée (aucune pause inventée) ;
+   - pause « fin avant début » sur un service qui ne franchit pas minuit : saisie invalide, non déduite ;
+   - seule la partie de la pause comprise dans le service est déduite ;
+   - deux pauses qui se chevauchent ne sont déduites qu'une fois. */
+function mhEffectivePauses(d,a,b){
+  const out={pz:0,al:[]},iv=[];
+  const crosses=b>1440;
+  (d&&Array.isArray(d.p)?d.p:[]).forEach(p=>{
+    const x=P(p&&p.d);let y=P(p&&p.f);
+    if(x==null||y==null||y===x)return;
+    const lbl=p.d+'–'+p.f;
+    if(y<x){
+      if(!crosses){out.al.push({lvl:'b',m:'Pause '+lbl+' invalide (fin avant début) — non déduite du TTE'});return}
+      y+=1440;
+    }
+    let best=null;
+    [0,1440].forEach(off=>{const s=Math.max(x+off,a),e=Math.min(y+off,b);if(e>s&&(!best||e-s>best[1]-best[0]))best=[s,e]});
+    if(!best){out.al.push({lvl:'w',m:'Pause '+lbl+' hors du service — non déduite du TTE'});return}
+    if(best[1]-best[0]<y-x)out.al.push({lvl:'w',m:'Pause '+lbl+' partiellement hors du service — seule la partie dans le service est déduite'});
+    iv.push(best);
+  });
+  iv.sort((u,v)=>u[0]-v[0]);
+  let cs=null,ce=null,overlap=false;
+  iv.forEach(([s,e])=>{
+    if(ce!=null&&s<ce){overlap=true;if(e>ce)ce=e;return}
+    if(ce!=null)out.pz+=ce-cs;
+    cs=s;ce=e;
+  });
+  if(ce!=null)out.pz+=ce-cs;
+  if(overlap)out.al.push({lvl:'w',m:'Pauses qui se chevauchent — le temps commun n\'est déduit qu\'une fois'});
+  return out;
+}
+
 function cdRaw(k){
   const d=DB.days[k],S=DB.s;
   const r={amp:0,tte:0,seuil:0,idaj:0,ir:0,iru:0,rc:0,fer:0,dim:0,trav:0,pz:0,nuit:0,al:[],deb:null,fin:null,t:d?d.t:null};
@@ -191,10 +226,8 @@ function cdRaw(k){
     const b=b0<=a?b0+1440:b0, br=b-a;
     const mealCovered=mhCoveredMealWindow(a,b,S);
     const mealChoice=mhMealChoice(d);
-    (d.p||[]).forEach(p=>{
-      const x=P(p.d); let y=P(p.f);
-      if(x!=null&&y!=null){if(y<x)y+=1440;r.pz+=y-x}
-    });
+    const ep=mhEffectivePauses(d,a,b);
+    r.pz=ep.pz; ep.al.forEach(x=>r.al.push(x));
     // Panier repas : le sélecteur JOUR est la référence.
     // EXT = repas pris hors du bureau (IR 15,70 €).
     // ENT = repas pris au bureau (IRU 9,69 €).
@@ -225,7 +258,8 @@ function cdRaw(k){
     if(b0==null && d.running && d.startEpoch){ const now=new Date(); b0=now.getHours()*60+now.getMinutes(); }
     if(a!=null&&b0!=null){
       const b=b0<=a?b0+1440:b0,br=b-a;
-      (d.p||[]).forEach(p=>{const x=P(p.d);let y=P(p.f);if(x!=null&&y!=null){if(y<x)y+=1440;r.pz+=y-x}});
+      const ep=mhEffectivePauses(d,a,b);
+      r.pz=ep.pz; ep.al.forEach(x=>r.al.push(x));
       r.amp=br; r.tte=br-r.pz;
       r.seuil=r.tte; r.trav=1; r.deb=a; r.fin=b;
       r.nuit=minutesNuit(a,b,S);
@@ -287,39 +321,10 @@ window.mhRepairDataIntegrity=function(){
     if(!window.DB || !DB.days) return {changed:false,removed:0};
 
     /*
-     * Correction canonique validée :
-     * ROMI1 actuel : 15/08/2026 = 06:30 -> 21:00
-     * pause 12:00 -> 12:30
-     * jour férié travaillé.
+     * V36.2 : l'ancienne « correction canonique » du 15/08/2026 réécrivait cette journée
+     * en dur (pauses remplacées, choix repas et notes perdus). Une donnée utilisateur
+     * n'est jamais réécrite par le code : bloc retiré, seul le nettoyage C18 reste.
      */
-    const k='2026-08-15';
-
-    const canonical={
-      t:'T',
-      deb:'06:30',
-      fin:'21:00',
-      p:[{d:'12:00',f:'12:30',ty:'EXT'}],
-      fer:true
-    };
-
-    const cur=DB.days[k];
-
-    const same=
-      cur &&
-      cur.t===canonical.t &&
-      cur.deb===canonical.deb &&
-      cur.fin===canonical.fin &&
-      cur.fer===true &&
-      Array.isArray(cur.p) &&
-      cur.p.length===1 &&
-      cur.p[0] &&
-      cur.p[0].d==='12:00' &&
-      cur.p[0].f==='12:30';
-
-    if(!same){
-      DB.days[k]=canonical;
-    }
-
     /*
      * Nettoyage strict des anciens C18 quotidiens.
      *
@@ -379,7 +384,7 @@ window.mhRepairDataIntegrity=function(){
       removed=before-DB.constats.length;
     }
 
-    const changed=!same || removed>0;
+    const changed=removed>0;
 
     if(changed && typeof save==='function'){
       save();
@@ -471,8 +476,11 @@ function brutOfRaw(G){
   if(G.ir&&irTax)L.push(['Indemnité de repas IR (part taxable)',G.ir+' repas',irTax.toFixed(2)+' €/repas',panIRTax]);
   const tot=L.reduce((a,x)=>a+x[3],0);
   /* Net estimé = brut × coefficient net + parts NON soumises (IR exonéré + IRU), comme sous « Net à payer » du bulletin. */
-  const netEst=tot*Number(S.net||0)+panIRExon+panIRU;
-  return{L,tot,netEst,panIR:panIRTax,panIRTax,panIRExon,panIRUT:panIRExon,panIRFull:G.ir*irFull,panIRU};
+  /* netSal = net du salaire seul (brut × coef, part IR taxable comprise une seule fois via le brut).
+     netEst = « Total versé estimé » = netSal + parts non soumises. Les écrans lisent ces deux valeurs, sans formule propre. */
+  const netSal=tot*Number(S.net||0);
+  const netEst=netSal+panIRExon+panIRU;
+  return{L,tot,netSal,netEst,panIR:panIRTax,panIRTax,panIRExon,panIRUT:panIRExon,panIRFull:G.ir*irFull,panIRU};
 }
 
 /* Current — source unique paie pour toutes les surfaces (Web/PWA/widget).

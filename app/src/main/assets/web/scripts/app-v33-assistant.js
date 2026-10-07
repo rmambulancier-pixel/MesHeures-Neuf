@@ -28,7 +28,7 @@ function scan(){
     const mealPause=p.some(x=>x.min>=C.mealMin && mhMealWindows(DB.s).some(w=>mm(x.d)>=w.deb&&mm(x.f)<=w.fin));
     const choice=typeof mhMealChoice==='function'?mhMealChoice(d):null;
     if(choice!=='NON'&&!mealPause)out.push({lvl:'warn',code:'MEAL_MISSING',k,msg:'Journée couvrant une plage repas : aucune pause repas de 30 min détectée dans la plage concernée.'});
-    else if(!Object.prototype.hasOwnProperty.call(d,'panier'))out.push({lvl:'info',code:'MEAL_AUTO',k,msg:'Mode Auto : panier extérieur selon la couverture d’une plage repas. Aucune pause fictive n’est retirée du TTE.'});
+    else if(choice==null)out.push({lvl:'info',code:'MEAL_AUTO',k,msg:'Mode Auto : panier extérieur selon la couverture d’une plage repas. Aucune pause fictive n’est retirée du TTE.'});
   }
   if(d.panier&&d.panier!=='NON'&&!p.some(x=>x.min>=30))out.push({lvl:'info',code:'BASKET_WITHOUT_PAUSE',k,msg:`Panier ${d.panier} renseigné sans pause de 30 min enregistrée : vérifier la saisie.`});
  }

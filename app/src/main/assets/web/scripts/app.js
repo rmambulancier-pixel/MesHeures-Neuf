@@ -416,7 +416,7 @@ document.addEventListener('touchend',e=>{
   else if(curTab==='mois'){dx<0?goMonth(1):goMonth(-1)}
 });
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=36.2.0',{scope:'./'}).then(reg=>{
+  navigator.serviceWorker.register('./sw.js?v=36.2.0-r1',{scope:'./'}).then(reg=>{
     try{
       window.mhServiceWorkerReady=!!reg;
       if(typeof reg.update==='function') reg.update().catch(()=>{});
@@ -542,14 +542,14 @@ function renderPay(){
   const st=DB.per.start,nb=DB.per.nb,{G}=calcPer(st,nb),br=brutOf(G),tot=br.tot;
   const host=$('pKpi'); if(!host)return;
   const anc=calcAnc(DB.s.emb||DEF.emb), ancPct=DB.s.anc||anc.pct;
-  const netEst=tot*DB.s.net+br.panIRExon+br.panIRU;
-  const sim=$('pSim'); if(sim){sim.innerHTML=`<div class="pay-sim-total"><strong>${EUR(tot)}</strong><span>BRUT ESTIMÉ</span></div><div class="pay-sim-grid"><div><span>Heures normales</span><b>${F(G.nor)}</b></div><div><span>HS 25 %</span><b>${F(G.h25)}</b></div><div><span>HS 50 %</span><b>${F(G.h50)}</b></div><div><span>Heures de nuit</span><b>${C2(G.nuit)} h</b></div><div><span>Dimanches</span><b>${G.dim}</b></div><div><span>Ancienneté</span><b>${ancPct}%</b></div></div><div class="pay-sim-net"><span>Net estimé</span><strong>${EUR(netEst)}</strong></div>`;}
+  const netEst=br.netEst,netSal=br.netSal;
+  const sim=$('pSim'); if(sim){sim.innerHTML=`<div class="pay-sim-total"><strong>${EUR(tot)}</strong><span>BRUT ESTIMÉ</span></div><div class="pay-sim-grid"><div><span>Heures normales</span><b>${F(G.nor)}</b></div><div><span>HS 25 %</span><b>${F(G.h25)}</b></div><div><span>HS 50 %</span><b>${F(G.h50)}</b></div><div><span>Heures de nuit</span><b>${C2(G.nuit)} h</b></div><div><span>Dimanches</span><b>${G.dim}</b></div><div><span>Ancienneté</span><b>${ancPct}%</b></div></div><div class="pay-sim-net"><span>Net estimé (salaire)</span><strong>${EUR(netSal)}</strong></div><div class="pay-sim-net"><span>Total versé estimé (+ repas non soumis)</span><strong>${EUR(netEst)}</strong></div>`;}
   const old=host.parentElement;
   if(old&&!document.getElementById('pProSummary')){
-    const c=document.createElement('div');c.className='card pro-summary';c.id='pProSummary';c.innerHTML=`<h2>💼 Synthèse professionnelle</h2><div class="pro-grid"><div><span>Brut estimé</span><b id="proBrut">${EUR(tot)}</b></div><div><span>Net estimé</span><b id="proNet">${EUR(tot*DB.s.net)}</b></div><div><span>Heures sup.</span><b id="proHours">${F(G.h25+G.h50)}</b></div><div><span>Écart bulletin</span><b id="proGap">À renseigner</b></div></div>`;old.parentNode.insertBefore(c,old);}
+    const c=document.createElement('div');c.className='card pro-summary';c.id='pProSummary';c.innerHTML=`<h2>💼 Synthèse professionnelle</h2><div class="pro-grid"><div><span>Brut estimé</span><b id="proBrut">${EUR(tot)}</b></div><div><span>Net estimé</span><b id="proNet">${EUR(netSal)}</b></div><div><span>Heures sup.</span><b id="proHours">${F(G.h25+G.h50)}</b></div><div><span>Écart bulletin</span><b id="proGap">À renseigner</b></div></div>`;old.parentNode.insertBefore(c,old);}
   const proBrut=document.getElementById('proBrut'),proNet=document.getElementById('proNet'),proHours=document.getElementById('proHours'),gap=document.getElementById('proGap'),B=gb(st);
   if(proBrut)proBrut.textContent=EUR(tot);
-  if(proNet)proNet.textContent=EUR(tot*DB.s.net);
+  if(proNet)proNet.textContent=EUR(netSal);
   if(proHours)proHours.textContent=F(G.h25+G.h50);
 
   // V30 : le champ « Écart bulletin » ne doit plus confondre

@@ -300,8 +300,10 @@ function afficherBulletin(bul){
       +calcFer/60*S.taux
       +(calcRC/60)*S.taux
       +(calcDim*S.dimPrime||0);
-    const calcBrut=calcBrutAvantAnc+(ancPct?calcBrutAvantAnc*ancPct/100:0);
-    addRow('Salaire brut',bul.brut,calcBrut,'€',ancPct?'Inclut RC payé + prime ancienneté '+ancPct+'%':'Inclut RC payé');
+    // Part taxable IR (IR extérieur − part exonérée) : dans le brut comme sur le bulletin, hors base d'ancienneté.
+    const irTaxable=calcIR*Math.max(0,(Number(S.ir)||0)-(Number(S.irT)||0));
+    const calcBrut=calcBrutAvantAnc+(ancPct?calcBrutAvantAnc*ancPct/100:0)+irTaxable;
+    addRow('Salaire brut',bul.brut,calcBrut,'€',(ancPct?'Inclut RC payé + prime ancienneté '+ancPct+'%':'Inclut RC payé')+(irTaxable?' + part taxable IR':''));
   }
   if(bul.net!=null){
     const calcNet=(bul.brut||0)*S.net+(calcIR*S.irT)+(calcIRU*S.iru);
