@@ -540,6 +540,7 @@
     return '<div class="mh31-home">' +
       block('Aujourd’hui', () => heroBlock(c)) +
       block('Pilotage', () => pilotBlock(c)) +
+      block('Compteur heures', () => (window.MHCompteur ? window.MHCompteur.html() : '')) +   /* V37.0-E : lecture seule */
       block('Intelligence', () => intelBlock(c)) +
       block('Smart Control', () => dossierBlock(c)) +
       block('Prochaine action', () => nextBlock(c)) +
