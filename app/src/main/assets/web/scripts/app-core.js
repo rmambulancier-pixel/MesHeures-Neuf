@@ -449,12 +449,15 @@ function calcPerRaw(start,nb){
     Q.push(o);
   }
   G.hab=G.trav*S.hab;
+  G.end=addD(start,nb*14-1); // date de référence de l'ancienneté (fin de période)
   return{Q,AL,G};
 }
 
 function brutOfRaw(G){
   const S=DB.s,T=S.taux,L=[];
-  const anc=calcAnc(S.emb);
+  /* Ancienneté appréciée à la fin de la période calculée (G.end), et non à la date du jour :
+     une période passée garde le taux qui s'appliquait à l'époque. Sans G.end : date du jour. */
+  const anc=calcAnc(S.emb,G.end||null);
   const ancPct=S.anc||anc.pct;
   L.push(['Heures normales',F(G.nor),T.toFixed(2)+' €/h',G.nor/60*T]);
   if(G.h25)L.push(['HS 25 %',F(G.h25),(T*1.25).toFixed(2)+' €/h',G.h25/60*T*1.25]);
@@ -499,7 +502,8 @@ window.mhCurrentPaySummary=function(){
 
 function minutesNuit(a,b,S){
   const nd=P(S.nuitDeb),nf=P(S.nuitFin);
-  if(nd==null||nf==null||!S.nuitMaj)return 0;
+  // Comptées même si la majoration est à 0 % : c'est une donnée horaire. Seule la ligne de paie dépend de nuitMaj.
+  if(nd==null||nf==null)return 0;
   let mn=0;
   for(let t=a;t<b;t++){
     const tm=t%1440; // ramène chaque minute à 0-1439, même pour un service qui franchit minuit

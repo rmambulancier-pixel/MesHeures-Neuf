@@ -28,8 +28,9 @@
     for(let i=0;i<nb*14;i++){
       const k=addD(start,i),r=cd(k); if(!r.tte&&!r.amp)continue;
       if(r.tte>=360&&r.pz<20)out.push({k,lvl:'b',m:'Pause minimale de 20 min à contrôler dès 6 h de TTE.',rule:'L3121-16'});
-      if(r.amp>12&&r.amp<=14)out.push({k,lvl:'w',m:'Amplitude > 12 h : vérifier le motif permettant l’extension conventionnelle.',rule:'CCN transport sanitaire art. 3'});
-      if(r.amp>14)out.push({k,lvl:'b',m:'Amplitude > 14 h : dépassement à vérifier impérativement.',rule:'CCN transport sanitaire art. 3'});
+      // r.amp est en minutes (12 h = 720, 14 h = 840). Critique au-delà de 14 h.
+      if(r.amp>720&&r.amp<=840)out.push({k,lvl:'w',m:'Amplitude > 12 h : vérifier le motif permettant l’extension conventionnelle.',rule:'CCN transport sanitaire art. 3'});
+      if(r.amp>840)out.push({k,lvl:'b',m:'Amplitude > 14 h : dépassement à vérifier impérativement.',rule:'CCN transport sanitaire art. 3'});
       if(r.tte>600&&r.tte<=720)out.push({k,lvl:'w',m:'TTE > 10 h : dépassement quotidien encadré à justifier.',rule:'CCN transport sanitaire art. 4'});
       if(r.tte>720)out.push({k,lvl:'b',m:'TTE > 12 h : dépassement quotidien au-delà de la limite conventionnelle.',rule:'CCN transport sanitaire art. 4'});
     }

@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 const V='33.1.0', WORK=new Set(['T','NUIT']);
-const C={ampWarn:720,ampMax:900,tteWarn:600,tteMax:720,weekMax:2880,avg3m:2760,restWarn:660,restMin:540,pauseMin:20,mealMin:30};
+const C={ampWarn:720,ampMax:840,tteWarn:600,tteMax:720,weekMax:2880,avg3m:2760,restWarn:660,restMin:540,pauseMin:20,mealMin:30};
 const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const days=()=>DB?.days||{};
 const isWork=k=>WORK.has(days()[k]?.t);
@@ -17,7 +17,7 @@ function scan(){
   const {d,r}=get(k), p=pauseList(d), amp=Number(r.amp)||dur(d.deb,d.fin)||0, tte=Number(r.tte)||0;
   if(!d.deb||!d.fin)out.push({lvl:'bad',code:'MISSING_TIME',k,msg:'Journée de travail incomplète : début ou fin manquant.'});
   if(d.deb&&d.fin&&amp<0)out.push({lvl:'bad',code:'TIME_INVALID',k,msg:'Horaires incohérents.'});
-  if(amp>C.ampMax)out.push({lvl:'bad',code:'AMP_GT15',k,msg:`Amplitude ${Fm(amp)} : dépasse 15 h, à documenter immédiatement.`});
+  if(amp>C.ampMax)out.push({lvl:'bad',code:'AMP_GT14',k,msg:`Amplitude ${Fm(amp)} : dépasse 14 h, à documenter immédiatement.`});
   else if(amp>C.ampWarn)out.push({lvl:'warn',code:'AMP_GT12',k,msg:`Amplitude ${Fm(amp)} : dépasse 12 h, motif/contrepartie à vérifier.`});
   if(tte>C.tteMax)out.push({lvl:'bad',code:'TTE_GT12',k,msg:`TTE ${Fm(tte)} : dépasse 12 h, situation à justifier.`});
   else if(tte>C.tteWarn)out.push({lvl:'warn',code:'TTE_GT10',k,msg:`TTE ${Fm(tte)} : dépasse 10 h, vérifier le motif prévu par les règles applicables.`});

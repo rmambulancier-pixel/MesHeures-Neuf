@@ -4,13 +4,43 @@
   const PREFIX=LS+'_v30_backup_';
 
   function cloneDB(){return JSON.parse(JSON.stringify(DB));}
+
+  /* V37.0-0 — Relevés ROMI1. Ils sont stockés par romi-master.js hors de DB
+     (localStorage['mh_romi_master_v35']) : sans ce bloc, aucune sauvegarde ne les contenait. */
+  const ROMI_KEY='mh_romi_master_v35';
+  function romiExport(){
+    try{const raw=localStorage.getItem(ROMI_KEY);if(!raw)return null;const o=JSON.parse(raw);return o&&typeof o==='object'&&!Array.isArray(o)?o:null}
+    catch(e){return null}
+  }
+  // Valide un bloc ROMI1 d'une sauvegarde : null = absent (ancien fichier), sinon nombre de relevés.
+  function romiValidate(o){
+    if(o==null)return null;
+    if(typeof o!=='object'||Array.isArray(o))throw new Error('Bloc ROMI1 de la sauvegarde invalide.');
+    Object.entries(o).forEach(([k,rec])=>{
+      const d=rec&&rec.data;
+      if(!d||!/^\d{4}-\d{2}-\d{2}$/.test(String(d.periodStart||''))||!/^\d{4}-\d{2}-\d{2}$/.test(String(d.periodEnd||'')))
+        throw new Error('Relevé ROMI1 invalide dans la sauvegarde ('+k+').');
+    });
+    return Object.keys(o).length;
+  }
+  // Remplace les relevés ROMI1 par ceux de la sauvegarde. Absent (ancien fichier) : relevés actuels conservés.
+  function romiImport(o){
+    if(romiValidate(o)==null)return null;
+    localStorage.setItem(ROMI_KEY,JSON.stringify(o));
+    try{document.dispatchEvent(new CustomEvent('mh:romi1-saved',{detail:{source:'restore'}}))}catch(e){}
+    return Object.keys(o).length;
+  }
+  function romiLabel(n){return n==null?'Relevés ROMI1 : absents du fichier, relevés actuels conservés.':n+' relevé(s) ROMI1 restauré(s).'}
+  window.mhRomiStore={key:ROMI_KEY,export:romiExport,validate:romiValidate,import:romiImport,label:romiLabel};
+
   function snapshot(){
     return {
       format:'MesHeures Backup',
       version:BACKUP_VERSION,
       createdAt:new Date().toISOString(),
       reason:'manual',
-      data:cloneDB()
+      data:cloneDB(),
+      romiMaster:romiExport()
     };
   }
   function isValidPayload(raw){
@@ -102,12 +132,15 @@
       try{
         const raw=JSON.parse(e.target.result),data=isValidPayload(raw);
         const keys=Object.keys(data);
-        if(!confirm('Importer cette sauvegarde ? Les données actuelles seront remplacées par celles du fichier. Une copie de sécurité sera créée avant import.'))return;
+        const romi=raw&&raw.format==='MesHeures Backup'?raw.romiMaster:undefined;
+        const romiN=romiValidate(romi);
+        if(!confirm('Importer cette sauvegarde ? Les données actuelles seront remplacées par celles du fichier'+(romiN!=null?' (dont '+romiN+' relevé(s) ROMI1)':'')+'. Une copie de sécurité sera créée avant import.'))return;
         const safety=window.mhV30Backup('before-import');
         if(!safety.ok)throw new Error('Impossible de créer la sauvegarde de sécurité avant import.');
         DB={s:{...DEF,...(data.s||{})},days:{...(data.days||{})},cmp:{...(data.cmp||{})},periods:Array.isArray(data.periods)?data.periods:[],bul:{...(data.bul||{})},bulletins:Array.isArray(data.bulletins)?data.bulletins:[],romi:{...(data.romi||{})},per:{start:DEF.anchor,nb:1,...(data.per||{})},exp:data.exp??null,constats:Array.isArray(data.constats)?data.constats:[],events:Array.isArray(data.events)?data.events:[],reconciliation:Array.isArray(data.reconciliation)?data.reconciliation:[]};
         if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();save();mhRefresh();
-        alert('✅ Import réussi. '+keys.length+' bloc(s) de données restauré(s).');
+        const romiDone=romiImport(romi);
+        alert('✅ Import réussi. '+keys.length+' bloc(s) de données restauré(s).\n'+romiLabel(romiDone));
       }catch(err){alert('❌ Import impossible : '+err.message)}
       finally{input.value=''}
     };
@@ -126,11 +159,12 @@
     try{
       const s=JSON.parse(localStorage.getItem(key));
       const data=isValidPayload(s);
+      const romiN=romiValidate(s&&s.romiMaster);
       if(!confirm('Restaurer ce point de sauvegarde ? Une copie de l’état actuel sera créée avant restauration.'))return false;
       const safety=window.mhV30Backup('before-restore');
       if(!safety.ok)throw new Error('Impossible de créer la sauvegarde de sécurité avant restauration.');
       DB={s:{...DEF,...(data.s||{})},days:{...(data.days||{})},cmp:{...(data.cmp||{})},periods:Array.isArray(data.periods)?data.periods:[],bul:{...(data.bul||{})},bulletins:Array.isArray(data.bulletins)?data.bulletins:[],romi:{...(data.romi||{})},per:{start:DEF.anchor,nb:1,...(data.per||{})},exp:data.exp??null,constats:Array.isArray(data.constats)?data.constats:[],events:Array.isArray(data.events)?data.events:[],reconciliation:Array.isArray(data.reconciliation)?data.reconciliation:[]};
-      if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();save();mhRefresh();alert('✅ Restauration terminée.');return true;
+      if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();save();const romiDone=romiImport(s&&s.romiMaster);mhRefresh();alert('✅ Restauration terminée.\n'+romiLabel(romiDone));return true;
     }catch(e){alert('❌ Restauration impossible : '+e.message);return false;}
   };
 
