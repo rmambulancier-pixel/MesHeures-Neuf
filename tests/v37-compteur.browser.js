@@ -32,6 +32,14 @@ srv.listen(0,async()=>{
       const card=pg.locator('#mh37Compteur');
       ok(await card.count()===1,'bloc « Compteur heures » présent sur l’Accueil');
       await card.scrollIntoViewIfNeeded();
+      const hClosed=await card.evaluate(c=>c.getBoundingClientRect().height);
+      const fs0=await pg.evaluate(()=>{const n=document.querySelector('#mh37Compteur .mh37c-note'),cs=getComputedStyle(n);return {size:parseFloat(cs.fontSize),op:+cs.opacity}});
+      ok(fs0.size>=12&&fs0.op>=0.8,'note des quatorzaines lisible ('+fs0.size+' px, opacité '+fs0.op+')');
+      const sums=await pg.evaluate(()=>[...document.querySelectorAll('#mh37Compteur details.mh37c-fold summary')].map(s=>s.innerText.replace(/\s+/g,' ').trim()));
+      ok(sums.length===3&&/Comparaison ROMI1 écart 17h40/.test(sums[0])&&/Reste à contrôler \d+ points/.test(sums[2]),'volets repliés avec résumé : '+sums.join(' | '));
+      await pg.evaluate(()=>document.querySelectorAll('#mh37Compteur details.mh37c-fold').forEach(d=>d.open=true));await pg.waitForTimeout(100);
+      const hOpen=await card.evaluate(c=>c.getBoundingClientRect().height);
+      ok(hClosed<hOpen*0.8,'bloc replié plus court : '+Math.round(hClosed)+' px au lieu de '+Math.round(hOpen)+' px');
       const m=await pg.evaluate(()=>{const c=document.getElementById('mh37Compteur'),r=c.getBoundingClientRect(),v=k=>(c.querySelector('[data-k="'+k+'"]')||{}).textContent;
         const btns=[...c.querySelectorAll('button')].map(x=>x.getBoundingClientRect()).filter(x=>x.width);
         const over=[...c.querySelectorAll('*')].filter(e=>{const b=e.getBoundingClientRect();return b.width&&(b.right>r.right+1||b.left<r.left-1)}).map(e=>e.className||e.tagName).slice(0,3);
@@ -48,7 +56,7 @@ srv.listen(0,async()=>{
       ok(m.minH>=36&&m.minW>=40,'boutons tactiles ≥ 36 px de haut ('+Math.round(m.minW)+'×'+Math.round(m.minH)+')');
       ok(m.bg!==m.color,'contraste texte / fond ('+m.color+' sur '+m.bg+')');
       /* quatorzaines */
-      await pg.locator('#mh37Compteur details.mh37c-q summary').click();await pg.waitForTimeout(150);
+      await pg.locator('#mh37Compteur details.mh37c-q:not(.mh37c-fold) summary').click();await pg.waitForTimeout(150);
       const q=await pg.evaluate(()=>{const c=document.getElementById('mh37Compteur'),r=c.getBoundingClientRect();
         const rows=[...c.querySelectorAll('.mh37c-qr')].map(x=>[...x.children].map(s=>s.innerText.replace(/\s+/g,' ').trim()));
         const over=[...c.querySelectorAll('.mh37c-qt *')].filter(e=>{const b=e.getBoundingClientRect();return b.width&&b.right>r.right+1}).length;

@@ -119,6 +119,24 @@ t('bulletin du mois rattaché : affiché avec « rattachement à confirmer », 1
   const B=load(fx.days,{db:{bulletins:[{mois:'2026-09',hs25H:16,hs50H:4.33,irN:11,iruN:3}]}}),d=B.C.data(REF);
   assert.equal(d.paye.bulletin.ir,11);assert.equal(d.autres.ir,13);assert.ok(text(B.C.html(REF)).includes('Bulletin septembre 2026'))});
 
+console.log('Affichage compact (V37.0-E-r1)');
+const fold=(h,k)=>{const m=h.match(new RegExp('<details class="mh37c-q mh37c-fold" data-fold="'+k+'"><summary><span>([^<]*)</span><b data-tone="([a-z]+)">([^<]*)</b>'));return m&&{label:m[1],tone:m[2],resume:m[3]}};
+t('ROMI1, déjà payé, reste à contrôler repliés (aucun volet ouvert par défaut)',()=>{
+  ['romi','paye','controle'].forEach(k=>assert.ok(fold(H,k),k));assert.ok(!/<details[^>]* open/.test(H))});
+t('titres des volets : l’essentiel reste visible replié',()=>{
+  assert.deepEqual(fold(H,'romi'),{label:'Comparaison ROMI1',tone:'warn',resume:'écart 17h40 ⚠️'});
+  assert.deepEqual(fold(H,'controle'),{label:'Reste à contrôler',tone:'bad',resume:c.controle.length+' points'});
+  assert.equal(fold(H,'paye').resume,'1 source')});
+t('titres sans ROMI1, non comparable, concordant, sans paiement',()=>{
+  assert.equal(fold(load(fx.days).C.html(REF),'romi').resume,'pas de relevé');
+  assert.equal(fold(load(fx.days,{romi:[{...ROMI_REF,periodStart:'2026-08-26'}]}).C.html(REF),'romi').resume,'non comparable');
+  const ok=fold(load(fx.days,{romi:[{...ROMI_REF,ttePeriodH:167.75}]}).C.html(REF),'romi');assert.deepEqual([ok.resume,ok.tone],['concordant ✓','ok']);
+  assert.equal(fold(load(fx.days).C.html(REF),'paye').resume,'non renseigné')});
+t('chiffres principaux toujours hors des volets (TTE, HS, autres temps)',()=>{
+  const top=H.split('<details')[0];['167h55','173h25','32h00','30h55','62h55','0h45','3h00'].forEach(v=>assert.ok(top.includes(v),v))});
+t('note des quatorzaines en style lisible (mh37c-note), plus en note atténuée',()=>{
+  assert.ok(/<div class="mh37c-note">HS calculées quatorzaine par quatorzaine/.test(H));assert.ok(!/mh31-note">HS calculées/.test(H))});
+
 console.log('Aucun double calcul, lecture seule');
 t('ne recalcule pas le TTE : les valeurs suivent strictement calcPer (moteur substitué)',()=>{
   const A=load(fx.days);vm.runInContext('calcPer=function(s,nb){return {Q:Array.from({length:nb},(_,i)=>({start:addD(s,i*14),tte:111,amp:222,seuil:333,trav:4,nor:5,h25:6,h50:7})),AL:[],G:{tte:111*nb,amp:222*nb,seuil:333*nb,trav:4*nb,nor:5,h25:6*nb,h50:7*nb,nuit:8,idaj:9,hab:10,ir:1,iru:2,rc:0}}}',A.ctx);

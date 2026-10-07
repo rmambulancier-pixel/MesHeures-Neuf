@@ -434,4 +434,13 @@
 .mh37c-todo{margin:6px 0 0;padding:0;list-style:none}
 .mh37c-todo li{position:relative;padding:5px 0 5px 14px;font-size:12px;line-height:1.4;color:var(--txt)}
 .mh37c-todo li::before{content:'';position:absolute;left:2px;top:11px;width:6px;height:6px;border-radius:50%;background:var(--tone,var(--dim))}
+.mh37c-note{margin:8px 0 10px;color:var(--txt);opacity:.82;font-size:12px;line-height:1.45}
+.mh37c-q summary{justify-content:space-between;gap:10px}
+.mh37c-q summary::-webkit-details-marker{display:none}
+.mh37c-q summary>span::before{content:'▸';display:inline-block;width:14px;color:var(--dim)}
+.mh37c-q[open] summary>span::before{transform:rotate(90deg)}
+.mh37c-q summary>b{padding:3px 9px;border-radius:999px;background:var(--tint);color:var(--tone);font-size:12px;font-weight:800;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mh37c-body{padding-bottom:10px}
+.mh37c-body .mh37c-cmp{margin-top:0}
+.mh37c-q summary{list-style:none}
 @media (max-width:380px){.mh37c-cmp{grid-template-columns:1fr 1fr}.mh37c-cmp>div:last-child{grid-column:1/-1}.mh37c-qr{font-size:11px}}

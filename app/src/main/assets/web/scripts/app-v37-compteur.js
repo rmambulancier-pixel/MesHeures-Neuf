@@ -126,31 +126,37 @@
         (a.rcJours?row('RC pris',a.rcJours+' j · '+hm(a.rcMin)):'')+
         row('Paniers','<span data-k="pan">'+a.ir+' IR · '+a.iru+' IRU</span>')+'</div>';
     /* Lecture par quatorzaine */
-    h+='<details class="mh37c-q"><summary>Lecture par quatorzaine</summary><div class="mh37c-qt">'+
+    h+='<details class="mh37c-q"><summary><span>Lecture par quatorzaine</span><b data-tone="mut">'+c.quatorzaines.length+' quatorzaines</b></summary><div class="mh37c-qt">'+
       '<div class="mh37c-qh"><span>Quatorzaine</span><span>TTE</span><span>Base HS</span><span>HS 25</span><span>HS 50</span></div>'+
       c.quatorzaines.map((q,i)=>'<div class="mh37c-qr" data-q="'+(i+1)+'"><span><b>Q'+(i+1)+'</b> '+dShort(q.debut)+' → '+dShort(q.fin)+
         (q.cpJours?'<small>'+q.cpJours+' CP · '+hm(q.cpMin)+'</small>':'')+'</span><span>'+hm(q.tte)+'</span><span>'+hm(q.base)+'</span><span>'+hm(q.h25)+'</span><span>'+hm(q.h50)+'</span></div>').join('')+
       '<div class="mh37c-qr mh37c-tot"><span><b>Total</b></span><span>'+hm(c.travail.tte)+'</span><span>'+hm(c.hs.base)+'</span><span>'+hm(c.hs.h25)+'</span><span>'+hm(c.hs.h50)+'</span></div>'+
-      '</div><div class="mh31-note">HS calculées quatorzaine par quatorzaine par le moteur de paie (au-delà de '+c.seuils.h25+' h, puis de '+c.seuils.h50+' h de base HS).</div></details>';
+      '</div><div class="mh37c-note">HS calculées quatorzaine par quatorzaine par le moteur de paie (au-delà de '+c.seuils.h25+' h, puis de '+c.seuils.h50+' h de base HS).</div></details>';
+    /* V37.0-E-r1 : ROMI1, déjà payé et reste à contrôler repliés ; le titre de chaque volet garde l'essentiel. */
+    const fold=(key,label,resume,tone,body)=>'<details class="mh37c-q mh37c-fold" data-fold="'+key+'"><summary><span>'+label+'</span><b data-tone="'+tone+'">'+resume+'</b></summary><div class="mh37c-body">'+body+'</div></details>';
     /* Comparaison : MesHeures et référence employeur, jamais mélangées */
-    h+='<div class="mh37c-sec"><span class="mh31-eyebrow">COMPARAISON ROMI1</span>';
-    if(r.statut==='absent')h+='<div class="mh31-note" data-romi="absent">Pas de relevé ROMI1 disponible.</div>';
-    else if(r.statut==='non_comparable')h+='<div class="mh31-note" data-romi="non_comparable">Non comparable : relevé'+(r.releves.length>1?'s':'')+' du '+r.releves.map(x=>dShort(x.debut)+' au '+dShort(x.fin)).join(', ')+' (périodes différentes).</div>';
+    let romiBody,romiRes,romiTone;
+    if(r.statut==='absent'){romiRes='pas de relevé';romiTone='mut';romiBody='<div class="mh37c-note" data-romi="absent">Pas de relevé ROMI1 disponible.</div>'}
+    else if(r.statut==='non_comparable'){romiRes='non comparable';romiTone='mut';romiBody='<div class="mh37c-note" data-romi="non_comparable">Non comparable : relevé'+(r.releves.length>1?'s':'')+' du '+r.releves.map(x=>dShort(x.debut)+' au '+dShort(x.fin)).join(', ')+' (périodes différentes).</div>'}
     else{
-      h+='<div class="mh37c-cmp" data-romi="comparable"><div><span>MesHeures</span><b>'+hm(r.mesheures.tte)+'</b><small>HS '+hm(r.mesheures.hs)+' · '+r.mesheures.jours+' j</small></div>'+
+      romiRes=r.aVerifier?'écart '+hm(r.ecartTte)+' ⚠️':'concordant ✓';romiTone=r.aVerifier?'warn':'ok';
+      romiBody='<div class="mh37c-cmp" data-romi="comparable"><div><span>MesHeures</span><b>'+hm(r.mesheures.tte)+'</b><small>HS '+hm(r.mesheures.hs)+' · '+r.mesheures.jours+' j</small></div>'+
         '<div><span>ROMI1 (employeur)</span><b>'+hm(r.employeur.tte)+'</b><small>HS '+hm(r.employeur.hs)+' · '+(r.employeur.presence!=null?r.employeur.presence+' j':'présence —')+'</small></div>'+
         '<div data-tone="'+(r.aVerifier?'warn':'ok')+'"><span>Écart TTE</span><b>'+hm(r.ecartTte)+'</b><small>'+(r.aVerifier?'⚠️ À vérifier · écart à analyser':'✓ concordant (±'+ROMI_TOL+' min)')+'</small></div></div>';
     }
-    h+='</div>';
+    h+=fold('romi','Comparaison ROMI1',romiRes,romiTone,romiBody);
     /* Déjà payé : uniquement ce qui est renseigné */
     const s=c.paye.saisie,b=c.paye.bulletin,e=r.statut==='comparable'?r.employeur:null;
     const paid=[];
     if(s&&(s.h25!=null||s.h50!=null))paid.push(row('HS payées (saisie Paie)',hm(s.h25)+' · '+hm(s.h50),'HS 25 % · HS 50 %'));
     if(e&&(e.hs125Payees!=null||e.hs150Payees!=null))paid.push(row('HS payées (ROMI1)',hm(e.hs125Payees)+' · '+hm(e.hs150Payees),'125 % · 150 %'+(e.hs125Rc!=null||e.hs150Rc!=null?' · en RC '+hm(e.hs125Rc)+' · '+hm(e.hs150Rc):'')));
     if(b)paid.push(row('Bulletin '+esc(mFr(b.mois)),hm(b.h25)+' · '+hm(b.h50),'HS 25 % · HS 50 % · rattachement à confirmer'));
-    h+='<div class="mh37c-sec"><span class="mh31-eyebrow">DÉJÀ PAYÉ</span>'+(paid.length?paid.join(''):'<div class="mh31-note">Aucun paiement renseigné pour ce relevé.</div>')+'</div>';
-    /* Reste à contrôler */
-    h+='<div class="mh37c-sec"><span class="mh31-eyebrow">RESTE À CONTRÔLER</span>'+(c.controle.length?'<ul class="mh37c-todo">'+c.controle.map(x=>'<li data-tone="'+x.niveau+'">'+esc(x.texte)+'</li>').join('')+'</ul>':'<div class="mh31-note">Rien à signaler sur ce relevé.</div>')+'</div>';
+    h+=fold('paye','Déjà payé',paid.length?paid.length+' source'+(paid.length>1?'s':''):'non renseigné','mut',
+      paid.length?paid.join(''):'<div class="mh37c-note">Aucun paiement renseigné pour ce relevé.</div>');
+    /* Reste à contrôler : le niveau le plus élevé colore le titre */
+    const worst=c.controle.some(x=>x.niveau==='bad')?'bad':c.controle.some(x=>x.niveau==='warn')?'warn':c.controle.length?'mut':'ok';
+    h+=fold('controle','Reste à contrôler',c.controle.length?c.controle.length+' point'+(c.controle.length>1?'s':''):'rien à signaler',worst,
+      c.controle.length?'<ul class="mh37c-todo">'+c.controle.map(x=>'<li data-tone="'+x.niveau+'">'+esc(x.texte)+'</li>').join('')+'</ul>':'<div class="mh37c-note">Rien à signaler sur ce relevé.</div>');
     /* Paie : affichée telle que l'écran Paie la calcule */
     if(c.paie)h+='<div class="mh31-quat-pay"><span>Brut estimé (écran Paie, '+dShort(c.paie.debut)+' → '+dShort(c.paie.fin)+')'+(c.paie.memePeriode?'':' · autre période')+'</span><b>'+eur(c.paie.brut)+'</b></div>';
     h+='<button class="mh31-link" onclick="tab(\'paie\')">Voir le calcul de paie <em>→</em></button>'+
