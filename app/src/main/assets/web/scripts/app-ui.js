@@ -233,7 +233,7 @@ function regPer(){
 }
 
 function renderPayBase(){
-  const S=DB.s,st=DB.per.start,nb=DB.per.nb,B=gb(st);
+  const S=DB.s,st=DB.per.start,nb=DB.per.nb,B=DB.bul[st]||{};   /* V37.0-H : lecture sans gb(), qui créait une entrée vide à chaque affichage */
   $('pS').value=st;$('pN').value=nb;
   $('pP25').value=B.p25??'';$('pP50').value=B.p50??'';
   $('pRC').value=B.rcOld??'';$('pRCA').value=B.rcAcq??'';
@@ -243,7 +243,9 @@ function renderPayBase(){
   $('pAlign').innerHTML=(off===0
     ?'<div class="al k">✅ Période alignée sur tes quatorzaines</div>'
     :'<div class="al w">⚠️ Décalage de '+off+' jour(s) — les HS peuvent être faussées. Ajuste la date de début.</div>')
-    +(reg?'<div class="al i">📌 Période enregistrée dans l\'audit</div>':'');
+    +(reg?'<div class="al i">📌 Période enregistrée dans l\'audit</div>':'')
+    +(window.MHPeriode?(()=>{const pe=addD(st,nb*14-1),cur=window.MHPeriode.courante(),same=cur.debut===st&&cur.fin===pe;   /* V37.0-H : période toujours qualifiée */
+      return '<div class="al '+(same?'k':'i')+'" data-periode="'+window.MHPeriode.statut(st,pe)+'">📅 '+window.MHPeriode.libelle(st,pe)+(same?'':' · relevé en cours : '+window.MHPeriode.dShort(cur.debut)+' → '+window.MHPeriode.dFr(cur.fin))+'</div>'})():'');
   const{Q,AL,G}=calcPer(st,nb);
   $('pKpi').innerHTML=[
     ['Amplitude',F(G.amp)],['TTE',F(G.tte)],
@@ -390,31 +392,37 @@ function renderPayBase(){
     if(B.rcAcq==null && rcAcqRomi!=null) $('pRCA').value=rcAcqRomi;
   }
 
+  const hFr=v=>Number(v).toFixed(2).replace('.',',');   // V37.0-H : heures décimales à la française (affichage seul)
   $('pRcOut').innerHTML=`<table>
-<tr><th>Type</th><th class="n">Dues calc.</th><th class="n">Payées</th><th class="n">→ RC théorique</th><th class="n">× majo.</th></tr>
-<tr><td>HS 25 %</td><td class="n">${C2(G.h25)}</td><td class="n">${hs25Payees!==null?hs25Payees.toFixed(2):'—'}</td><td class="n">${hs25NonPayees!==null?hs25NonPayees.toFixed(2):'—'}</td><td class="n">${hs25NonPayees!==null?(hs25NonPayees*1.25).toFixed(2):'—'}</td></tr>
-<tr><td>HS 50 %</td><td class="n">${C2(G.h50)}</td><td class="n">${hs50Payees!==null?hs50Payees.toFixed(2):'—'}</td><td class="n">${hs50NonPayees!==null?hs50NonPayees.toFixed(2):'—'}</td><td class="n">${hs50NonPayees!==null?(hs50NonPayees*1.50).toFixed(2):'—'}</td></tr>
-<tr class="t"><td>Équivalence théorique de majoration</td><td colspan="3"></td><td class="n">${equivTheorique!==null?equivTheorique.toFixed(2)+' h':'—'}</td></tr>
-<tr class="t"><td>RC acquis — référence employeur</td><td colspan="3"></td><td class="n">${rcBulletin!==null?rcBulletin.toFixed(2)+' h':'—'}</td></tr>
-<tr class="t"><td>Solde RC réel — référence employeur</td><td colspan="3"></td><td class="n">${soldeRCReel!==null?soldeRCReel.toFixed(2)+' h':'—'}</td></tr>
+<tr><th>Type</th><th class="n">HS calculées MesHeures</th><th class="n">HS payées (employeur)</th><th class="n">Non payées</th><th class="n">RC théorique MesHeures</th></tr>
+<tr><td>HS 25 %</td><td class="n">${hFr(hs25Calculees)}</td><td class="n">${hs25Payees!==null?hFr(hs25Payees):'non renseigné'}</td><td class="n">${hs25NonPayees!==null?hFr(hs25NonPayees):'—'}</td><td class="n">${hs25NonPayees!==null?hFr(hs25NonPayees*1.25):'—'}</td></tr>
+<tr><td>HS 50 %</td><td class="n">${hFr(hs50Calculees)}</td><td class="n">${hs50Payees!==null?hFr(hs50Payees):'non renseigné'}</td><td class="n">${hs50NonPayees!==null?hFr(hs50NonPayees):'—'}</td><td class="n">${hs50NonPayees!==null?hFr(hs50NonPayees*1.50):'—'}</td></tr>
+<tr class="t"><td>RC théorique MesHeures (calcul interne)</td><td colspan="3"></td><td class="n">${equivTheorique!==null?hFr(equivTheorique)+' h':'—'}</td></tr>
+<tr class="t"><td>RC employeur (acquis)</td><td colspan="3"></td><td class="n">${rcBulletin!==null?hFr(rcBulletin)+' h':'non renseigné'}</td></tr>
+<tr class="t"><td>Solde RC employeur</td><td colspan="3"></td><td class="n">${soldeRCReel!==null?hFr(soldeRCReel)+' h':'non renseigné'}</td></tr>
 </table>
 ${ecartRC!==null?`<div class="al ${Math.abs(ecartRC)<0.01?'k':'i'}" style="margin-top:9px">
-📊 Écart entre l'équivalence théorique MesHeures et le RC employeur : <b>${ecartRC.toFixed(2)} h</b>.
+📊 Écart entre le RC théorique MesHeures et le RC employeur : <b>${hFr(ecartRC)} h</b>. Écart constaté, cause non déterminée.
 </div>`:''}
 <div class="al i" style="margin-top:9px">
-📌 <b>Référence employeur :</b> ${sourceEmployeur||'non renseignée'}.
-L'équivalence théorique MesHeures ne remplace jamais le RC employeur.
+📌 <b>Source employeur :</b> ${sourceEmployeur||'non renseignée'}.
+La valeur théorique MesHeures ne constitue pas le solde officiel de repos compensateur.
 </div>
 ${rcBulletin===null?`<div class="al w" style="margin-top:7px">
-⚠️ RC employeur non renseigné pour cette période : le solde RC réel ne peut pas être déterminé.
+⚠️ RC employeur non renseigné — solde réel indéterminable.
 </div>`:''}`;
 
-  let c='<tr><th>Semaine</th><th class="n">TTE calculé</th><th class="n">TTE bulletin</th><th class="n">Écart</th></tr>';
+  /* V37.0-H : comparaison TTE MesHeures (calcul interne) / TTE inscrit sur le bulletin (employeur), par semaine.
+     Cellule vide = « non renseigné », jamais 0. Semaine sans aucune journée saisie = « non comparable ».
+     Saisie libre HH:MM (une semaine dépasse souvent 24 h, ce que le champ « heure » n'acceptait pas). */
+  const WEEK_ST={ok:['🟢','Concordant'],warn:['🟠','Écart à vérifier'],na:['⚪','Non renseigné'],nc:['⚫','Non comparable']};
+  let c='<tr><th>Semaine</th><th class="n">TTE MesHeures</th><th class="n">TTE bulletin</th><th class="n">Écart</th><th>Statut</th></tr>';
   Q.forEach(o=>o.w.forEach(s=>{
-    const v=DB.cmp[s.start]||'',e=v?P(v)-s.tte:null;
-    c+=`<tr><td>${short(s.start)}</td><td class="n">${F(s.tte)}</td>
-<td class="n"><input type="time" value="${v}" onchange="DB.cmp['${s.start}']=this.value;save();mhRefresh('pay-field')" style="width:100px"></td>
-<td class="n ${e===null?'':e===0?'ok':'bad'}">${e===null?'—':e===0?'✓':F(e)}</td></tr>`;
+    const v=String(DB.cmp[s.start]||''),pv=P(v.replace(/^(\d{1,2})\s*h\s*(\d{2})$/i,'$1:$2')),saisie=[0,1,2,3,4,5,6].some(i=>DB.days[addD(s.start,i)]);
+    const e=pv==null?null:pv-s.tte,st=!saisie?'nc':pv==null?'na':e===0?'ok':'warn';
+    c+=`<tr data-week="${s.start}" data-statut="${st}"><td>${short(s.start)}</td><td class="n">${saisie?F(s.tte):'—'}</td>
+<td class="n"><input type="text" inputmode="numeric" placeholder="HH:MM" value="${esc(v).replace(/"/g,'&quot;')}" onchange="DB.cmp['${s.start}']=this.value.trim();save();mhRefresh('pay-field')" style="width:84px"></td>
+<td class="n ${st==='ok'?'ok':st==='warn'?'bad':''}">${e===null?'—':e===0?'✓':(e>0?'+':'−')+F(Math.abs(e))}</td><td>${WEEK_ST[st][0]} ${WEEK_ST[st][1]}</td></tr>`;
   }));
   $('pCmp').innerHTML=c;
 }
@@ -505,7 +513,7 @@ function renderAuditBase(){
    * date de début.
    */
   function auditBulletin(start){
-    const B=gb(start)||{};
+    const B=(DB.bul&&DB.bul[start])||{};   /* V37.0-H : lecture sans création */
     const R=DB.romi&&DB.romi[start]||null;
     return {
       ...B,

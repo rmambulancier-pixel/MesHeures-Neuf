@@ -258,7 +258,7 @@
   function cardHtml(s,extraRows){
     const count=(t,n,l)=>'<div class="mh31-count" data-tone="'+t+'"><strong>'+n+'</strong><span>'+l+'</span></div>';
     const head='<div class="mh31-card-head"><div><span class="mh31-eyebrow">SMART CONTROL · '+WINDOW_DAYS+' DERNIERS JOURS</span><b>'+esc(s.icon+' '+s.label)+'</b></div>'+
-      '<strong class="mh31-badge" data-tone="'+(s.status==='insufficient'?'warn':tone(s.status))+'">'+(s.score==null?'—':s.score+'%')+'</strong></div>';
+      '<strong class="mh31-badge" data-tone="'+(s.status==='insufficient'?'mut':tone(s.status))+'">'+(s.score==null?'—':s.score+'%')+'</strong></div>';
     if(s.status==='insufficient')
       return '<div class="mh31-card mh37-card" data-mh37="insufficient">'+head+'<div class="mh31-note">'+esc(s.explanation)+'</div>'+(extraRows||'')+'</div>';
     const bad=s.groups.filter(g=>g.level==='bad'),warn=s.groups.filter(g=>g.level==='warn');

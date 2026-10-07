@@ -84,6 +84,7 @@
       seuils:{h25:num(DB.s&&DB.s.base)?Number(DB.s.base)*2:NR,h50:num(DB.s&&DB.s.base)&&num(DB.s.pl)?Number(DB.s.base)*2+Number(DB.s.pl):NR},
       paye:{saisie:bul?{h25:num(bul.p25)?Math.round(Number(bul.p25)*60):null,h50:num(bul.p50)?Math.round(Number(bul.p50)*60):null}:null,
         bulletin:bulletin?{mois:bulletin.mois,h25:hDec(bulletin.hs25H),h50:hDec(bulletin.hs50H),ir:num(bulletin.irN)?Number(bulletin.irN):null,iru:num(bulletin.iruN)?Number(bulletin.iruN):null}:null},
+      periodePaie:paie?{debut:paie.start,fin:addD(paie.start,paie.nb*14-1),meme:paie.start===ps&&paie.nb===2}:null,
       paie:paie?{brut:paie.grossEst,netEst:paie.netEst,debut:paie.start,fin:addD(paie.start,paie.nb*14-1),memePeriode:paie.start===ps&&paie.nb===2}:null
     };
   }
@@ -98,14 +99,14 @@
     const j=r.journalier,tol=r.tolerance;
     let h='';
     if(r.statut==='partiel')h+='<div class="mh37c-note" data-romi="partiel"><b>Relevé ROMI1 partiel — comparaison limitée</b><br>Le relevé couvre du '+dFr(r.releve.debut)+' au '+dFr(r.releve.fin)+' ('+r.releve.jours+' jours). La comparaison porte uniquement sur ces dates'+(r.mesheures.hs==null?' ; HS non comparables (hors quatorzaines entières)':'')+'.'+(r.autresPartiels?' '+r.autresPartiels+' autre(s) relevé(s) partiel(s) non affiché(s).':'')+'</div>';
-    h+='<div class="mh37c-cmp" data-romi="'+r.statut+'"><div><span>MesHeures</span><b>'+hm(r.mesheures.tte)+'</b><small>HS '+hm(r.mesheures.hs)+' · '+r.mesheures.jours+' j</small></div>'+
-      '<div><span>ROMI1 (employeur)</span><b>'+hm(r.employeur.tte)+'</b><small>HS '+hm(r.employeur.hs)+' · '+(r.employeur.presence!=null?r.employeur.presence+' j':'présence —')+'</small></div>'+
+    h+='<div class="mh37c-cmp" data-romi="'+r.statut+'"><div><span>MesHeures</span><b>'+hm(r.mesheures.tte)+'</b><small>Calcul interne · HS '+hm(r.mesheures.hs)+' · '+r.mesheures.jours+' j</small></div>'+
+      '<div><span>ROMI1 (employeur)</span><b>'+hm(r.employeur.tte)+'</b><small>Source employeur · HS '+hm(r.employeur.hs)+' · '+(r.employeur.presence!=null?r.employeur.presence+' j':'présence —')+'</small></div>'+
       '<div data-tone="'+(r.ecartTte==null?'mut':r.aVerifier?'warn':'ok')+'"><span>Écart TTE</span><b>'+hm(r.ecartTte)+'</b><small>'+(r.ecartTte==null?'non comparable — donnée manquante':r.aVerifier?'⚠️ À vérifier · écart à analyser':'✓ concordant (±'+tol+' min)')+'</small></div></div>';
     h+='<div class="mh37c-dec">'+row('Journées comparables','<span data-k="jc">'+j.comparables+' / '+j.total+'</span>',j.disponible?'écart journalier au-delà de ±'+tol+' min : '+j.aVerifier:'détail journalier ROMI1 absent')+
       row('Écart expliqué par les journées comparées','<span data-k="ex">'+(j.ecartExplique==null?'—':sgn(j.ecartExplique))+'</span>')+
       row('Écart restant à analyser','<span data-k="rest">'+(j.ecartRestant==null?'—':sgn(j.ecartRestant))+'</span>')+'</div>';
     if(!j.disponible){
-      h+='<div class="mh37c-note" data-detail="absent">Le relevé ROMI1 ne contient que les totaux de la période : l’écart ne peut pas encore être localisé jour par jour. Aucune cause n’est déduite (absence, CP, pause, saisie ou relevé).</div>';
+      h+='<div class="mh37c-note" data-detail="absent"><b>Écart non localisé faute de détail journalier ROMI1.</b> Le relevé ROMI1 ne contient que les totaux de la période : l’écart ne peut pas encore être localisé jour par jour. Aucune cause n’est déduite (absence, CP, pause, saisie ou relevé).</div>';
       return h;
     }
     const shown=j.lignes.filter(l=>!(l.statut==='concordant'&&!l.mh.presence&&!(l.romi&&l.romi.presence)));
@@ -127,7 +128,7 @@
     const c=data(opts),p=c.periode,a=c.autres,r=c.romi;
     let h='<div class="mh31-card mh37c" id="mh37Compteur">'+
       '<div class="mh31-card-head"><div><span class="mh31-eyebrow">COMPTEUR HEURES</span><b>'+dShort(p.debut)+' → '+dFr(p.fin)+'</b></div>'+
-      '<span class="mh31-pill" data-tone="mut">'+(p.enCours?'en cours':'relevé de 4 semaines')+'</span></div>'+
+      '<span class="mh31-pill" data-tone="'+(p.enCours?'info':'mut')+'" data-k="statut">relevé '+(window.MHPeriode?window.MHPeriode.statut(p.debut,p.fin,opts&&opts.today):p.enCours?'en cours':'antérieur')+'</span></div>'+
       '<div class="mh37c-nav"><button class="g" onclick="MHCompteur.go(-1)" aria-label="Relevé précédent">‹</button>'+
       (p.actuelle?'<span>Relevé actuel</span>':'<button class="g" onclick="MHCompteur.go(0)">Relevé actuel</button>')+
       '<button class="g" onclick="MHCompteur.go(1)" aria-label="Relevé suivant">›</button></div>';
@@ -181,6 +182,7 @@
     /* Paie : affichée telle que l'écran Paie la calcule */
     if(c.paie)h+='<div class="mh31-quat-pay"><span>Brut estimé (écran Paie, '+dShort(c.paie.debut)+' → '+dShort(c.paie.fin)+')'+(c.paie.memePeriode?'':' · autre période')+'</span><b>'+eur(c.paie.brut)+'</b></div>';
     h+='<button class="mh31-link" onclick="tab(\'paie\')">Voir le calcul de paie <em>→</em></button>'+
+      (c.periodePaie&&!c.periodePaie.meme?'<div class="mh31-note" data-k="autrePaie">L’écran Paie porte sur une autre période : '+dShort(c.periodePaie.debut)+' → '+dFr(c.periodePaie.fin)+'.</div>':'')+
       '<div class="mh31-note">Lecture indicative des calculs MesHeures. Mois de paie : '+esc(mFr(p.moisPaie))+' (rattachement à confirmer). Quatorzaines ancrées au '+dFr(p.ancre)+'.</div>';
     return h+'</div>';
   }

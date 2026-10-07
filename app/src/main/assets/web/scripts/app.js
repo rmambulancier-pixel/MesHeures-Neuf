@@ -416,7 +416,7 @@ document.addEventListener('touchend',e=>{
   else if(curTab==='mois'){dx<0?goMonth(1):goMonth(-1)}
 });
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=37.0-G',{scope:'./'}).then(reg=>{
+  navigator.serviceWorker.register('./sw.js?v=37.0-H',{scope:'./'}).then(reg=>{
     try{
       window.mhServiceWorkerReady=!!reg;
       if(typeof reg.update==='function') reg.update().catch(()=>{});
@@ -546,40 +546,29 @@ function renderPay(){
   const sim=$('pSim'); if(sim){sim.innerHTML=`<div class="pay-sim-total"><strong>${EUR(tot)}</strong><span>BRUT ESTIMÉ</span></div><div class="pay-sim-grid"><div><span>Heures normales</span><b>${F(G.nor)}</b></div><div><span>HS 25 %</span><b>${F(G.h25)}</b></div><div><span>HS 50 %</span><b>${F(G.h50)}</b></div><div><span>Heures de nuit</span><b>${C2(G.nuit)} h</b></div><div><span>Dimanches</span><b>${G.dim}</b></div><div><span>Ancienneté</span><b>${ancPct}%</b></div></div><div class="pay-sim-net"><span>Net estimé (salaire)</span><strong>${EUR(netSal)}</strong></div><div class="pay-sim-net"><span>Total versé estimé (+ repas non soumis)</span><strong>${EUR(netEst)}</strong></div>`;}
   const old=host.parentElement;
   if(old&&!document.getElementById('pProSummary')){
-    const c=document.createElement('div');c.className='card pro-summary';c.id='pProSummary';c.innerHTML=`<h2>💼 Synthèse professionnelle</h2><div class="pro-grid"><div><span>Brut estimé</span><b id="proBrut">${EUR(tot)}</b></div><div><span>Net estimé</span><b id="proNet">${EUR(netSal)}</b></div><div><span>Heures sup.</span><b id="proHours">${F(G.h25+G.h50)}</b></div><div><span>Écart bulletin</span><b id="proGap">À renseigner</b></div></div>`;old.parentNode.insertBefore(c,old);}
-  const proBrut=document.getElementById('proBrut'),proNet=document.getElementById('proNet'),proHours=document.getElementById('proHours'),gap=document.getElementById('proGap'),B=gb(st);
+    const c=document.createElement('div');c.className='card pro-summary';c.id='pProSummary';c.innerHTML=`<h2>💼 Synthèse professionnelle</h2><div class="pro-grid"><div><span>Brut estimé</span><b id="proBrut">${EUR(tot)}</b></div><div><span>Net salaire estimé</span><b id="proNet">${EUR(netSal)}</b></div><div><span>Heures sup. calculées</span><b id="proHours">${F(G.h25+G.h50)}</b></div><div><span>Bulletin de référence</span><b id="proGap">Bulletin non renseigné</b></div></div><div class="pro-period" id="proPeriod"></div>`;old.parentNode.insertBefore(c,old);}
+  const proBrut=document.getElementById('proBrut'),proNet=document.getElementById('proNet'),proHours=document.getElementById('proHours'),gap=document.getElementById('proGap');
   if(proBrut)proBrut.textContent=EUR(tot);
   if(proNet)proNet.textContent=EUR(netSal);
   if(proHours)proHours.textContent=F(G.h25+G.h50);
 
-  // V30 : le champ « Écart bulletin » ne doit plus confondre
-  // l'absence de saisie RC de la quatorzaine avec l'absence de bulletin.
-  // Les bulletins sont mensuels et une quatorzaine peut chevaucher deux mois.
-  // On recherche donc les bulletins dont le mois intersecte réellement la période.
+  /* V37.0-H : « Bulletin de référence » (ex « Écart bulletin »). Un bulletin d'un autre mois n'est jamais présenté
+     comme celui de la période affichée : il est qualifié « référence précédente ». La comparaison historique reste visible. */
+  const perEl=document.getElementById('proPeriod');
+  if(perEl&&window.MHPeriode){const pe=addD(st,nb*14-1),mp=window.MHPeriode.moisPaie(st);
+    perEl.textContent=window.MHPeriode.libelle(st,pe)+' · calculé par MesHeures · mois de paie '+mp.libelle+' ('+mp.statut+')';}
   if(gap){
-    const periodEnd=addD(st,nb*14-1);
-    const monthsInPeriod=new Set();
-    let cursor=st;
-    while(cursor<=periodEnd){
-      monthsInPeriod.add(cursor.slice(0,7));
-      cursor=addD(cursor,1);
+    const ref=window.MHPeriode?window.MHPeriode.bulletinReference(st):{statut:'absent'};
+    if(ref.statut==='absent'){gap.textContent='Bulletin non renseigné';gap.title='Aucun bulletin employeur importé pour ce relevé ni avant.'}
+    else{
+      const b=ref.bulletin,bits=[ref.libelle];
+      if(Number.isFinite(Number(b.brut)))bits.push('brut '+EUR(b.brut));
+      if(Number.isFinite(Number(b.net)))bits.push('net '+EUR(b.net));
+      gap.innerHTML=esc(bits.join(' · '))+'<small class="pro-ref-note">'+(ref.statut==='precedent'?'Référence précédente — pas le bulletin de la période courante.':'Bulletin rattaché à ce relevé — rattachement à confirmer.')+'</small>';
+      gap.title=ref.texte+' Source : bulletin employeur importé.';
     }
-    const matches=(DB.bulletins||[]).filter(b=>b&&/^\d{4}-\d{2}$/.test(String(b.mois||''))&&monthsInPeriod.has(b.mois));
-    if(matches.length){
-      const labels=matches.map(b=>{
-        const bits=[String(b.mois)];
-        if(Number.isFinite(Number(b.brut)))bits.push('brut '+EUR(b.brut));
-        if(Number.isFinite(Number(b.net)))bits.push('net '+EUR(b.net));
-        return bits.join(' · ');
-      });
-      gap.textContent=labels.join(' | ');
-      gap.title='Bulletin(s) mensuel(s) trouvé(s) pour le mois couvert par cette période. Le rapprochement exact se fait dans Bulletin / Rapprochement.';
-      gap.style.fontSize=matches.length>1?'0.78em':'0.86em';
-    }else{
-      gap.textContent='Aucun bulletin pour cette période';
-      gap.title='Aucun bulletin mensuel importé ne correspond aux mois couverts par cette quatorzaine.';
-      gap.style.fontSize='0.86em';
-    }
+    gap.dataset.ref=ref.statut;
+    gap.style.fontSize='0.82em';
   }
 }
 
@@ -589,7 +578,7 @@ function renderAudit(){
   const periods=DB.periods||[], seen=new Set(), all=[];periods.forEach(p=>{const pk=p.start+'|'+p.nb;if(seen.has(pk))return;seen.add(pk);all.push(...calcPer(p.start,p.nb).AL)});
   const unique=[];const ua=new Set();all.forEach(a=>{const k=a.k+'|'+a.lvl+'|'+a.m;if(!ua.has(k)){ua.add(k);unique.push(a)}});
   const hard=unique.filter(a=>a.lvl==='b').length,warn=unique.filter(a=>a.lvl==='w').length;
-  const total=hard*4+warn; const score=Math.max(0,Math.min(100,100-total*5)); host.innerHTML=`<div class="audit-health"><div><span>ÉTAT DES PÉRIODES</span><b>${score}/100</b></div><strong>${score>=90?'🟢 Planning cohérent':score>=70?'🟠 Points à vérifier':'🔴 Contrôle nécessaire'}</strong><small>${unique.length?unique.length+' point(s) détecté(s)':'Aucune anomalie détectée'}</small></div><div class="audit-strip"><span>🔎 ${seen.size} période(s)</span><span class="${hard?'bad-text':'ok-text'}">🔴 ${hard} critique(s)</span><span class="${warn?'warn-text':'ok-text'}">🟠 ${warn} attention(s)</span><span>🟢 contrôle terminé</span></div>`+host.innerHTML;
+  const total=hard*4+warn; const score=Math.max(0,Math.min(100,100-total*5)); host.innerHTML=`<div class="audit-health"><div><span>ÉTAT DES PÉRIODES</span><b>${score}/100</b></div><strong>${score>=90?'🟢 Planning cohérent':score>=70?'🟠 Points à vérifier':'🔴 Contrôle nécessaire'}</strong><small>${unique.length?unique.length+' point(s) détecté(s)':'Aucune anomalie détectée'}</small></div><div class="audit-strip"><span>🔎 ${seen.size} période(s)</span><span class="${hard?'bad-text':'ok-text'}">🔴 ${hard} critique(s)</span><span class="${warn?'warn-text':'ok-text'}">🟠 ${warn} attention(s)</span><span>🔵 contrôle effectué</span></div>`+host.innerHTML;
 }
 
 /* Export V15 : enveloppe versionnée, import compatible avec les anciens JSON. */

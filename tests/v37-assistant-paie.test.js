@@ -69,8 +69,8 @@ t('synthèse : 🔴 bloquants, 🟠 à vérifier, 🟢 contrôlés affichés',()
 
 console.log('4-6. Estimation et décomposition');
 t('4. brut estimé avec la période exacte',()=>{assert.ok(t1.includes('Brut estimé 3 463,54 €'));assert.ok(t1.includes('Période 24/08/2026 → 20/09/2026'));assert.ok(t2.includes('Brut estimé 1 791,78 €'))});
-t('5. net estimé = brutOf().netEst (coefficient configuré), sinon « Net non disponible »',()=>{
-  assert.equal(d1.net.total,d1.B.netEst);assert.ok(t1.includes('Net estimé 2 880,39 €'));
+t('5. net salaire estimé = brutOf().netSal, total versé estimé = brutOf().netEst (V37.0-H : libellés de l’écran Paie), sinon « Net non disponible »',()=>{
+  assert.equal(d1.net.total,d1.B.netEst);assert.equal(d1.net.salaire,d1.B.netSal);assert.ok(t1.includes('Net salaire estimé 2 725,81 €'));assert.ok(/Total versé estimé .{0,80}2 880,39 €/.test(t1));
   const L=load(ALL,{s:{...R1.s,net:0}}),tx=text(L.A.html(NOW));assert.equal(L.A.data(NOW).net,null);assert.ok(tx.includes('Net non disponible'));
   assert.ok(t1.includes('Estimation — ne constitue pas un bulletin de salaire.'))});
 t('6. décomposition : chaque ligne du moteur (libellé et montant) et le total, IR exonéré et IRU hors brut',()=>{
@@ -131,10 +131,14 @@ t('20. bloquants : HS payées non renseignées ; journée sans fin → saisie bl
   assert.equal(d.checks.find(x=>x.key==='saisie').niveau,'bad');assert.ok(d.checks.find(x=>x.key==='saisie').cible==='jour:2026-09-03');assert.equal(d.checks.find(x=>x.key==='tte').niveau,'warn')});
 t('20b. HS payées différentes du calcul : 🟠 écart (saisie Paie prioritaire)',()=>{const d=load(ALL,{db:{bul:{'2026-08-24':{p25:16,p50:4.33}}}}).A.data(NOW),c=d.checks.find(x=>x.key==='hsPayees');
   assert.equal(c.niveau,'warn');assert.ok(c.texte.includes('HS 25 % +16h00'))});
-t('impact potentiel : classé, sans aucune somme d’impact inventée',()=>{
-  const i=h1.indexOf('data-open="impact"'),x=text(h1.slice(i,h1.indexOf('</details>',i)));
-  ['HS payées HS dans le brut estimé : 1 226,53 € Impact potentiel : important','ROMI1 Impact à déterminer','CP Impact : possible','Paniers Impact : possible','Aucun problème détecté','Aucun montant d’impact n’est additionné'].forEach(v=>assert.ok(x.includes(v),v));
-  assert.ok(x.indexOf('Impact potentiel : important')<x.indexOf('Impact à déterminer'))});
+t('impact potentiel (V37.0-H) : 🔴 direct / 🟠 possible / 🔵 information, « non déterminable », aucun montant',()=>{
+  const i=h1.indexOf('data-open="impact"'),blk=h1.slice(i,h1.indexOf('</details>',i)),x=text(blk);
+  assert.ok(/data-tone="bad" data-impact="direct"><span>HS payées/.test(blk));assert.ok(/data-tone="bad" data-impact="direct"><span>ROMI1/.test(blk));
+  assert.ok(/data-impact="possible"><span>CP/.test(blk));assert.ok(/data-impact="possible"><span>Paniers/.test(blk));assert.ok(!/Repos compensateur/.test(blk),'RC employeur connu par ROMI1 (solde 174,15 h) : pas d’alerte RC');
+  {const h=load(ALL).A.html(NOW),k=h.indexOf('data-open="impact"'),b2=h.slice(k,h.indexOf('</details>',k));assert.ok(/data-impact="possible"><span>Repos compensateur<small>RC employeur non renseigné — solde réel indéterminable./.test(b2))}
+  assert.ok(/data-tone="info" data-impact="information"><span>Alertes réglementaires/.test(blk));
+  ['🔴 Impact potentiellement financier direct','🟠 Impact possible','🔵 Information sans impact chiffrable','Impact financier : non déterminable avec les données disponibles.','Aucun problème détecté'].forEach(v=>assert.ok(x.includes(v),v));
+  assert.ok(!/\d,\d{2} €/.test(x),'aucun montant dans l’impact');assert.ok(x.indexOf('financier direct')<x.indexOf('Impact possible'))});
 t('mois de paie : « Bulletin — septembre 2026 », « ⚠️ Rattachement à confirmer »',()=>{assert.ok(t1.includes('Bulletin — septembre 2026'));assert.ok(t1.includes('⚠️ Rattachement à confirmer'));assert.ok(t2.includes('Bulletin — octobre 2026'))});
 t('déjà payé : absence ≠ paiement nul ; sources saisie Paie, ROMI1, bulletin',()=>{
   assert.ok(t1.includes('L’absence d’information n’est pas un paiement nul.'));

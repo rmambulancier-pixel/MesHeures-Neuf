@@ -29,7 +29,10 @@
   const D=()=>(typeof DB!=='undefined'&&DB&&typeof DB==='object')?DB:{};
   const clone=o=>JSON.parse(JSON.stringify(o));
   const frNum=s=>esc(s).replace(/(\d)\.(\d)/g,'$1,$2');   // libellés du moteur : décimales à la française (affichage seul)
-  const ICON={ok:'🟢',warn:'🟠',bad:'🔴',na:'⚪'};
+  const ICON={ok:'🟢',warn:'🟠',bad:'🔴',na:'⚪',info:'🔵'};
+  /* V37.0-H : sens unique des statuts (Assistant, Compteur, ROMI1, Smart Control). */
+  const DEF_NIVEAU={bad:'Une donnée indispensable au contrôle du bulletin manque ou présente une incohérence importante.',warn:'Une donnée existe mais nécessite une confirmation ou une vérification.',ok:'La donnée a pu être vérifiée sans anomalie détectée.',na:'Donnée non renseignée ou non évaluable : jamais comptée comme conforme.'};
+  const NONDET='Impact financier : non déterminable avec les données disponibles.';
 
   /* ---------- période et moteur ---------- */
   function period(opts){
@@ -68,7 +71,7 @@
     const add=(key,titre,niveau,texte,source,cible,impact)=>L.push({key,titre,niveau,texte,source,cible,impact});
     add('saisie','Saisie des journées',!s.c.saisies?'na':incompl.length?'bad':'ok',
       !s.c.saisies?'Aucune journée saisie sur la période.':incompl.length?incompl.length+' journée(s) de travail sans début ou fin : '+incompl.map(dShort).join(', ')+'.':'Toutes les journées de travail ont un début et une fin.',
-      'journées saisies (moteur)',incompl.length?'jour:'+incompl[0]:'jour',incompl.length?'important':'aucun');
+      'journées saisies (moteur)',incompl.length?'jour:'+incompl[0]:'jour',incompl.length?'direct':'aucun');
     const prov=incompl.length?'provisoire tant que la saisie est incomplète':enCours?'relevé en cours : valeur provisoire':null;
     add('tte','TTE',!worked?'na':prov?'warn':'ok',!worked?'Aucune journée travaillée.':'TTE '+hm(G.tte)+' calculé par le moteur sur '+G.trav+' jour(s)'+(prov?' · '+prov:'')+'.','moteur TTE (calcPer)','compteur',prov?'possible':'aucun');
     add('hs25','HS 25 %',!worked?'na':prov?'warn':'ok',!worked?'Aucune journée travaillée.':hm(G.h25)+' calculées par quatorzaine'+(prov?' · '+prov:'')+'.','moteur HS / quatorzaine','compteur',prov?'possible':'aucun');
@@ -84,19 +87,19 @@
     let rN,rT,rI;
     if(!romi||romi.statut==='absent'){rN='na';rT='Pas de relevé ROMI1 disponible.';rI='aucun'}
     else if(romi.statut==='non_comparable'){rN='na';rT='Relevé ROMI1 sur une autre période : non comparable.';rI='aucun'}
-    else if(romi.statut==='partiel'){rN='warn';rT='Relevé ROMI1 partiel — comparaison limitée'+(romi.ecartTte!=null?' · écart '+sgnHm(romi.ecartTte):'')+'.';rI='à déterminer'}
+    else if(romi.statut==='partiel'){rN='warn';rT='Relevé ROMI1 partiel — comparaison limitée'+(romi.ecartTte!=null?' · écart '+sgnHm(romi.ecartTte):'')+'.';rI='direct'}
     else if(romi.ecartTte==null){rN='na';rT='TTE ROMI1 absent du relevé.';rI='aucun'}
-    else if(romi.aVerifier){rN='warn';rT='Écart ROMI1 '+hm(Math.abs(romi.ecartTte))+' (MesHeures '+hm(romi.mesheures.tte)+' · ROMI1 '+hm(romi.employeur.tte)+') : à vérifier — écart à analyser.';rI='à déterminer'}
+    else if(romi.aVerifier){rN='warn';rT='Écart ROMI1 '+hm(Math.abs(romi.ecartTte))+' (MesHeures '+hm(romi.mesheures.tte)+' · ROMI1 '+hm(romi.employeur.tte)+') : à vérifier — écart à analyser.';rI='direct'}
     else{rN='ok';rT='MesHeures et ROMI1 concordants (écart '+sgnHm(romi.ecartTte)+', tolérance ±'+TOL+' min).';rI='aucun'}
     add('romi','ROMI1',rN,rT,'rapprochement ROMI1 (lot F)','romi',rI);
     const hs=G.h25+G.h50;
     if(!worked)add('hsPayees','HS payées','na','Aucune journée travaillée.','saisie Paie · ROMI1 · bulletin','paie','aucun');
     else if(!hs)add('hsPayees','HS payées','ok','Aucune HS calculée sur la période.','moteur HS','paie','aucun');
-    else if(!paid.length)add('hsPayees','HS payées','bad','HS payées non renseignées : '+hm(hs)+' d’HS calculées, aucun paiement saisi, importé ou relevé.','saisie Paie · ROMI1 · bulletin','paie','important');
+    else if(!paid.length)add('hsPayees','HS payées','bad','HS payées non renseignées : '+hm(hs)+' d’HS calculées, aucun paiement saisi, importé ou relevé.','saisie Paie · ROMI1 · bulletin','paie','direct');
     else{const p=paid[0],d25=p.h25==null?null:G.h25-p.h25,d50=p.h50==null?null:G.h50-p.h50,off=[d25,d50].some(d=>d==null||Math.abs(d)>TOL);
-      add('hsPayees','HS payées',off?'warn':'ok',(off?'Écart entre HS calculées et HS payées':'HS payées conformes au calcul')+' ('+p.source+') : HS 25 % '+sgnHm(d25)+' · HS 50 % '+sgnHm(d50)+'.','HS payées ('+p.source+')','paie',off?'important':'aucun')}
+      add('hsPayees','HS payées',off?'warn':'ok',(off?'Écart entre HS calculées et HS payées':'HS payées conformes au calcul')+' ('+p.source+') : HS 25 % '+sgnHm(d25)+' · HS 50 % '+sgnHm(d50)+'.','HS payées ('+p.source+')','paie',off?'direct':'aucun')}
     const regl=AL.filter(a=>a.lvl==='b'&&!/Horaires incomplets/.test(a.m||'')).length;
-    add('reglementaire','Alertes réglementaires',!worked?'na':regl?'warn':'ok',!worked?'Aucune journée travaillée.':regl?regl+' alerte(s) critique(s) sur le relevé (voir Audit). Sans effet calculé sur le brut.':'Aucune alerte critique sur le relevé.','moteur (alertes de période) · Audit','audit','aucun effet calculé');
+    add('reglementaire','Alertes réglementaires',!worked?'na':regl?'warn':'ok',!worked?'Aucune journée travaillée.':regl?regl+' alerte(s) critique(s) sur le relevé (voir Audit). Sans effet calculé sur le brut.':'Aucune alerte critique sur le relevé.','moteur (alertes de période) · Audit','audit',regl?'information':'aucun');
     return L;
   }
 
@@ -120,7 +123,15 @@
       vide:!s.c.saisies,G,B,Q:s.Q,c:s.c,romi,paid,checks:L,compte:n,score,verdict,
       net:num(coef)&&coef>0?{salaire:B.netSal,total:B.netEst,coef,irExonere:B.panIRExon,iru:B.panIRU}:null,
       precedent:prev?{debut:prev.debut,fin:prev.fin,G:prev.G,B:prev.B,c:prev.c}:null,
+      rcEmployeur:rcEmployeur(s.debut,romi),reference:window.MHPeriode?window.MHPeriode.bulletinReference(s.debut):{statut:'absent',texte:'Bulletin non renseigné pour ce relevé.'},
+      courante:window.MHPeriode?window.MHPeriode.courante(now):null,statutPeriode:window.MHPeriode?window.MHPeriode.statut(s.debut,s.fin,now):(s.fin>=now?'en cours':'antérieur'),
       sim:simState?simulate(G,simState):null};
+  }
+  /* RC employeur : saisie de l'écran Paie (DB.bul, sans gb()) ou relevé ROMI1 de la période. Jamais fabriqué. */
+  function rcEmployeur(ps,romi){
+    const b=D().bul&&D().bul[ps]||{},e=romi&&romi.statut==='comparable'?romi.employeur:null;
+    const acquis=num(b.rcAcq)?Math.round(Number(b.rcAcq)*60):null,solde=e&&e.rcCumul!=null?e.rcCumul:null;
+    return {acquis,solde,source:acquis!=null?'saisie Paie':solde!=null?'ROMI1':null};
   }
   function simulate(G,st){
     const g=clone(G);                                  // copie : le G du moteur (mis en cache) n'est jamais touché
@@ -161,18 +172,26 @@
     let h='<div class="mh37p" id="mh37Assistant">';
     /* 1. verdict */
     h+='<div class="mh37p-head"><div><h2>🧠 Assistant Paie</h2><b class="mh37p-mois">Bulletin — '+esc(mFr(p.moisPaie))+'</b>'+
-      '<small>Relevé du '+dFr(p.debut)+' au '+dFr(p.fin)+(p.enCours?' · en cours':'')+' · ⚠️ Rattachement à confirmer</small></div></div>'+
+      '<small data-k="periode">Relevé '+c.statutPeriode+' · '+dShort(p.debut)+' → '+dFr(p.fin)+' · période de l’écran Paie</small>'+(c.courante&&(c.courante.debut!==p.debut||c.courante.fin!==p.fin)?'<small>Relevé en cours : '+dShort(c.courante.debut)+' → '+dFr(c.courante.fin)+'</small>':'')+'<small>Mois de paie : '+esc(mFr(p.moisPaie))+' · ⚠️ Rattachement à confirmer</small></div></div>'+
       '<div class="mh37p-verdict" data-tone="'+v.niveau+'"><b data-k="verdict">'+ICON[v.niveau]+' '+v.texte+'</b><span data-k="score">'+(c.score==null?'Données insuffisantes':c.score+' % prêt')+'</span></div>'+
       '<div class="mh37p-counts"><span data-tone="bad"><b data-k="nbad">'+c.compte.bad+'</b> bloquant'+(c.compte.bad>1?'s':'')+'</span><span data-tone="warn"><b data-k="nwarn">'+c.compte.warn+'</b> à vérifier</span><span data-tone="ok"><b data-k="nok">'+c.compte.ok+'</b> contrôlé'+(c.compte.ok>1?'s':'')+'</span></div>'+
       (c.score!=null?'<div class="mh37p-note">Score : contrôles conformes / contrôles évalués ('+c.compte.ok+' / '+(c.compte.ok+c.compte.warn+c.compte.bad)+'), '+c.compte.na+' non évalué'+(c.compte.na>1?'s':'')+'. Spécifique au bulletin, distinct du Smart Control.</div>':'');
     if(c.vide)return h+'<div class="mh37p-note">Aucune journée saisie sur ce relevé : aucune estimation n’est affichée.</div>'+tools()+'</div>';
     /* 2. estimation */
     h+='<div class="mh37p-est"><span class="mh37p-eye">💰 ESTIMATION DU BULLETIN</span>'+
-      '<div class="mh37p-money"><div><span>Brut estimé</span><b data-k="brut">'+eur(B.tot)+'</b></div><div><span>Net estimé</span><b data-k="net">'+(c.net?eur(c.net.total):'Net non disponible')+'</b></div></div>'+
-      (c.net?'<small>Net : brut × '+String(c.net.coef).replace('.',',')+' (coefficient configuré) = '+eur(c.net.salaire)+', + IR exonéré '+eur(c.net.irExonere)+' + IRU '+eur(c.net.iru)+'.</small>':'<small>Coefficient brut → net non configuré.</small>')+
+      '<div class="mh37p-money"><div><span>Brut estimé</span><b data-k="brut">'+eur(B.tot)+'</b></div><div><span>Net salaire estimé</span><b data-k="net">'+(c.net?eur(c.net.salaire):'Net non disponible')+'</b></div></div>'+
+      (c.net?'<div class="mh37p-kv"><span>Total versé estimé<small>net salaire + IR exonéré '+eur(c.net.irExonere)+' + IRU '+eur(c.net.iru)+'</small></span><b data-k="total">'+eur(c.net.total)+'</b></div><small>Net salaire : brut × '+String(c.net.coef).replace('.',',')+' (coefficient configuré). Calculé par MesHeures.</small>':'<small>Coefficient brut → net non configuré.</small>')+
       '<small>Période '+dFr(p.debut)+' → '+dFr(p.fin)+'. <b>Estimation — ne constitue pas un bulletin de salaire.</b></small></div>';
+    const ref=c.reference;
+    h+='<div class="mh37p-ref" data-ref="'+ref.statut+'"><span class="mh37p-eye">📄 Bulletin de référence</span><b>'+(ref.statut==='absent'?'Bulletin non renseigné':esc(ref.libelle.charAt(0).toUpperCase()+ref.libelle.slice(1)))+'</b>'+
+      '<small>Source : '+(ref.statut==='absent'?'aucun bulletin employeur importé':'bulletin employeur importé')+(c.romi&&(c.romi.statut==='comparable'||c.romi.statut==='partiel')?' · ROMI1 du '+dShort(c.romi.releve.debut)+' au '+dShort(c.romi.releve.fin)+' disponible':'')+'</small>'+
+      '<small>Statut : '+(ref.statut==='absent'?'Bulletin non renseigné':ref.statut==='precedent'?'Référence disponible — référence précédente, pas le bulletin de la période courante':'Référence disponible — rattachement à confirmer')+'</small></div>';
     /* 3. anomalies (bloquants et à vérifier visibles) */
-    const top=c.checks.filter(x=>x.niveau==='bad'||x.niveau==='warn').sort((a,b)=>(a.niveau==='bad'?0:1)-(b.niveau==='bad'?0:1));
+    let top=c.checks.filter(x=>x.niveau==='bad'||x.niveau==='warn').sort((a,b)=>(a.niveau==='bad'?0:1)-(b.niveau==='bad'?0:1));
+    /* V37.0-H : TTE et HS provisoires pour la même raison → une seule ligne (les 3 contrôles restent comptés séparément) */
+    const prov=top.filter(x=>['tte','hs25','hs50'].includes(x.key)&&x.niveau==='warn');
+    if(prov.length>1){const i=top.indexOf(prov[0]),why0=(prov[0].texte.split(' · ')[1]||'').replace(/\.$/,'');
+      top=top.filter(x=>!prov.includes(x));top.splice(i,0,{key:'provisoire',niveau:'warn',titre:prov.map(x=>x.titre).join(', '),texte:prov.map(x=>x.titre+' '+x.texte.split(' ')[x.key==='tte'?1:0]).join(' · ')+' · '+why0+'.',source:'moteur TTE / HS (calcPer)',cible:'compteur'})}
     h+='<div class="mh37p-sec"><span class="mh37p-eye">🚨 POINTS À TRAITER</span>'+(top.length?top.map(x=>'<div class="mh37p-item" data-tone="'+x.niveau+'" data-key="'+x.key+'"><div><b>'+ICON[x.niveau]+' '+esc(x.titre)+'</b><small>'+esc(x.texte)+'</small><i>Source : '+esc(x.source)+'</i></div>'+linkFor(x.cible)+'</div>').join(''):'<div class="mh37p-note">Aucun point bloquant ni à vérifier.</div>')+'</div>';
     /* 4. décomposition du brut */
     const st=key=>{const m={'HS 25 %':'hs25','HS 50 %':'hs50','Habillage/déshabillage':'habillage','IDAJ (dépassement amplitude)':'idaj','Indemnité de repas IR (part taxable)':'paniers','Heures normales':'tte','Majoration heures de nuit':'nuit'}[key];const x=c.checks.find(y=>y.key===m);return x?'<i>État : '+ICON[x.niveau]+' '+(x.niveau==='ok'?'contrôlé':x.niveau==='warn'?'à vérifier':x.niveau==='bad'?'bloquant':'non évalué')+'</i>':''};
@@ -189,25 +208,42 @@
       (hors.length?'<div class="mh37p-sub">Versé hors brut (non soumis)</div>'+hors.map(x=>'<div class="mh37p-kv"><span>'+x[0]+' · '+x[1]+'</span><b>'+eur(x[2])+'</b></div>').join(''):'')+
       (info.length?'<div class="mh37p-sub">Sans montant propre</div>'+info.join(''):'')+
       det('why:TTE','<span>TTE<small>'+G.trav+' jour(s) travaillé(s)</small></span><b>'+hm(G.tte)+'</b>',why('TTE',c)+st('Heures normales'),'mh37p-line')+'</div>';
-    /* 5. impact potentiel */
-    const order={important:0,'à déterminer':1,possible:2,'aucun effet calculé':3,aucun:4};
-    const imp=c.checks.filter(x=>x.niveau!=='na').slice().sort((a,b)=>(order[a.impact]??5)-(order[b.impact]??5));
-    const hsAmt=B.L.filter(l=>/^HS /.test(l[0])).reduce((s,l)=>s+l[3],0);
-    h+=det('impact','<span>💥 Impact potentiel sur le bulletin</span><b data-tone="'+(imp.some(x=>x.impact==='important')?'bad':imp.some(x=>x.impact!=='aucun'&&x.impact!=='aucun effet calculé')?'warn':'ok')+'">'+imp.filter(x=>x.impact!=='aucun'&&x.impact!=='aucun effet calculé').length+'</b>',
-      imp.map(x=>'<div class="mh37p-kv" data-tone="'+x.niveau+'"><span>'+ICON[x.niveau]+' '+esc(x.titre)+(x.key==='hsPayees'&&x.niveau!=='ok'&&hsAmt?'<small>HS dans le brut estimé : '+eur(hsAmt)+'</small>':'')+'</span><b>'+
-        (x.impact==='aucun'?'Aucun problème détecté':x.impact==='aucun effet calculé'?'Aucun effet calculé sur le brut':x.impact==='important'?'Impact potentiel : important':x.impact==='possible'?'Impact : possible':'Impact à déterminer')+'</b></div>').join('')+
-      '<p>Aucun montant d’impact n’est additionné : il ne peut pas être calculé de façon fiable.</p>');
+    /* 5. impact potentiel (V37.0-H) : 🔴 financier direct / 🟠 possible / 🔵 information ; aucun montant inventé */
+    const CAT={direct:['bad','🔴 Impact potentiellement financier direct'],possible:['warn','🟠 Impact possible'],information:['info','🔵 Information sans impact chiffrable']};
+    const impl=c.checks.filter(x=>x.niveau!=='na'&&x.impact!=='aucun').map(x=>({cat:x.impact,titre:x.titre,texte:x.texte}));
+    const hsTot=G.h25+G.h50;
+    if(hsTot>0&&c.rcEmployeur.acquis==null&&c.rcEmployeur.solde==null)impl.push({cat:'possible',titre:'Repos compensateur',texte:'RC employeur non renseigné — solde réel indéterminable.'});
+    const nImp=impl.length;
+    h+=det('impact','<span>💥 Impact potentiel sur le bulletin</span><b data-tone="'+(impl.some(x=>x.cat==='direct')?'bad':impl.some(x=>x.cat==='possible')?'warn':nImp?'info':'ok')+'">'+nImp+'</b>',
+      Object.keys(CAT).map(k=>{const l=impl.filter(x=>x.cat===k);return l.length?'<div class="mh37p-sub" data-cat="'+k+'">'+CAT[k][1]+'</div>'+l.map(x=>'<div class="mh37p-kv" data-tone="'+CAT[k][0]+'" data-impact="'+k+'"><span>'+esc(x.titre)+'<small>'+esc(x.texte)+'</small></span><b>'+(k==='information'?'Sans effet calculé sur le brut':'Non déterminable')+'</b></div>').join(''):''}).join('')+
+      (c.checks.filter(x=>x.niveau==='ok').length?'<div class="mh37p-sub">🟢 Contrôlé</div><div class="mh37p-kv" data-tone="ok"><span>'+c.checks.filter(x=>x.niveau==='ok').map(x=>esc(x.titre)).join(' · ')+'</span><b>Aucun problème détecté</b></div>':'')+
+      '<p>'+NONDET+' Aucun montant n’est additionné.</p>');
+    /* sources : calculé / fourni / à confirmer (V37.0-H) */
+    const rc=c.rcEmployeur,pd=c.paid,rr=c.romi&&(c.romi.statut==='comparable'||c.romi.statut==='partiel')?c.romi:null;
+    const kv=(l,v,tone)=>'<div class="mh37p-kv"'+(tone?' data-tone="'+tone+'"':'')+'><span>'+l+'</span><b>'+v+'</b></div>';
+    const calc=kv('TTE',hm(G.tte))+kv('Amplitude',hm(G.amp))+kv('HS 25 % · HS 50 %',hm(G.h25)+' · '+hm(G.h50))+kv('Nuit',hm(G.nuit))+kv('Habillage',hm(G.hab))+kv('Paniers',G.ir+' IR · '+G.iru+' IRU')+kv('Brut estimé',eur(B.tot))+kv('Net salaire estimé',c.net?eur(c.net.salaire):'Net non disponible');
+    const four=kv('TTE ROMI1',rr&&rr.employeur.tte!=null?hm(rr.employeur.tte):'non renseigné',rr?'info':'na')+
+      kv('HS réellement payées',pd.length?hm(pd[0].h25)+' · '+hm(pd[0].h50)+' ('+esc(pd[0].source)+')':'non renseigné',pd.length?'info':'na')+
+      kv('RC employeur',rc.acquis!=null?'acquis '+hm(rc.acquis)+' ('+rc.source+')':rc.solde!=null?'solde '+hm(rc.solde)+' (ROMI1)':'non renseigné',rc.source?'info':'na')+
+      kv('Bulletin',ref.statut==='absent'?'non renseigné':esc(ref.libelle)+(num(ref.bulletin.brut)?' · brut '+eur(ref.bulletin.brut):'')+(ref.statut==='precedent'?' (référence précédente)':''),ref.statut==='absent'?'na':'info');
+    const hyp=[kv('Rattachement du mois de paie',esc(mFr(p.moisPaie))+' · à confirmer','warn'),kv('Durée réelle d’un jour de CP',hm(D().s&&D().s.cp)+' (réglage) · à confirmer','warn')];
+    if(c.romi&&c.romi.aVerifier)hyp.push(kv('Cause de l’écart ROMI1','non déterminée','warn'));
+    if(hsTot>0&&rc.acquis==null&&rc.solde==null)hyp.push(kv('RC employeur','non renseigné · solde indéterminable','na'));
+    if(hsTot>0&&!pd.length)hyp.push(kv('HS payées','donnée absente · traitement inconnu (jamais 0)','na'));
+    h+=det('sources','<span>🧭 Sources des données</span><b data-tone="info">calculé · fourni · à confirmer</b>',
+      '<div class="mh37p-sub" data-src="calc">Calculé par MesHeures</div>'+calc+'<div class="mh37p-sub" data-src="employeur">Fourni par l’employeur</div>'+four+
+      '<div class="mh37p-sub" data-src="hyp">Hypothèse / à confirmer</div>'+hyp.join('')+'<p>Une hypothèse n’est jamais présentée comme une donnée officielle ; une donnée absente n’est jamais comptée comme zéro.</p>');
     /* 6. ROMI1 */
     const r=c.romi;
     let rb;
     if(!r||r.statut==='absent')rb='<p>Pas de relevé ROMI1 disponible.</p>';
     else if(r.statut==='non_comparable')rb='<p>Non comparable : périodes différentes. Aucun écart calculé.</p>';
-    else{rb='<div class="mh37p-kv"><span>MesHeures</span><b>'+hm(r.mesheures.tte)+'</b></div><div class="mh37p-kv"><span>ROMI1 (employeur)</span><b>'+hm(r.employeur.tte)+'</b></div>'+
-      '<div class="mh37p-kv" data-tone="'+(r.aVerifier?'warn':'ok')+'"><span>Écart</span><b>'+hm(r.ecartTte)+'</b></div>'+
+    else{rb='<div class="mh37p-kv"><span>MesHeures<small>calcul interne</small></span><b>'+hm(r.mesheures.tte)+'</b></div><div class="mh37p-kv" data-tone="info"><span>ROMI1<small>source employeur</small></span><b>'+hm(r.employeur.tte)+'</b></div>'+
+      '<div class="mh37p-kv" data-tone="'+(r.aVerifier?'warn':'ok')+'"><span>Écart</span><b>'+sgnHm(r.ecartTte)+'</b></div>'+
       (r.statut==='partiel'?'<p>Relevé ROMI1 partiel — comparaison limitée à ses dates.</p>':'')+
       (r.aVerifier?'<p><b>À vérifier — écart à analyser.</b></p>':'')+
       (r.journalier&&r.journalier.disponible?'<div class="mh37p-kv"><span>Journées comparables</span><b>'+r.journalier.comparables+' / '+r.journalier.total+'</b></div><div class="mh37p-kv"><span>Écart expliqué par les journées comparées</span><b>'+sgnHm(r.journalier.ecartExplique)+'</b></div><div class="mh37p-kv"><span>Écart restant à analyser</span><b>'+sgnHm(r.journalier.ecartRestant)+'</b></div>'
-        :'<p>Le relevé ROMI1 actuel ne contient que les totaux. L’écart ne peut pas être localisé jour par jour.</p>')}
+        :'<p><b>Écart non localisé faute de détail journalier ROMI1.</b> Le relevé ROMI1 actuel ne contient que les totaux. L’écart ne peut pas être localisé jour par jour. Aucune cause n’est déduite.</p>')}
     const rck=c.checks.find(x=>x.key==='romi');
     h+=det('romi','<span>🔎 Contrôle ROMI1</span><b data-tone="'+rck.niveau+'" data-k="romi">'+(r&&r.ecartTte!=null&&(r.statut==='comparable'||r.statut==='partiel')?(r.aVerifier?ICON.warn+' Écart ROMI1 : '+hm(Math.abs(r.ecartTte)):ICON.ok+' concordant'):ICON.na+' '+(r&&r.statut==='non_comparable'?'non comparable':'pas de relevé'))+'</b>',rb+btn('romi','→ ROMI1')+btn('compteur','→ Compteur'));
     /* déjà payé */
@@ -217,8 +253,9 @@
     h+=det('evol','<span>📈 Évolution</span><b data-tone="na">'+(c.precedent?'vs '+dShort(c.precedent.debut)+' → '+dShort(c.precedent.fin):'aucun relevé précédent')+'</b>',evolution(c));
     /* 8. vérifier / simuler / outils */
     h+=det('check','<span>🔍 Vérifier le bulletin</span><b data-tone="'+v.niveau+'">'+c.compte.ok+' / '+(c.compte.ok+c.compte.warn+c.compte.bad)+'</b>',
-      c.checks.map(x=>'<div class="mh37p-item" data-tone="'+x.niveau+'" data-check="'+x.key+'"><div><b>'+esc(x.titre)+'</b><small>'+ICON[x.niveau]+' '+(x.niveau==='ok'?'contrôlé':x.niveau==='warn'?'à vérifier':x.niveau==='bad'?'bloquant':'non évalué')+' · '+esc(x.texte)+'</small></div>'+linkFor(x.cible)+'</div>').join(''),'mh37p-check');
+      '<div class="mh37p-legend">'+['bad','warn','ok','na'].map(k=>'<div data-tone="'+k+'"><b>'+ICON[k]+' '+({bad:'Bloquant',warn:'À vérifier',ok:'Contrôlé',na:'Non renseigné'})[k]+'</b> '+DEF_NIVEAU[k]+'</div>').join('')+'</div>'+c.checks.map(x=>'<div class="mh37p-item" data-tone="'+x.niveau+'" data-check="'+x.key+'"><div><b>'+esc(x.titre)+'</b><small>'+ICON[x.niveau]+' '+(x.niveau==='ok'?'contrôlé':x.niveau==='warn'?'à vérifier':x.niveau==='bad'?'bloquant':'non évalué')+' · '+esc(x.texte)+'</small></div>'+linkFor(x.cible)+'</div>').join(''),'mh37p-check');
     h+=det('sim','<span>🧪 Simuler</span><b data-tone="'+(c.sim?'warn':'na')+'">'+(c.sim?'simulation active':'copie temporaire')+'</b>',simHtml(c),'mh37p-simd');
+    if(c.sim)h=h.replace('<div class="mh37p-verdict"','<div class="mh37p-simbar" data-k="simbar">🧪 SIMULATION — aucune donnée réelle modifiée</div><div class="mh37p-verdict"');
     h+=tools();
     return h+'</div>';
   }
@@ -239,7 +276,7 @@
   function simHtml(c){
     const s=c.sim,G=c.G,cur=s?s.params:{h25:G.h25,h50:G.h50,ir:G.ir,iru:G.iru};
     const ctl=(k,lab,val,step,fmt)=>'<div class="mh37p-simr"><span>'+lab+'</span><button class="g" aria-label="'+lab+' moins" onclick="MHAssistantPaie.sim(\''+k+'\','+(-step)+')">−</button><b data-sim="'+k+'">'+fmt(val)+'</b><button class="g" aria-label="'+lab+' plus" onclick="MHAssistantPaie.sim(\''+k+'\','+step+')">+</button></div>';
-    let h='<p>Les valeurs ci-dessous sont une copie temporaire : aucune journée, pause, repas, CP, relevé ROMI1, constat ni donnée de paie n’est modifié. Le brut simulé est recalculé par le moteur de paie (brutOf) sur cette copie.</p>'+
+    let h=(s?'<div class="mh37p-simbar">🧪 SIMULATION — aucune donnée réelle modifiée</div>':'')+'<p>Les valeurs ci-dessous sont une copie temporaire : aucune journée, pause, repas, CP, relevé ROMI1, constat ni donnée de paie n’est modifié. Le brut simulé est recalculé par le moteur de paie (brutOf) sur cette copie.</p>'+
       ctl('h25','HS 25 %',cur.h25,15,hm)+ctl('h50','HS 50 %',cur.h50,15,hm)+ctl('ir','Paniers IR',cur.ir,1,String)+ctl('iru','Paniers IRU',cur.iru,1,String);
     if(s)h+='<span class="mh37p-eye">Impact simulé</span><div class="mh37p-kv"><span>Brut actuel</span><b>'+eur(s.brutReel)+'</b></div><div class="mh37p-kv"><span>Brut simulé</span><b data-k="simBrut">'+eur(s.brut)+'</b></div>'+
       '<div class="mh37p-kv mh37p-tot"><span>Différence</span><b data-k="simDiff">'+sgnEur(s.diffBrut)+'</b></div><div class="mh37p-kv"><span>Net estimé simulé</span><b>'+eur(s.net)+' ('+sgnEur(s.diffNet)+')</b></div>'+

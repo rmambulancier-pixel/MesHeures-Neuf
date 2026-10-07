@@ -88,12 +88,16 @@
     let romi=[];
     try{const list=window.MH_ROMI&&typeof window.MH_ROMI.list==='function'?(window.MH_ROMI.list()||[]).filter(Boolean):[];
       romi=list.filter(x=>isoDay(x.periodStart)&&isoDay(x.periodEnd)).sort((a,b)=>String(a.periodStart).localeCompare(String(b.periodStart))).map(x=>{
-        let tte=0,pres=0;for(let k=x.periodStart;k<=x.periodEnd;k=addD(k,1)){const d=days[k];if(d&&(d.t==='T'||d.t==='NUIT')){tte+=Number(cd(k).tte)||0;pres++}}
         const aligned=mhQuatorzaine.isStart(x.periodStart)&&mhQuatorzaine.isStart(addD(x.periodEnd,1));
-        let hs=null;if(aligned&&pres){const n=Math.round((nDays(x.periodStart,x.periodEnd)+1)/14),G=calcPer(x.periodStart,n).G;hs=G.h25+G.h50}
+        let tte=0,pres=0,hs=null,detail=false;
+        /* V37.0-H : même rapprochement que le Compteur et l'Assistant Paie (MHRomiRecon, lot F) ; repli historique sinon. */
+        const rr=window.MHRomiRecon&&typeof window.MHRomiRecon.analyze==='function'?window.MHRomiRecon.analyze({start:x.periodStart,end:x.periodEnd}):null;
+        if(rr&&rr.mesheures){tte=rr.mesheures.tte;pres=rr.mesheures.jours;hs=pres?rr.mesheures.hs:null;detail=!!(rr.journalier&&rr.journalier.disponible)}
+        else{for(let k=x.periodStart;k<=x.periodEnd;k=addD(k,1)){const d=days[k];if(d&&(d.t==='T'||d.t==='NUIT')){tte+=Number(cd(k).tte)||0;pres++}}
+          if(aligned&&pres){const n=Math.round((nDays(x.periodStart,x.periodEnd)+1)/14),G=calcPer(x.periodStart,n).G;hs=G.h25+G.h50}}
         return {debut:x.periodStart,fin:x.periodEnd,tteRomiH:num(x.ttePeriodH)?Number(x.ttePeriodH):null,hsRomiH:num(x.hsPeriodH)?Number(x.hsPeriodH):null,
           presenceRomi:num(x.presenceDays)?Number(x.presenceDays):null,rcRomiH:num(x.rcBalanceH)?Number(x.rcBalanceH):null,
-          alignee:aligned,tteMesHeures:pres?tte:null,presenceMesHeures:pres,hsMesHeures:hs}})}catch(e){romi=[]}
+          alignee:aligned,tteMesHeures:pres?tte:null,presenceMesHeures:pres,hsMesHeures:hs,detailJournalier:detail}})}catch(e){romi=[]}
 
     /* Rapprochement paie : journal de preuves (mois portant un bulletin) */
     let rapprochement=[];
@@ -178,7 +182,7 @@
     T([{t:'Période',w:84},{t:'TTE ROMI1',w:56,a:'r'},{t:'TTE MesHeures',w:62,a:'r'},{t:'Présence',w:56,a:'r'},{t:'HS ROMI1',w:52,a:'r'},{t:'HS MesHeures',w:62,a:'r'},{t:'RC cumulé',w:50,a:'r'},{t:'Comparaison',w:93}],
       d.romi.map(r=>[dShort(r.debut)+' → '+dShort(r.fin),hDec(r.tteRomiH),r.tteMesHeures!=null?hm(r.tteMesHeures):'—',
         (r.presenceRomi!=null?r.presenceRomi:'—')+' / '+r.presenceMesHeures,hDec(r.hsRomiH),r.alignee?(r.hsMesHeures!=null?hm(r.hsMesHeures):'—'):NC,hDec(r.rcRomiH),
-        !r.alignee?'HS non comparables (période hors quatorzaines entières)':r.tteMesHeures==null?'aucune journée saisie':'TTE : écart '+hm(r.tteMesHeures-Math.round(r.tteRomiH*60))]),
+        !r.alignee?'HS non comparables (période hors quatorzaines entières)':r.tteMesHeures==null?'aucune journée saisie':'TTE : écart '+hm(r.tteMesHeures-Math.round(r.tteRomiH*60))+(r.detailJournalier?'':' (non localisé : totaux ROMI1 seuls)')]),
       'Aucun relevé ROMI1 enregistré.');
 
     H2('5. Rapprochement paie (journal de preuves)');
@@ -273,7 +277,11 @@
     const blocks=model(d,o);
     blocks.forEach((b,bi)=>{
       if(b.k==='h1'){need(26);T(ML,y-16,b.t,16,true);y-=24}
-      else if(b.k==='h2'){need(29+minH(blocks[bi+1]));y-=8;T(ML,y-11,b.t,11.5,true);y-=15;ops.push('0.6 G 0.6 w '+ML+' '+y.toFixed(2)+' m '+(ML+CW)+' '+y.toFixed(2)+' l S');y-=6}
+      else if(b.k==='h2'){
+        /* V37.0-H : une section courte sans tableau (ex. « Intégrité ») reste entière sur une page : pas de dernière page presque vide */
+        let j=bi+1,full=0,small=true;while(j<blocks.length&&blocks[j].k!=='h2'){const x=blocks[j];if(x.k==='table'){small=false;break}
+          full+=x.k==='p'?wrap(x.t,CW,x.small?7.5:9,false).length*(x.small?7.5:9)*1.3+3:x.k==='kv'?x.rows.reduce((s,r)=>s+wrap(r[1],CW-156,8.5,false).length*11+2,0)+4:0;j++}
+        need(29+(small&&full<220?full:minH(blocks[bi+1])));y-=8;T(ML,y-11,b.t,11.5,true);y-=15;ops.push('0.6 G 0.6 w '+ML+' '+y.toFixed(2)+' m '+(ML+CW)+' '+y.toFixed(2)+' l S');y-=6}
       else if(b.k==='p'){const size=b.small?7.5:9,lh=size*1.3;wrap(b.t,CW,size,false).forEach(l=>{need(lh);T(ML,y-size,l,size,false,b.small?0.3:null);y-=lh});y-=3}
       else if(b.k==='kv'){const size=8.5,lh=11,kw=150;b.rows.forEach(r=>{const L=wrap(r[1],CW-kw-6,size,false),h=L.length*lh+2;need(h);T(ML,y-size,r[0],size,true);L.forEach((l,i)=>T(ML+kw,y-size-i*lh,l,size,false));y-=h});y-=4}
       else if(b.k==='table'){

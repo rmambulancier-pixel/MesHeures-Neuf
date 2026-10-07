@@ -68,7 +68,10 @@ srv.listen(0,async()=>{
     const bytes=pdfX?Buffer.concat(pdfX.b64.map(c=>Buffer.from(c,'base64'))):Buffer.alloc(0);
     let R=null;try{R=readPdf(bytes)}catch(e){ok(false,'PDF illisible : '+e.message)}
     if(R){
-      const N=R.pagesDecl;ok(N>=2&&R.pages.every(p=>p.ops.length>20),'PDF valide et non vide : '+N+' pages, '+bytes.length+' octets, aucune page blanche');
+      /* V37.0-H : le nombre de pages dépend de la date (fenêtre Smart Control de 28 jours) ; critère précis plutôt qu'un seuil d'opérations :
+         chaque page porte du contenu hors en-tête / pied, et aucune page n'est un fragment orphelin (titre ou tableau, ou au moins 5 lignes). */
+      const body=p=>p.ops.filter(o=>!/^MesHeures · Dossier probatoire · généré le|^Empreinte des données \(SHA-256\)|^Page \d+ \/ \d+$/.test(o.tx));
+      const N=R.pagesDecl;ok(N>=2&&R.pages.every(p=>{const b=body(p);return b.length>=3&&(b.some(o=>o.bold)||b.length>=5)}),'PDF valide et non vide : '+N+' pages, '+bytes.length+' octets, aucune page blanche ni orpheline');
       ok(['167h55','173h25','32h00','30h55','0h45','13 / 2','150h15','16 / 18'].every(v=>R.text.includes(v)),'valeurs de référence présentes (TTE, amplitude, HS, IDAJ, paniers, ROMI1)');
       ok(R.flat.includes('Smart Control')&&/\d+ % des contrôles conformes/.test(R.text),'Smart Control repris');
       ok(R.flat.includes('Pause minimale de 20 min')&&R.flat.includes('non chiffré')&&!R.text.includes('4,92'),'constat de pause hérité listé sans montant (pas de 4,92 €)');

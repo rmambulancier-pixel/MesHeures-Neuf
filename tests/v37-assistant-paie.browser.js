@@ -33,7 +33,7 @@ const metrics=pg=>pg.evaluate(()=>{const c=document.getElementById('mh37Assistan
   const over=[...c.querySelectorAll('*')].filter(e=>{const b=e.getBoundingClientRect();return b.width&&(b.right>r.right+1||b.left<r.left-1)}).map(e=>e.className||e.tagName).slice(0,3);
   const btns=[...c.querySelectorAll('button')].filter(x=>x.offsetParent).map(x=>x.getBoundingClientRect());
   const vb=c.querySelector('.mh37p-verdict').getBoundingClientRect(),est=c.querySelector('.mh37p-est').getBoundingClientRect();
-  return {txt:c.innerText,verdict:v('verdict'),score:v('score'),brut:v('brut'),net:v('net'),bad:v('nbad'),warn:v('nwarn'),ok:v('nok'),romi:v('romi'),
+  return {txt:c.innerText,verdict:v('verdict'),score:v('score'),brut:v('brut'),net:v('net'),total:v('total'),bad:v('nbad'),warn:v('nwarn'),ok:v('nok'),romi:v('romi'),
     over,docW:document.documentElement.scrollWidth,vw:innerWidth,minH:Math.min(...btns.map(x=>x.height)),
     page:document.getElementById('s-paie').innerText,verdictTop:vb.top+scrollY-(c.getBoundingClientRect().top+scrollY),estBottom:est.bottom-r.top,
     color:getComputedStyle(c.querySelector('.mh37p-money b')).color,bg:getComputedStyle(c.closest('.card')).backgroundColor}});
@@ -49,7 +49,7 @@ srv.listen(0,async()=>{
       const m=await metrics(pg);
       ok(!/Assistant paie V33/i.test(m.page)&&/🧠 Assistant Paie/.test(m.txt)&&/Bulletin — septembre 2026/.test(m.txt),'en-tête V37 « Assistant Paie · Bulletin — septembre 2026 », plus aucun « Assistant paie V33 »');
       ok(m.verdict==='🔴 BULLETIN BLOQUÉ'&&m.score==='58 % prêt'&&m.bad==='1'&&m.warn==='4'&&m.ok==='7','verdict 🔴 BULLETIN BLOQUÉ · 58 % prêt · 1 / 4 / 7');
-      ok(m.brut==='3 463,54 €'&&m.net==='2 880,39 €','brut 3 463,54 € et net 2 880,39 € visibles');
+      ok(m.brut==='3 463,54 €'&&m.net==='2 725,81 €'&&m.total==='2 880,39 €','brut 3 463,54 €, net salaire 2 725,81 € et total versé 2 880,39 € visibles');
       ok(m.estBottom<1000,'verdict et estimation visibles sans ouvrir de volet ('+Math.round(m.estBottom)+' px)');
       ok(/HS payées non renseignées/.test(m.txt)&&/Écart ROMI1 17h40/.test(m.txt),'bloquant et écart ROMI1 affichés d’emblée');
       ok(m.romi==='🟠 Écart ROMI1 : 17h40','volet ROMI1 fermé : « 🟠 Écart ROMI1 : 17h40 »');
@@ -99,6 +99,7 @@ srv.listen(0,async()=>{
 
     console.log('Cache : installation V37.0-F puis mise à jour V37.0-G');
     const OLD=fs.mkdtempSync(path.join(os.tmpdir(),'mh37f-'));
+    const CUR=(fs.readFileSync(path.join(NEW,'sw.js'),'utf8').match(/const CACHE='([^']+)'/)||[])[1];
     cp.execSync('git archive b5979ad app/src/main/assets/web | tar -x -C '+JSON.stringify(OLD),{cwd:REPO,stdio:'ignore'});
     ROOT=path.join(OLD,'app/src/main/assets/web');
     const ctx=await b.newContext({viewport:{width:412,height:915}}),pg=await ctx.newPage();
@@ -109,7 +110,7 @@ srv.listen(0,async()=>{
     await pg.goto(url);let p=await probe();await pg.reload();p=await probe();
     ok(p.v33&&!p.v37&&p.sw,'V37.0-F installé : ancien Assistant paie V33 servi par le cache (situation de départ)');
     ROOT=NEW;await pg.reload();await probe();await pg.reload();p=await probe();
-    ok(!p.v33&&p.v37&&p.caches.length===1&&p.caches[0]==='mesheures-shell-v37.0-G','après mise à jour : Assistant Paie V37 servi, seul le cache mesheures-shell-v37.0-G reste');
+    ok(!p.v33&&p.v37&&p.caches.length===1&&p.caches[0]===CUR,'après mise à jour : Assistant Paie V37 servi, seul le cache '+CUR+' reste');
     await pg.reload();p=await probe();ok(!p.v33&&p.v37,'3e lancement : l’ancien Assistant V33 n’est plus jamais servi');
     await ctx.close();fs.rmSync(OLD,{recursive:true,force:true});
   }catch(e){ok(false,'exception : '+e.message)}

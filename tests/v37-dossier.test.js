@@ -29,7 +29,7 @@ function load(days,opts={}){
     ';DB.s={...DEF,...'+JSON.stringify(opts.s||fx.s)+'};DB.days='+JSON.stringify(days)+';'+extra+'mhNormalizeMealSettings();mhMigrateLegacyMealChoices();'+
     'function save(){MH30DataEngine.invalidate("save")}function mhRefresh(){}'+
     ';globalThis.__x={get DB(){return DB},cd,calcPer,brutOf,F,Q:mhQuatorzaine};',ctx);
-  for(const f of ['app-legal.js','app-evidence.js','app-v37-control.js'])vm.runInContext(fs.readFileSync(path.join(WEB,f),'utf8'),ctx,{filename:f});
+  for(const f of ['app-legal.js','app-evidence.js','app-v37-control.js','app-v37-romi-reconciliation.js'])vm.runInContext(fs.readFileSync(path.join(WEB,f),'utf8'),ctx,{filename:f});
   if(opts.romi)win.MH_ROMI={list:()=>clone(opts.romi)};
   if(opts.freeze){vm.runInContext('Object.freeze(DB);',ctx);deepFreeze(ctx.__x.DB)}
   vm.runInContext(fs.readFileSync(path.join(WEB,'app-v37-dossier.js'),'utf8'),ctx,{filename:'app-v37-dossier.js'});

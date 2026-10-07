@@ -67,7 +67,7 @@ function pushWidgetData(){
       if(keys.length) rcSoldeMin=Math.round(Number(DB.romi[keys[keys.length-1]].rcSolde)*60);
       if(!rcSoldeMin && typeof calcPer==='function' && typeof gb==='function'){
         const ps=DB.per||{}, start=ps.start||mhQuatorzaine.start(k), nb=Math.max(2,Math.min(3,Math.round(Number(ps.nb)||2)));
-        const G=calcPer(start,nb).G||{}, B=gb(start), d25=Math.max((Number(G.h25)||0)/60-(Number(B.p25)||0),0), d50=Math.max((Number(G.h50)||0)/60-(Number(B.p50)||0),0);
+        const G=calcPer(start,nb).G||{}, B=(DB.bul&&DB.bul[start])||{}, d25=Math.max((Number(G.h25)||0)/60-(Number(B.p25)||0),0), d50=Math.max((Number(G.h50)||0)/60-(Number(B.p50)||0),0);
         rcSoldeMin=Math.round(((Number(B.rcOld)||0)+d25*1.25+d50*1.5)*60);
       }
     }catch(e){console.warn('Widget RC',e)}
