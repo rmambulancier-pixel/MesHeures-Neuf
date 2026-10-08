@@ -43,11 +43,12 @@
   const minutes=t=>{const m=/^(\d{1,2}):(\d{2})$/.exec(String(t||''));return m?+m[1]*60+ +m[2]:null};
 
   /* ---------- dictionnaire de libellés (versionné) ---------- */
-  /* motif : sur le libellé normalisé (minuscules, sans accents ni ponctuation). canon : formes pour la correspondance approchée. */
+  /* motif : sur le libellé normalisé (minuscules, sans accents ni ponctuation). canon : formes pour la correspondance approchée.
+   * variantes : erreurs d'OCR connues, acceptées explicitement (correspondance « approchée », variante indiquée). */
   const DICT_V1=Object.freeze({id:'mh-planning',version:1,date:'2026-10-08',source:'définitions données par l’utilisateur le 08/10/2026',regles:[
     {id:'JOUR',motif:'^jour ?(\\d{1,2}) ?h ?(\\d{2})?$',canon:['jour 7h'],type:'JOUR',libelle:'Jour {h}h',dureeDuLibelle:true,horaires:null,applicable:true,
       note:'Durée lue dans le libellé. Horaires non indiqués par le planning.'},
-    {id:'REPOS',motif:'^repos$',canon:['repos'],type:'REPOS',libelle:'Repos',horaires:null,applicable:true,note:'Repos prévu.'},
+    {id:'REPOS',motif:'^repos$',canon:['repos'],variantes:['repas'],type:'REPOS',libelle:'Repos',horaires:null,applicable:true,note:'Repos prévu.'},
     {id:'SAMU',motif:'^samu$',canon:['samu'],type:'GARDE_SAMU',libelle:'Samu',horaires:{debut:'08:00',fin:'20:00'},applicable:true,
       note:'Garde SAMU de 8h00 à 20h00 (amplitude prévue). Temps de travail effectif non indiqué.'},
     {id:'CONDOM',motif:'^condo ?m?$',canon:['condo m','condom','condo'],type:'GARDE_COMMERCIALE',libelle:'Condo m',horaires:{debut:'08:00',fin:'20:00'},applicable:true,
@@ -75,10 +76,12 @@
       const h=r.horaires?{debut:r.horaires.debut,fin:r.horaires.fin}:null;
       const amp=h?((minutes(h.fin)-minutes(h.debut)+1440)%1440||1440):null;
       return {brut:String(brut==null?'':brut),normalise:n,regle:r.id,type:r.type,libelle,applicable:r.applicable,dureeMin,horaires:h,amplitudeMin:amp,
-        correspondance:mode,note:r.note};
+        correspondance:mode,variante:null,tolerance:mode==='approchée'?'generale':null,note:r.note};
     };
-    if(!n)return {brut:String(brut==null?'':brut),normalise:'',regle:null,type:'VIDE',libelle:'',applicable:null,dureeMin:null,horaires:null,amplitudeMin:null,correspondance:'aucune',note:'Cellule vide ou illisible.'};
+    if(!n)return {brut:String(brut==null?'':brut),normalise:'',regle:null,type:'VIDE',libelle:'',applicable:null,dureeMin:null,horaires:null,amplitudeMin:null,correspondance:'aucune',variante:null,tolerance:null,note:'Cellule vide ou illisible.'};
     for(const r of dict.regles){const m=new RegExp(r.motif).exec(n);if(m)return res(r,m,'exacte')}
+    /* variante d'OCR déclarée (ex. « Repas » pour « Repos ») : après tous les motifs exacts, avant la tolérance générale */
+    for(const r of dict.regles)if((r.variantes||[]).includes(n)){const o=res(r,new RegExp(r.motif).exec(r.canon[0]),'approchée');o.variante=n;o.tolerance='variante';return o}
     /* correspondance approchée : distance faible ET mêmes chiffres (jamais « Jour 8h » pour « Jour 7h ») */
     let best=null;
     dict.regles.forEach(r=>(r.canon||[]).forEach(c=>{
@@ -88,7 +91,7 @@
     }));
     if(best){const m=new RegExp(best.r.motif).exec(best.c);return res(best.r,m,'approchée')}
     return {brut:String(brut),normalise:n,regle:null,type:'NON_INTERPRETE',libelle:String(brut).trim(),applicable:null,dureeMin:null,horaires:null,amplitudeMin:null,
-      correspondance:'aucune',note:'Libellé inconnu : non interprété, aucune durée déduite. À définir dans le dictionnaire si besoin.'};
+      correspondance:'aucune',variante:null,tolerance:null,note:'Libellé inconnu : non interprété, aucune durée déduite. À définir dans le dictionnaire si besoin.'};
   }
 
   /* ---------- période et dates ---------- */

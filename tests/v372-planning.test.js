@@ -45,6 +45,23 @@ t('bruit OCR léger : « Jour 7n », « Repas », « Samv » → correspondance 
 t('jamais de rapprochement qui change un chiffre : « Jour 8n » non interprété (pas Jour 7h) ; « Récup 35h » ≠ Récup 39h',()=>{
   const j=P.interpreter('Jour 8n');assert.deepEqual([j.type,j.dureeMin],['NON_INTERPRETE',null]);assert.equal(P.interpreter('Récup 35h').type,'NON_INTERPRETE')});
 
+t('« Repos » exact inchangé : REPOS, correspondance exacte, sans variante ni tolérance',()=>{const i=P.interpreter('Repos');
+  assert.deepEqual([i.type,i.correspondance,i.variante,i.tolerance,i.dureeMin],['REPOS','exacte',null,null,null])});
+t('« Repas » → REPOS, correspondance approchée par la variante déclarée « repas » (pas par la tolérance générale)',()=>{
+  ['Repas','REPAS','repas.'].forEach(x=>{const i=P.interpreter(x);assert.equal(i.type,'REPOS',x);assert.equal(i.correspondance,'approchée',x);assert.equal(i.variante,'repas',x);assert.equal(i.tolerance,'variante',x)});
+  assert.equal(P.interpreter('Repas').type==='REPOS'&&P.interpreter('Repas').correspondance==='approchée',true)});
+t('la variante ne s’applique qu’au mot entier « repas » : « Repas midi », « Repasse » non transformés en REPOS',()=>{
+  ['Repas midi','Repasse'].forEach(x=>assert.equal(P.interpreter(x).type,'NON_INTERPRETE',x))});
+t('chiffres stricts : « Jour 7n » → Jour 7h (tolérance générale) ; « Jour 8n » jamais Jour 7h ; « Jour 1h » reste Jour 1h',()=>{
+  const a=P.interpreter('Jour 7n');assert.deepEqual([a.type,a.dureeMin,a.correspondance,a.tolerance],['JOUR',420,'approchée','generale']);
+  const b=P.interpreter('Jour 8n');assert.notEqual(b.dureeMin,420);assert.equal(b.type,'NON_INTERPRETE');
+  const c=P.interpreter('Jour 1h');assert.deepEqual([c.type,c.dureeMin,c.correspondance],['JOUR',60,'exacte'])});
+t('« Jour 1h » sur une ligne majoritairement en Jour 7h → DUREE_INHABITUELLE ; « Repas » sur la ligne → REPOS sans anomalie',()=>{
+  const g=clone(grille);g.cellules[LROTH][0].texte='Jour 1h';g.cellules[LROTH][3].texte='Repas';const p=P.creer(base({ligne:P.extraireLigne(g,LROTH)}));
+  assert.ok(p.anomalies.some(a=>a.code==='DUREE_INHABITUELLE'&&a.date==='2026-11-02'));
+  const r=p.interpretation.find(x=>x.date==='2026-11-05');assert.deepEqual([r.type,r.correspondance],['REPOS','approchée']);assert.equal(p.ocr.cellules[3].texte,'Repas','brut conservé');
+  assert.ok(!p.anomalies.some(a=>a.date==='2026-11-05'))});
+
 console.log('Libellé inconnu');
 t('« Astreinte X » → NON_INTERPRETE, libellé brut conservé, aucune durée, aucun horaire',()=>{const i=P.interpreter('Astreinte X');
   assert.deepEqual([i.type,i.libelle,i.dureeMin,i.horaires,i.applicable],['NON_INTERPRETE','Astreinte X',null,null,null]);assert.ok(/aucune durée/.test(i.note))});
