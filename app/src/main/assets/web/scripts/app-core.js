@@ -211,7 +211,8 @@ function calcAnc(emb,refDate){
    - seule la partie de la pause comprise dans le service est déduite ;
    - deux pauses qui se chevauchent ne sont déduites qu'une fois. */
 function mhEffectivePauses(d,a,b){
-  const out={pz:0,al:[]},iv=[];
+  /* V37.1 : out.iv = intervalles de pause effectifs, fusionnés, en minutes du service (ajout en lecture seule ; pz et al inchangés). */
+  const out={pz:0,al:[],iv:[]},iv=[];
   const crosses=b>1440;
   (d&&Array.isArray(d.p)?d.p:[]).forEach(p=>{
     const x=P(p&&p.d);let y=P(p&&p.f);
@@ -231,10 +232,10 @@ function mhEffectivePauses(d,a,b){
   let cs=null,ce=null,overlap=false;
   iv.forEach(([s,e])=>{
     if(ce!=null&&s<ce){overlap=true;if(e>ce)ce=e;return}
-    if(ce!=null)out.pz+=ce-cs;
+    if(ce!=null){out.pz+=ce-cs;out.iv.push([cs,ce])}
     cs=s;ce=e;
   });
-  if(ce!=null)out.pz+=ce-cs;
+  if(ce!=null){out.pz+=ce-cs;out.iv.push([cs,ce])}
   if(overlap)out.al.push({lvl:'w',m:'Pauses qui se chevauchent — le temps commun n\'est déduit qu\'une fois'});
   return out;
 }

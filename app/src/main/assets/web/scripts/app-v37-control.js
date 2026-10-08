@@ -49,6 +49,7 @@
     REPOS:{scope:'day',title:'Repos entre deux services',rule:'Repos quotidien : 11 h. En dessous de 9 h : critique.',source:'Code du travail, art. L3131-1 ; accord du 16/06/2016, art. 7',warn:660,bad:540},
     SEMAINE:{scope:'week',title:'Durée hebdomadaire',rule:'Le TTE d’une semaine (lundi → dimanche) ne doit pas dépasser 48 h.',source:'Accord transport sanitaire du 16/06/2016, art. 4',bad:2880},
     MOYENNE:{scope:'period',title:'Moyenne sur 12 semaines',rule:'La moyenne hebdomadaire de TTE sur 12 semaines consécutives ne doit pas dépasser 46 h.',source:'Accord transport sanitaire du 16/06/2016, art. 4',bad:2760},
+    NUIT_PAUSE:{scope:'day',title:'Pause de nuit',rule:'Travailleur de nuit en permanence de nuit : une pause d’au moins 20 min après 6 h de travail effectif continu. Contrôlé seulement si le statut de travailleur de nuit est établi.',source:'Accord transport sanitaire du 16/06/2016, art. 9',continu:360,pause:20},
     ROMI_TTE:{scope:'romi',title:'TTE ROMI1 / MesHeures',rule:'Le TTE du relevé ROMI1 (référence employeur) est comparé au TTE calculé par MesHeures sur exactement la même période. Écart toléré : 15 min.',source:'Relevé ROMI1 (référence employeur)',tol:15}
   };
   const DAY_FAMILIES=['HORAIRES','AMPLITUDE','TTE','PAUSE','SAISIE','REPAS','FERIE'];
@@ -175,7 +176,23 @@
         [['Moyenne hebdomadaire',fmt(worst.avg)],['Seuil','46h00 (maximum)']],'Moyenne de '+fmt(worst.avg)+' par semaine sur 12 semaines.',[actPeriod(worst.w)]));
     }else out.notEvaluated.push('Moyenne sur 12 semaines : moins de 12 semaines de données.');
 
-    /* 5. ROMI1 : dernier relevé, comparé sur exactement la même période */
+    /* 5. V37.1 : pause de nuit (art. 9), journées comportant des heures 22 h → 5 h ; statut via MHNuit (lecture seule). */
+    try{
+      if(window.MHNuit){
+        const st={},statut=y=>st[y]||(st[y]=window.MHNuit.annee(y,{today:end}));
+        const nuits=worked.filter(k=>days[k].deb&&days[k].fin).map(k=>window.MHNuit.jour(k)).filter(j=>j&&!j.incomplet&&j.amplitude>0);
+        const nonEtabli=nuits.filter(j=>!statut(j.date.slice(0,4)).pauseControlee);
+        nuits.filter(j=>statut(j.date.slice(0,4)).pauseControlee).forEach(j=>{
+          out.controls++;
+          if(j.continuMax>RULES.NUIT_PAUSE.continu)out.alerts.push(mk('NUIT_PAUSE','warn',j.date,dLong(j.date),
+            dayData(j.date,days[j.date],R[j.date]).concat([['Heures de nuit (22h → 5h)',fmt(j.amplitude)],['Plus long travail continu',fmt(j.continuMax)],['Seuil','6h00 sans pause de 20 min']]),
+            'Travail continu de '+fmt(j.continuMax)+' sans pause d’au moins 20 min.',[actDay(j.date)]));
+        });
+        if(nonEtabli.length)out.notEvaluated.push('Pause de nuit (art. 9) : '+nonEtabli.length+' journée'+(nonEtabli.length>1?'s':'')+' avec heures de nuit, statut de travailleur de nuit non établi.');
+      }
+    }catch(e){out.notEvaluated.push('Pause de nuit (art. 9) : données illisibles.')}
+
+    /* 6. ROMI1 : dernier relevé, comparé sur exactement la même période */
     try{
       const list=window.MH_ROMI&&typeof window.MH_ROMI.list==='function'?window.MH_ROMI.list().filter(Boolean):[];
       const last=list.filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(String(x.periodStart||''))&&/^\d{4}-\d{2}-\d{2}$/.test(String(x.periodEnd||'')))

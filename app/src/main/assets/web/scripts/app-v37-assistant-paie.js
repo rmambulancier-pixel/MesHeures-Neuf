@@ -125,7 +125,13 @@
       precedent:prev?{debut:prev.debut,fin:prev.fin,G:prev.G,B:prev.B,c:prev.c}:null,
       rcEmployeur:rcEmployeur(s.debut,romi),reference:window.MHPeriode?window.MHPeriode.bulletinReference(s.debut):{statut:'absent',texte:'Bulletin non renseigné pour ce relevé.'},
       courante:window.MHPeriode?window.MHPeriode.courante(now):null,statutPeriode:window.MHPeriode?window.MHPeriode.statut(s.debut,s.fin,now):(s.fin>=now?'en cours':'antérieur'),
-      sim:simState?simulate(G,simState):null};
+      sim:simState?simulate(G,simState):null,nuit9:nuit9(s.debut,s.fin,now)};
+  }
+  /* V37.1 : travail de nuit (art. 9), information hors score lue dans MHNuit. Jamais de montant : contrepartie en repos. */
+  function nuit9(ps,pe,now){
+    try{if(!window.MHNuit)return null;const pr=window.MHNuit.periode(ps,pe),an=window.MHNuit.annee(pe.slice(0,4),{today:now});
+      return {amplitude:pr.amplitude,travail:pr.travail,jours:pr.jours,jours3h:pr.jours3h,annee:an.annee,cumul:an.cumul,seuil:an.seuil,reste:an.reste,statut:an.statut,texte:an.texte,repos:an.repos,source:an.source}}
+    catch(e){console.warn('Travail de nuit',e);return null}
   }
   /* RC employeur : saisie de l'écran Paie (DB.bul, sans gb()) ou relevé ROMI1 de la période. Jamais fabriqué. */
   function rcEmployeur(ps,romi){
@@ -249,6 +255,19 @@
     /* déjà payé */
     h+=det('paye','<span>🧾 Déjà payé</span><b data-tone="'+(c.paid.length?'ok':'na')+'">'+(c.paid.length?c.paid.length+' source'+(c.paid.length>1?'s':''):'non renseigné')+'</b>',
       (c.paid.length?c.paid.map(x=>'<div class="mh37p-kv"><span>'+esc(x.source)+'<small>HS 25 % · HS 50 %</small></span><b>'+hm(x.h25)+' · '+hm(x.h50)+'</b></div>').join(''):'<p>Aucun paiement renseigné pour ce relevé. L’absence d’information n’est pas un paiement nul.</p>')+btn('paie','→ Saisir les HS payées'));
+    /* V37.1 : travail de nuit (art. 9), hors score */
+    const n9=c.nuit9;
+    if(n9){
+      const kn=(l,v,tone)=>'<div class="mh37p-kv"'+(tone?' data-tone="'+tone+'"':'')+'><span>'+l+'</span><b>'+v+'</b></div>';
+      h+=det('nuit','<span>🌙 Travail de nuit (art. 9)</span><b data-tone="'+(n9.statut==='etabli'?'warn':'info')+'" data-k="nuit9">'+hm(n9.amplitude)+'</b>',
+        kn('Amplitude de nuit 22h → 5h<small>relevé '+dShort(p.debut)+' → '+dShort(p.fin)+' · '+n9.jours+' journée'+(n9.jours>1?'s':'')+'</small>',hm(n9.amplitude))+
+        kn('Travail effectif de nuit<small>pauses de nuit déduites</small>',hm(n9.travail))+
+        kn('Cumul '+n9.annee+' (année civile)<small>seuil de 270 h d’amplitude de nuit</small>',hm(n9.cumul)+' / '+hm(n9.seuil),'info')+
+        '<p data-k="nuit9st">'+esc(n9.texte)+'</p>'+
+        (n9.repos?kn('Contrepartie en repos '+n9.repos.pourcentage+' %<small>à confirmer · au moins 5 % conservés en repos ('+hm(n9.repos.plancher)+') si une partie est convertie en argent</small>',hm(n9.repos.heures),'warn')+'<p>'+esc(n9.repos.note)+'</p>'
+          :'<p>Contrepartie en repos : sans objet tant que le statut de travailleur de nuit n’est pas établi.</p>')+
+        '<p>Information hors score, sans montant : la contrepartie prévue est un repos, pas une majoration de salaire. La ligne « Nuit » du brut suit le réglage paie (plage et majoration configurées), distinct de l’article 9.</p><i>Source : '+esc(n9.source)+'</i>'+btn('compteur','→ Compteur'));
+    }
     /* 7. évolution */
     h+=det('evol','<span>📈 Évolution</span><b data-tone="na">'+(c.precedent?'vs '+dShort(c.precedent.debut)+' → '+dShort(c.precedent.fin):'aucun relevé précédent')+'</b>',evolution(c));
     /* 8. vérifier / simuler / outils */

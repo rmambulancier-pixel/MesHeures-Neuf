@@ -95,7 +95,7 @@ srv.listen(0,async()=>{
     ok(html.length>5000&&html.includes('167h55')&&html.includes('Objet : Inspection du travail')&&!BAD.test(html.replace(/<[^>]+>/g,' ')),'imprimable transmis à printHtml : complet, objet repris, aucune valeur invalide');
     const vp=await A.ctx.newPage();await vp.setContent(html);
     const v=await vp.evaluate(()=>({len:document.body.innerText.length,h2:document.querySelectorAll('h2').length,ow:document.documentElement.scrollWidth}));
-    ok(v.len>3000&&v.h2===11,'imprimable rendu : 11 sections, '+v.len+' caractères (pas de page blanche)');
+    ok(v.len>3000&&v.h2===12,'imprimable rendu : 12 sections (V37.1 : travail de nuit), '+v.len+' caractères (pas de page blanche)');
     await vp.screenshot({path:path.join(require('os').tmpdir(),'mesheures-v37d-imprimable.png')});await vp.close();
 
     const J=await button(pg,'Export dossier JSON');ok(J.ok,'bouton « Export dossier JSON » visible et accessible');

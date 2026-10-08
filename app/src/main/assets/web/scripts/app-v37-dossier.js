@@ -11,7 +11,7 @@
  */
 (function(){
   'use strict';
-  const V='37.0.0';   // version de l'application inscrite dans le dossier (format inchangé depuis V37.0-D)
+  const V='37.1.0';   // version de l'application inscrite dans le dossier (V37.1 : section travail de nuit)
   const NR='non renseigné';
   const NC='non comparable';
   const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
@@ -112,6 +112,14 @@
       .map(b=>({mois:b.mois||null,brut:num(b.brut)?Number(b.brut):null,net:num(b.net)?Number(b.net):null,hNorm:num(b.hNorm)?Number(b.hNorm):null,
         hs25H:num(b.hs25H)?Number(b.hs25H):null,hs50H:num(b.hs50H)?Number(b.hs50H):null,habH:num(b.habH)?Number(b.habH):null,ir:num(b.irN)?Number(b.irN):null,iru:num(b.iruN)?Number(b.iruN):null}));
 
+    /* V37.1 : travail de nuit (art. 9), années civiles couvertes ; MHNuit en lecture seule. */
+    let nuit=null;
+    try{if(window.MHNuit&&first){nuit=[];for(let y=+first.slice(0,4);y<=+now.slice(0,4);y++){const a=window.MHNuit.annee(String(y),{today:now});
+      nuit.push({annee:a.annee,debut:a.debut,fin:a.fin,cumul:a.cumul,seuil:a.seuil,franchi:a.franchi,statut:a.statut,texte:a.texte,manquants:a.manquants,
+        repos:a.repos?{pourcentage:a.repos.pourcentage,heures:a.repos.heures,plancher:a.repos.plancher}:null,
+        pausesNonConformes:a.pauseControlee?a.pausesNuit.filter(x=>!x.conforme).map(x=>({date:x.date,continuMax:x.continuMax})):null,
+        mois:a.mensuel.filter(m=>m.amplitude>0)})}}}catch(e){nuit=null}
+
     const chronologie=[]
       .concat(first?[{date:first,quoi:'Première journée enregistrée'}]:[])
       .concat(romi.map(r=>({date:r.fin,quoi:'Relevé ROMI1 du '+dFr(r.debut)+' au '+dFr(r.fin)})))
@@ -129,7 +137,7 @@
         dureeCpMin:num(S.cp)?Number(S.cp):null,habillageMinJour:num(S.hab)?Number(S.hab):null,coefNet:num(S.net)?Number(S.net):null,
         anciennete:anc?{annees:anc.y,mois:anc.m,pct:anc.pct,forcee:num(S.anc)&&Number(S.anc)>0?Number(S.anc):null}:null},
       totaux:{journees:journees.length,travaillees:journees.filter(j=>j.work).length,tte:journees.reduce((s,j)=>s+j.tte,0),amp:journees.reduce((s,j)=>s+j.amp,0)},
-      periodes,journees,smartControl:smart,anomalies,romi,rapprochement,bulletins,constats,evenements,chronologie
+      periodes,journees,smartControl:smart,anomalies,romi,rapprochement,bulletins,constats,nuit,evenements,chronologie
     };
   }
   /* JSON canonique : base de l'empreinte SHA-256 des données */
@@ -166,7 +174,7 @@
     }
 
     H2('3. Périodes de paie (relevés de 4 semaines)');
-    P('Valeurs du moteur de paie (identiques à l’écran Paie sur 2 quatorzaines). HS 25 % / HS 50 % calculées par quatorzaine. Colonne « Mois » : rattachement à confirmer (voir en-tête).',true);
+    if(d.periodes.length)P('Valeurs du moteur de paie (identiques à l’écran Paie sur 2 quatorzaines). HS 25 % / HS 50 % calculées par quatorzaine. Colonne « Mois » : rattachement à confirmer (voir en-tête).',true);
     T([{t:'Période',w:70},{t:'Mois',w:52},{t:'Jours',w:28,a:'r'},{t:'TTE',w:42,a:'r'},{t:'Amplitude',w:46,a:'r'},{t:'HS 25 %',w:40,a:'r'},{t:'HS 50 %',w:40,a:'r'},
        {t:'IDAJ',w:34,a:'r'},{t:'Nuit',w:34,a:'r'},{t:'IR / IRU',w:38,a:'r'},{t:'CP',w:22,a:'r'},{t:'Brut estimé',w:69,a:'r'}],
       d.periodes.slice().reverse().map(p=>[dShort(p.debut)+' → '+dShort(p.fin)+(p.enCours?' (en cours)':''),mFr(p.moisPaie),String(p.jours),hm(p.tte),hm(p.amp),hm(p.h25),hm(p.h50),
@@ -202,15 +210,30 @@
       d.constats.map(c=>[dFr(c.jour),c.regle,c.niveau==='critique'?'Critique':c.niveau==='a_verifier'?'À vérifier':txt(c.niveau),txt(c.source),c.montant>0?eur(c.montant):'non chiffré']),'Aucun constat enregistré.');
 
     H2('9. Journées');
-    P('Toutes les journées enregistrées. Pauses : celles réellement saisies. Repas : choix de la journée appliqué par le moteur.',true);
+    if(d.journees.length)P('Toutes les journées enregistrées. Pauses : celles réellement saisies. Repas : choix de la journée appliqué par le moteur.',true);
     T([{t:'Date',w:50},{t:'Type',w:50},{t:'Horaires',w:56},{t:'Pauses saisies',w:62},{t:'Amplitude',w:44,a:'r'},{t:'TTE',w:36,a:'r'},{t:'Nuit',w:30,a:'r'},{t:'IDAJ',w:30,a:'r'},{t:'Repas',w:60},{t:'Alertes',w:97}],
       d.journees.map(j=>[dFr(j.date),j.libelle+(j.ferie?' (férié)':''),j.work?(j.deb||'?')+' → '+(j.fin||'?'):'—',j.work?(j.pauses.join(', ')||'aucune'):'—',
         j.work?hm(j.amp):'—',j.work?hm(j.tte):'—',j.nuit?hm(j.nuit):'—',j.idaj?hm(j.idaj):'—',j.work?j.repas:'—',j.alertes.length?j.alertes.join(' · '):'—']),'Aucune journée enregistrée.');
 
-    H2('10. Événements et chronologie');
+    H2('10. Travail de nuit (art. 9)');
+    if(!d.nuit)P(d.meta.couverture.debut?'Module de travail de nuit indisponible.':'Aucune journée enregistrée.',true);
+    else{
+      P('Accord du 16/06/2016 (transport sanitaire), art. 9 : nuit de 22 h à 5 h. Travailleur de nuit : au moins 3 h de travail de nuit au moins 2 fois par semaine selon l’horaire habituel, ou au moins 270 h d’amplitude de nuit dans l’année civile. Contrepartie en repos (10 %, 15 % en cas d’affectation exclusive de nuit, non applicable), pas une majoration de salaire. La colonne « Nuit » des sections 3 et 9 suit le réglage paie, distinct de l’article 9.',true);
+      T([{t:'Année',w:50},{t:'Amplitude 22h-5h',w:80,a:'r'},{t:'Seuil',w:50,a:'r'},{t:'Statut',w:335}],
+        d.nuit.map(y=>[y.annee,hm(y.cumul),hm(y.seuil),y.texte+(y.repos?' Repos '+y.repos.pourcentage+' % : '+hm(y.repos.heures)+' (à confirmer). Au moins '+hm(y.repos.plancher)+' (5 %) restent en repos en cas de conversion partielle en argent.':'')]),'Aucune année couverte.');
+      const mois=[].concat(...d.nuit.map(y=>y.mois));
+      P('Information mensuelle des heures de nuit (mois comportant des heures entre 22 h et 5 h).',true);
+      T([{t:'Mois',w:110},{t:'Amplitude de nuit',w:110,a:'r'},{t:'Travail de nuit',w:110,a:'r'},{t:'Journées',w:85,a:'r'},{t:'Journées ≥ 3 h',w:100,a:'r'}],
+        mois.map(m=>[mFr(m.mois),hm(m.amplitude),hm(m.travail),String(m.jours),String(m.jours3h)]),'Aucune heure entre 22 h et 5 h enregistrée.');
+      const pn=[].concat(...d.nuit.map(y=>y.pausesNonConformes||[]));
+      if(d.nuit.some(y=>y.pausesNonConformes))T([{t:'Date',w:100},{t:'Travail continu',w:120,a:'r'},{t:'Constat',w:295}],pn.map(x=>[dFr(x.date),hm(x.continuMax),'Plus de 6 h de travail continu sans pause de 20 min']),'Pause de nuit : aucun dépassement de 6 h de travail continu.');
+      else P('Pause de nuit (20 min après 6 h continues) : non contrôlée, statut de travailleur de nuit non établi.',true);
+    }
+
+    H2('11. Événements et chronologie');
     T([{t:'Date',w:80},{t:'Élément',w:435}],d.chronologie.map(c=>[isoDay(c.date)?dFr(c.date):/^\d{4}-\d{2}$/.test(String(c.date))?mFr(c.date):txt(c.date),c.quoi]),'Aucun élément chronologique.');
 
-    H2('11. Intégrité');
+    H2('12. Intégrité');
     KV([['Empreinte SHA-256 des données',o.dataHash||NR],['Contenu haché','JSON canonique du dossier (données ci-dessus, même génération)']]);
     P('Ce document est un export des données locales de MesHeures. Les estimations et contrôles doivent être confrontés aux documents originaux (bulletins, relevés ROMI1, planning, contrat) et aux règles applicables.',true);
     return B;

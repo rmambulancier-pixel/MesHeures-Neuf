@@ -62,6 +62,10 @@
     const bulletin=((typeof DB!=='undefined'&&DB&&Array.isArray(DB.bulletins))?DB.bulletins:[]).find(b=>b&&b.mois===mhQuatorzaine.payMonth(ps))||null;
     let paie=null;try{if(typeof window.mhCurrentPaySummary==='function')paie=window.mhCurrentPaySummary()}catch(e){paie=null}
     const romi=romiFor(ps,pe);
+    /* V37.1 : travail de nuit (art. 9), module MHNuit en lecture seule ; absent = bloc non affiché. */
+    let nuit9=null;
+    try{if(window.MHNuit){const an=window.MHNuit.annee(pe.slice(0,4),{today:now}),pr=window.MHNuit.periode(ps,pe);
+      nuit9={amplitude:pr.amplitude,travail:pr.travail,jours:pr.jours,annee:an.annee,cumul:an.cumul,seuil:an.seuil,statut:an.statut,texte:an.texte,repos:an.repos}}}catch(e){console.warn('Travail de nuit',e);nuit9=null}
     const alertes={critiques:R.AL.filter(a=>a.lvl==='b').length,aVerifier:R.AL.filter(a=>a.lvl!=='b').length};
     const controle=[];
     if(romi.statut==='comparable'&&romi.aVerifier)controle.push({niveau:'warn',texte:'Écart TTE avec le relevé ROMI1 : '+hm(romi.ecartTte)+'. Écart à analyser.'});
@@ -80,7 +84,7 @@
       travail:{tte:G.tte,amp:G.amp,jours:G.trav},
       hs:{h25:G.h25,h50:G.h50,total:G.h25+G.h50,base:G.seuil,normales:G.nor},
       autres:{nuit:G.nuit,idaj:G.idaj,hab:G.hab,cpMin:G.seuil-G.tte,cpJours:count('CP',ps,pe),rcMin:G.rc,rcJours:count('RC',ps,pe),ir:G.ir,iru:G.iru},
-      quatorzaines,romi,alertes,controle,
+      nuit9,quatorzaines,romi,alertes,controle,
       seuils:{h25:num(DB.s&&DB.s.base)?Number(DB.s.base)*2:NR,h50:num(DB.s&&DB.s.base)&&num(DB.s.pl)?Number(DB.s.base)*2+Number(DB.s.pl):NR},
       paye:{saisie:bul?{h25:num(bul.p25)?Math.round(Number(bul.p25)*60):null,h50:num(bul.p50)?Math.round(Number(bul.p50)*60):null}:null,
         bulletin:bulletin?{mois:bulletin.mois,h25:hDec(bulletin.hs25H),h50:hDec(bulletin.hs50H),ir:num(bulletin.irN)?Number(bulletin.irN):null,iru:num(bulletin.iruN)?Number(bulletin.iruN):null}:null},
@@ -124,6 +128,14 @@
     return h;
   }
 
+  /* V37.1 : plage « Nuit » du réglage paie (moteur), distincte de la période de nuit de l'article 9. */
+  function plageNuit(){const S=(typeof DB!=='undefined'&&DB&&DB.s)||{};return String(S.nuitDeb||'21:00').replace(':','h')+' → '+String(S.nuitFin||'06:00').replace(':','h')}
+  const STATUT9={etabli:'travailleur de nuit',indice:'critère hebdomadaire à confirmer',non:'non travailleur de nuit',non_determinable:'statut non déterminable'};
+  function nuit9Row(n){
+    if(!n)return '';
+    return row('Nuit art. 9 (22h → 5h)','<span data-k="nuit9">'+hm(n.amplitude)+'</span>','amplitude de nuit · cumul '+n.annee+' : <span data-k="nuit9an">'+hm(n.cumul)+'</span> / '+hm(n.seuil)+' · <span data-k="nuit9st">'+STATUT9[n.statut]+'</span>'+
+      (n.repos?' · repos '+n.repos.pourcentage+' % : '+hm(n.repos.heures)+' (à confirmer)':''));
+  }
   function html(opts){
     const c=data(opts),p=c.periode,a=c.autres,r=c.romi;
     let h='<div class="mh31-card mh37c" id="mh37Compteur">'+
@@ -143,7 +155,7 @@
         row('HS 25 %','<span data-k="h25">'+hm(c.hs.h25)+'</span>')+row('HS 50 %','<span data-k="h50">'+hm(c.hs.h50)+'</span>')+
         row('Total HS','<span data-k="hs">'+hm(c.hs.total)+'</span>','calculées par quatorzaine · base HS '+hm(c.hs.base)+' (TTE + CP)')+'</div>'+
       '<div class="mh37c-sec"><span class="mh31-eyebrow">AUTRES TEMPS</span>'+
-        row('Nuit','<span data-k="nuit">'+hm(a.nuit)+'</span>')+row('IDAJ','<span data-k="idaj">'+hm(a.idaj)+'</span>')+
+        row('Nuit','<span data-k="nuit">'+hm(a.nuit)+'</span>',c.nuit9?'réglage paie '+esc(plageNuit())+'':'')+nuit9Row(c.nuit9)+row('IDAJ','<span data-k="idaj">'+hm(a.idaj)+'</span>')+
         row('Habillage','<span data-k="hab">'+hm(a.hab)+'</span>')+
         row('CP','<span data-k="cp">'+(a.cpJours?a.cpJours+' j · '+hm(a.cpMin):'aucun')+'</span>',a.cpJours?'valorisés dans la base HS':'')+
         (a.rcJours?row('RC pris',a.rcJours+' j · '+hm(a.rcMin)):'')+

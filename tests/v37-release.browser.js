@@ -14,6 +14,7 @@ const REPO=path.join(__dirname,'..'),NEW=path.join(REPO,'app/src/main/assets/web
 const R1=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-08-24.json'),'utf8'));
 const R2=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-09-21.json'),'utf8'));
 const NOW=new Date('2026-10-08T10:00:00');
+const REL='37.1.0';   // V37.1 : version courante
 const types={'.js':'text/javascript','.html':'text/html','.css':'text/css','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.wasm':'application/wasm','.gz':'application/gzip'};
 let fails=0;const ok=(c,m)=>{console.log((c?'  ok  ':'FAIL  ')+m);if(!c)fails++};
 let ROOT=NEW;
@@ -79,7 +80,7 @@ srv.listen(0,async()=>{
       await ctx.close();
     }
 
-    console.log('Cache : V37.0-H (entrée ?v=36.2.0) → V37.0.0 RELEASE (entrée ?v=37.0.0)');
+    console.log('Cache : V37.0-H (entrée ?v=36.2.0) → V'+REL+' (entrée ?v='+REL+')');
     const OLD=fs.mkdtempSync(path.join(os.tmpdir(),'mh37h-'));
     const CUR=(fs.readFileSync(path.join(NEW,'sw.js'),'utf8').match(/const CACHE='([^']+)'/)||[])[1];
     cp.execSync('git archive 3a10803 app/src/main/assets/web | tar -x -C '+JSON.stringify(OLD),{cwd:REPO,stdio:'ignore'});
@@ -92,14 +93,14 @@ srv.listen(0,async()=>{
     const base=`http://127.0.0.1:${srv.address().port}/index.html`;
     await pg.goto(base+'?v=36.2.0');let p=await probe();await pg.reload();p=await probe();
     ok(p.sw&&p.ver==='V36.2.0'&&p.caches.includes('mesheures-shell-v37.0-H'),'V37.0-H installé (cache mesheures-shell-v37.0-H)');
-    ROOT=NEW;served.length=0;await pg.goto(base+'?v=37.0.0');await probe();await pg.goto(base+'?v=37.0.0');p=await probe();
-    ok(p.ver==='V37.0.0'&&p.title==='MesHeures V37.0.0','2e lancement du nouvel APK : V37.0.0 affichée');
+    ROOT=NEW;served.length=0;await pg.goto(base+'?v='+REL);await probe();await pg.goto(base+'?v='+REL);p=await probe();
+    ok(p.ver==='V'+REL&&p.title==='MesHeures V'+REL,'2e lancement du nouvel APK : V'+REL+' affichée');
     ok(p.caches.length===1&&p.caches[0]===CUR,'seul le cache '+CUR+' reste (ancien cache 37.0-H supprimé)');
-    ok(p.scripts.every(s=>s.endsWith('?v=37.0.0')),'scripts servis en ?v=37.0.0 (dont romi-master.js, auparavant sans révision)');
+    ok(p.scripts.every(s=>s.endsWith('?v='+REL)),'scripts servis en ?v='+REL+' (dont romi-master.js, auparavant sans révision)');
     ok(!served.some(u=>/\?v=37\.0-[A-H]/.test(u)),'aucun asset 37.0-G / 37.0-H demandé après la mise à jour');
-    await pg.goto(base+'?v=37.0.0');p=await probe();ok(p.ver==='V37.0.0'&&p.caches.length===1,'3e lancement : stable');
+    await pg.goto(base+'?v='+REL);p=await probe();ok(p.ver==='V'+REL&&p.caches.length===1,'3e lancement : stable');
     await ctx.close();fs.rmSync(OLD,{recursive:true,force:true});
   }catch(e){ok(false,'exception : '+e.message)}
   await b.close();srv.close();
-  console.log(fails?`\n${fails} échec(s)`:'\nTest navigateur Release V37.0.0 : OK');process.exit(fails?1:0);
+  console.log(fails?`\n${fails} échec(s)`:'\nTest navigateur Release (V'+REL+') : OK');process.exit(fails?1:0);
 });

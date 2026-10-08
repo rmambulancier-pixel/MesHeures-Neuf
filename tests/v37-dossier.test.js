@@ -29,7 +29,8 @@ function load(days,opts={}){
     ';DB.s={...DEF,...'+JSON.stringify(opts.s||fx.s)+'};DB.days='+JSON.stringify(days)+';'+extra+'mhNormalizeMealSettings();mhMigrateLegacyMealChoices();'+
     'function save(){MH30DataEngine.invalidate("save")}function mhRefresh(){}'+
     ';globalThis.__x={get DB(){return DB},cd,calcPer,brutOf,F,Q:mhQuatorzaine};',ctx);
-  for(const f of ['app-legal.js','app-evidence.js','app-v37-control.js','app-v37-romi-reconciliation.js'])vm.runInContext(fs.readFileSync(path.join(WEB,f),'utf8'),ctx,{filename:f});
+  for(const f of ['app-legal.js','app-evidence.js','app-v371-nuit.js','app-v37-control.js','app-v37-romi-reconciliation.js'])   // V37.1 : MHNuit chargé comme dans index.html
+  vm.runInContext(fs.readFileSync(path.join(WEB,f),'utf8'),ctx,{filename:f});
   if(opts.romi)win.MH_ROMI={list:()=>clone(opts.romi)};
   if(opts.freeze){vm.runInContext('Object.freeze(DB);',ctx);deepFreeze(ctx.__x.DB)}
   vm.runInContext(fs.readFileSync(path.join(WEB,'app-v37-dossier.js'),'utf8'),ctx,{filename:'app-v37-dossier.js'});
@@ -77,9 +78,9 @@ t('pdftotext (si installé) relit le même contenu',()=>{
   ['167h55','173h25','32h00','30h55','150h15','Identité','Rapprochement paie','Smart Control'].forEach(x=>assert.ok(out.includes(x),x))});
 
 console.log('Contenu principal');
-t('les 11 sections sont présentes (PDF et imprimable)',()=>{
+t('les 12 sections sont présentes (PDF et imprimable ; V37.1 : 10. Travail de nuit)',()=>{
   ['1. Identité et configuration','2. Synthèse Smart Control','3. Périodes de paie','4. Relevés ROMI1','5. Rapprochement paie','6. Bulletins importés',
-   '7. Anomalies réglementaires','8. Constats enregistrés','9. Journées','10. Événements et chronologie','11. Intégrité'].forEach(s=>{
+   '7. Anomalies réglementaires','8. Constats enregistrés','9. Journées','10. Travail de nuit (art. 9)','11. Événements et chronologie','12. Intégrité'].forEach(s=>{
     assert.ok(R.pdf.text.includes(s),'PDF '+s);assert.ok(R.html.includes(s.replace(/&/g,'&amp;')),'HTML '+s)})});
 t('identité : embauche, ancienneté (moteur calcAnc), taux, CP ; nom absent → « non renseigné »',()=>{
   assert.ok(R.pdf.text.includes('09/09/2019'));assert.ok(R.pdf.text.includes('14,20 € / h'));assert.ok(/Salarié\nnon renseigné/.test(R.pdf.text));
