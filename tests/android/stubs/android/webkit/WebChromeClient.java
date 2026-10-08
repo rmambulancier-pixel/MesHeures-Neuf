@@ -1,0 +1,1 @@
+package android.webkit; public class WebChromeClient{ public boolean onShowFileChooser(WebView w,ValueCallback<android.net.Uri[]> c,FileChooserParams p){return false;} public abstract static class FileChooserParams{ public abstract String[] getAcceptTypes(); public abstract boolean isCaptureEnabled(); } }

@@ -11,17 +11,21 @@ const read=p=>fs.readFileSync(path.join(REPO,p),'utf8');
 const clone=o=>JSON.parse(JSON.stringify(o));
 let fails=0;
 function t(name,fn){try{fn();console.log('  ok  '+name)}catch(e){fails++;console.log('FAIL  '+name+'\n      '+(e&&e.message))}}
-const REL='37.1.1';   // V37.1 : version courante (V37.0.0 / 3700 → V37.1.1 / 3711)
+const REL='37.2.0';   // version courante (V37.1.1 / 3711 → V37.2.0 / 3720)
+/* V37.2 : la version reste 37.2.0 pendant les sous-lots ; la révision du cache change à chaque lot (37.2.0-B, -C…),
+   sinon le service worker continuerait de servir les scripts du lot précédent sur le téléphone. */
+const REV=(fs.readFileSync(path.join(REPO,'app/src/main/assets/web/sw.js'),'utf8').match(/const CACHE='mesheures-shell-v([^']+)'/)||[])[1];
 
 console.log('Version Android');
-t('version.properties : VERSION=37.1.1, VERSION_CODE=3711 (37.0.0 / 3700 → 37.1.1 / 3711, même schéma)',()=>{
-  const p=Object.fromEntries(read('version.properties').trim().split(/\n/).map(l=>l.split('=')));assert.equal(p.VERSION,REL);assert.equal(p.VERSION_CODE,'3711');
-  const [a,b,c]=p.VERSION.split('.').map(Number);assert.equal(Number(p.VERSION_CODE),a*100+b*10+c);assert.ok(Number(p.VERSION_CODE)>3700,'versionCode croissant')});
+t('version.properties : VERSION=37.2.0, VERSION_CODE=3720 (37.1.1 / 3711 → 37.2.0 / 3720, même schéma)',()=>{
+  const p=Object.fromEntries(read('version.properties').trim().split(/\n/).map(l=>l.split('=')));assert.equal(p.VERSION,REL);assert.equal(p.VERSION_CODE,'3720');
+  const [a,b,c]=p.VERSION.split('.').map(Number);assert.equal(Number(p.VERSION_CODE),a*100+b*10+c);assert.ok(Number(p.VERSION_CODE)>3711,'versionCode croissant')});
 t('build.gradle lit version.properties (versionName / versionCode non codés en dur)',()=>{
   const g=read('app/build.gradle');assert.ok(/versionCode releaseCode/.test(g)&&/versionName releaseVersion/.test(g)&&/version\.properties/.test(g))});
-t('HybridCore : VERSION 37.1.1, ENTRY_URL ?v=37.1.1',()=>{const j=read('app/src/main/java/com/mesheures/app/core/HybridCore.java');
-  assert.ok(j.includes('VERSION = "'+REL+'"'));assert.ok(j.includes('index.html?v='+REL+'"'))});
-t('version affichée et métadonnées web : 37.1.1 partout, plus aucun 36.2.0',()=>{
+t('HybridCore : VERSION 37.2.0, ENTRY_URL ?v=<révision du cache>',()=>{const j=read('app/src/main/java/com/mesheures/app/core/HybridCore.java');
+  assert.ok(j.includes('VERSION = "'+REL+'"'));assert.ok(j.includes('index.html?v='+REV+'"'))});
+t('révision du cache : 37.2.0 ou 37.2.0-<lot>',()=>{assert.ok(REV===REL||new RegExp('^'+REL.replace(/\./g,'\\.')+'-[A-Z]$').test(REV),REV)});
+t('version affichée et métadonnées web : 37.2.0 partout, plus aucun 36.2.0',()=>{
   const idx=read('app/src/main/assets/web/index.html');assert.ok(idx.includes('<title>MesHeures V'+REL+'</title>'));assert.ok(idx.includes('content="'+REL+'"'));assert.ok(idx.includes('>V'+REL+'</span>'));
   assert.equal(JSON.parse(read('app/src/main/assets/web/manifest.json')).version,REL);
   const walk=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?(e.name==='vendor'?[]:walk(path.join(d,e.name))):[path.join(d,e.name)]);
@@ -30,10 +34,10 @@ t('version affichée et métadonnées web : 37.1.1 partout, plus aucun 36.2.0',(
 console.log('Cache et références d’assets');
 const idx=read('app/src/main/assets/web/index.html'),sw=read('app/src/main/assets/web/sw.js'),appjs=read('app/src/main/assets/web/scripts/app.js');
 const SHELL=JSON.parse(sw.match(/const SHELL=(\[[^\]]*\])/)[1].replace(/'/g,'"'));
-t('cache final unique : mesheures-shell-v37.1.1',()=>{assert.equal(sw.match(/const CACHE='([^']+)'/)[1],'mesheures-shell-v'+REL);assert.ok(/k\.startsWith\('mesheures-shell-'\)&&k!==CACHE/.test(sw),'anciens caches supprimés à l’activation')});
-t('index.html, sw.js, app.js : révision ?v=37.1.1 uniquement (aucune révision intermédiaire 37.0-x)',()=>{
+t('cache unique : mesheures-shell-v<révision>',()=>{assert.equal(sw.match(/const CACHE='([^']+)'/)[1],'mesheures-shell-v'+REV);assert.ok(/k\.startsWith\('mesheures-shell-'\)&&k!==CACHE/.test(sw),'anciens caches supprimés à l’activation')});
+t('index.html, sw.js, app.js : une seule révision ?v= (aucune révision 37.0-x ni 36.x)',()=>{
   [idx,sw,appjs].forEach(s=>{assert.ok(!/\?v=37\.0-[0A-Z]/.test(s));assert.ok(!/\?v=36\./.test(s))});
-  assert.ok(appjs.includes("sw.js?v="+REL));(idx.match(/\?v=[^"']+/g)||[]).forEach(v=>assert.equal(v,'?v='+REL,v))});
+  assert.ok(appjs.includes("sw.js?v="+REV));(idx.match(/\?v=[^"']+/g)||[]).forEach(v=>assert.equal(v,'?v='+REV,v))});
 t('chaque script / feuille de style de index.html existe et figure dans le cache du service worker',()=>{
   const refs=[...idx.matchAll(/(?:src|href)="(\.?\/?(?:scripts|style)\/[^"]+)"/g)].map(m=>m[1].replace(/^(?!\.\/)/,'./'));
   assert.ok(refs.length>35,'références '+refs.length);
@@ -91,5 +95,5 @@ t('ROMI1 : 150h15 · HS 39h25 (39,42 h) · 16 j · écart 17h40 non expliqué',(
   assert.deepEqual([F(r.employeur.tte),F(r.employeur.hs),r.employeur.presence,F(r.ecartTte)],['150h15','39h25',16,'17h40']);
   assert.equal(r.journalier.disponible,false);assert.equal(r.journalier.ecartExplique,null);assert.equal(r.journalier.ecartRestant,1060)});
 
-console.log(fails?`\n${fails} échec(s)`:'\nTous les tests du Release (V37.1.1) passent.');
+console.log(fails?`\n${fails} échec(s)`:'\nTous les tests du Release (V37.2.0, révision '+REV+') passent.');
 process.exit(fails?1:0);

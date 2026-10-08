@@ -15,7 +15,8 @@ const REPO=path.join(__dirname,'..'),NEW=path.join(REPO,'app/src/main/assets/web
 const R1=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-08-24.json'),'utf8'));
 const R2=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-09-21.json'),'utf8'));
 const NOW=new Date('2026-10-08T10:00:00');
-const REL='37.1.1';
+const REL='37.2.0';   // version affichée
+const REV=(require('fs').readFileSync(require('path').join(__dirname,'..','app/src/main/assets/web/sw.js'),'utf8').match(/const CACHE='mesheures-shell-v([^']+)'/)||[])[1];   // révision du cache (37.2.0-B…)
 const types={'.js':'text/javascript','.html':'text/html','.css':'text/css','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.wasm':'application/wasm','.gz':'application/gzip'};
 let fails=0;const ok=(c,m)=>{console.log((c?'  ok  ':'FAIL  ')+m);if(!c)fails++};
 let ROOT=NEW;
@@ -129,10 +130,10 @@ srv.listen(0,async()=>{
       await pg.goto(base+'?v=37.0.0');let p=await probe();await pg.reload();p=await probe();
       ok(p.sw&&p.ver==='V37.0.0'&&p.caches.includes('mesheures-shell-v37.0.0')&&p.nuit==='undefined','V37.0.0 installé (cache mesheures-shell-v37.0.0, pas de module de nuit)');
       const daysBefore=p.days;
-      ROOT=NEW;served.length=0;await pg.goto(base+'?v='+REL);await probe();await pg.goto(base+'?v='+REL);p=await probe();
+      ROOT=NEW;served.length=0;await pg.goto(base+'?v='+REV);await probe();await pg.goto(base+'?v='+REV);p=await probe();
       ok(p.ver==='V'+REL&&p.nuit==='object','2e lancement du nouvel APK : V'+REL+' affichée, module de nuit chargé');
-      ok(p.caches.length===1&&p.caches[0]==='mesheures-shell-v'+REL,'seul le cache mesheures-shell-v'+REL+' reste');
-      ok(served.some(u=>u.includes('app-v371-nuit.js?v='+REL))&&!served.some(u=>/\?v=37\.0\.0/.test(u)&&!/index\.html/.test(u)),'app-v371-nuit.js servi, aucun asset 37.0.0 demandé après la mise à jour');
+      ok(p.caches.length===1&&p.caches[0]==='mesheures-shell-v'+REV,'seul le cache mesheures-shell-v'+REV+' reste');
+      ok(served.some(u=>u.includes('app-v371-nuit.js?v='+REV))&&!served.some(u=>/\?v=37\.0\.0/.test(u)&&!/index\.html/.test(u)),'app-v371-nuit.js servi, aucun asset 37.0.0 demandé après la mise à jour');
       ok(p.days===daysBefore&&p.days>0,'données conservées ('+p.days+' journées)');
       ROOT=NEW;await ctx.close();
     }

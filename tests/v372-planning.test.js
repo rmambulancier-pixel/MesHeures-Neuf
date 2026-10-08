@@ -188,8 +188,8 @@ t('moteur : app-core.js strictement identique au tag v37.1.1 (aa4f9b2)',()=>{let
   if(old==null){console.log('      (aa4f9b2 absent : comparaison ignorée)');return}assert.equal(fs.readFileSync(path.join(WEB,'app-core.js'),'utf8'),old)});
 t('module sans accès au moteur ni aux journées : aucune référence à DB, cd(), calcPer, save(), ROMI',()=>{
   const code=SRC.replace(/\/\*[\s\S]*?\*\//g,'');assert.ok(!/\bDB\b|\bcd\(|calcPer|brutOf|\bsave\(|MH_ROMI|mesheures_v3/.test(code))});
-t('non intégré à l’application en V37.2.0-A (index.html, sw.js inchangés)',()=>{const idx=fs.readFileSync(path.join(REPO,'app/src/main/assets/web/index.html'),'utf8'),sw=fs.readFileSync(path.join(REPO,'app/src/main/assets/web/sw.js'),'utf8');
-  assert.ok(!idx.includes('app-v372-planning')&&!sw.includes('app-v372-planning'))});
+t('intégré à l’application depuis V37.2.0-B : chargé une seule fois, après app-core.js, et dans le cache du service worker',()=>{const idx=fs.readFileSync(path.join(REPO,'app/src/main/assets/web/index.html'),'utf8'),sw=fs.readFileSync(path.join(REPO,'app/src/main/assets/web/sw.js'),'utf8');
+  assert.equal((idx.match(/scripts\/app-v372-planning\.js\?v=/g)||[]).length,1);assert.ok(idx.indexOf('app-v372-planning.js')>idx.indexOf('app-core.js'));assert.ok(sw.includes("'./scripts/app-v372-planning.js?v="))});
 
 (async()=>{for(const [name,fn] of tests){try{await fn();console.log('  ok  '+name)}catch(e){fails++;console.log('FAIL  '+name+'\n      '+(e&&e.message))}}
   console.log(fails?`\n${fails} échec(s)`:'\nTous les tests V37.2.0-A (planning prévu, cœur) passent.');process.exit(fails?1:0)})();

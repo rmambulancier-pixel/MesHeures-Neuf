@@ -200,7 +200,8 @@ t('module sans calcul propre : réutilise minutesNuit / mhEffectivePauses / cd, 
   assert.ok(/minutesNuit\(/.test(src)&&/mhEffectivePauses\(/.test(src)&&/\bcd\(/.test(src));assert.ok(!/S\.taux|brutOf|calcPer|€|nuitMaj|localStorage|save\(/.test(src))});
 t('enregistré dans index.html (après app-core.js) et dans le cache du service worker',()=>{
   const idx=fs.readFileSync(path.join(REPO,'app/src/main/assets/web/index.html'),'utf8'),sw=fs.readFileSync(path.join(REPO,'app/src/main/assets/web/sw.js'),'utf8');
-  assert.ok(idx.indexOf('app-v371-nuit.js?v=37.1.1')>idx.indexOf('app-core.js?v=37.1.1'));assert.ok(idx.indexOf('app-v371-nuit.js')<idx.indexOf('app-v37-control.js'));assert.ok(sw.includes("'./scripts/app-v371-nuit.js?v=37.1.1'"))});
+  const rev=(sw.match(/const CACHE='mesheures-shell-v([^']+)'/)||[])[1];   /* révision courante du cache (V37.2 : 37.2.0-B…) */
+  assert.ok(idx.indexOf('app-v371-nuit.js?v='+rev)>idx.indexOf('app-core.js?v='+rev));assert.ok(idx.indexOf('app-v371-nuit.js')<idx.indexOf('app-v37-control.js'));assert.ok(sw.includes("'./scripts/app-v371-nuit.js?v="+rev+"'"))});
 
 console.log(fails?`\n${fails} échec(s)`:'\nTous les tests V37.1 travail de nuit passent.');
 process.exit(fails?1:0);

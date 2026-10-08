@@ -12,13 +12,18 @@ import androidx.webkit.WebViewFeature;
 
 /** V30 secure WebView boundary. */
 public final class HybridCore {
-    public static final String VERSION = "37.1.1";
+    public static final String VERSION = "37.2.0";
     public static final String DOMAIN = "appassets.androidplatform.net";
-    public static final String ENTRY_URL = "https://" + DOMAIN + "/assets/web/index.html?v=37.1.1";
+    public static final String ENTRY_URL = "https://" + DOMAIN + "/assets/web/index.html?v=37.2.0-B";
     private final WebViewAssetLoader assetLoader;
     public HybridCore(Context context) {
+        /* V37.2 : originaux des plannings prévisionnels, servis en lecture seule depuis files/plannings uniquement
+           (InternalStoragePathHandler refuse toute sortie de ce dossier). */
+        java.io.File plannings = new java.io.File(context.getFilesDir(), "plannings");
+        if (!plannings.isDirectory()) plannings.mkdirs();
         assetLoader = new WebViewAssetLoader.Builder().setDomain(DOMAIN)
-                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(context)).build();
+                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(context))
+                .addPathHandler("/planning-source/", new WebViewAssetLoader.InternalStoragePathHandler(context, plannings)).build();
     }
     public WebResourceResponse intercept(WebResourceRequest request) {
         if (request == null || request.getUrl() == null) return null;

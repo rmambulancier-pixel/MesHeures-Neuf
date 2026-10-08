@@ -9,7 +9,7 @@
 (function () {
   'use strict';
 
-  const V = '37.1.1';
+  const V = '37.2.0';
   const PRIMARY = ['home', 'jour', 'mois', 'paie', 'analyse'];
 
   const $ = id => document.getElementById(id);

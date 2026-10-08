@@ -17,7 +17,7 @@ function tab(t){
   if(t==='jour' && !curDate){curDate=today();curMonth=curDate.slice(0,7)}
   if(t==='mois' && !curMonth){curMonth=today().slice(0,7);curDate=today()}
   curTab=t;
-  ['home','jour','mois','paie','analyse','audit','bul','romi','reg'].forEach(x=>{
+  ['home','jour','mois','paie','analyse','audit','bul','romi','reg','prevu'].forEach(x=>{
     const sec=$('s-'+x),btn=$('t-'+x);
     if(sec)sec.classList.toggle('on',x===t);
     if(btn)btn.classList.toggle('on',x===t);

@@ -11,7 +11,7 @@
  */
 (function(){
   'use strict';
-  const V='37.1.1';   // version de l'application inscrite dans le dossier (V37.1 : section travail de nuit)
+  const V='37.2.0';   // version de l'application inscrite dans le dossier
   const NR='non renseigné';
   const NC='non comparable';
   const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];

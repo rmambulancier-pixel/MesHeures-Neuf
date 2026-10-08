@@ -17,7 +17,7 @@
  */
 (function(root){
   'use strict';
-  const V='37.2.0-A';
+  const V='37.2.0-B';
   const KEY='mh_planning_v372';
   const ISO=/^\d{4}-\d{2}-\d{2}$/;
   const MAX_JOURS=62;
@@ -226,9 +226,40 @@
   }
 
   /* ---------- stockage (clé séparée, hors DB ; stockage injectable pour les tests) ---------- */
+  /* ---------- import d'une source (lot B) : la source avant toute analyse ----------
+   * SOURCE ORIGINALE (fichier sur le téléphone, jamais modifié) → DONNÉES EXTRAITES (texte d'un PDF texte, rangé avec la source)
+   * → INTERPRÉTATION (planning du lot A, lié par planningId, lots suivants) → CORRECTIONS (journal).
+   * Aucune analyse ici : pas d'OCR, pas de salarié, pas de période devinée. */
+  const REF=/^(android|idb):[0-9a-f]{64}\.(jpg|png|webp|pdf)$/;
+  const SOURCE_TYPES=['photo','galerie','fichier'];
+  const FORMATS={jpeg:'image/jpeg',png:'image/png',webp:'image/webp',pdf:'application/pdf'};
+  function creerImport(m){
+    m=m||{};
+    if(!SOURCE_TYPES.includes(m.sourceType))throw new Error('Type de source inconnu.');
+    if(!FORMATS[m.format])throw new Error('Format non pris en charge.');
+    if(!/^[0-9a-f]{64}$/.test(String(m.sha256||'')))throw new Error('Empreinte SHA-256 manquante.');
+    if(!REF.test(String(m.localRef||'')))throw new Error('Référence locale de la source invalide.');
+    if(!(Number(m.size)>0))throw new Error('Taille du fichier invalide.');
+    const now=m.importedAt||new Date().toISOString(),pdf=m.format==='pdf',txt=m.texte||null;
+    const ocrStatut=!pdf?'a_venir':txt&&txt.textuel?'pdf_texte':'pdf_image_a_venir';
+    return {
+      id:m.id||('imp-'+m.sha256.slice(0,16)),format:'MesHeures Planning prévu · import',version:V,nature:'prévisionnel',
+      createdAt:m.createdAt||now,importedAt:now,statut:'a_analyser',sourceType:m.sourceType,
+      periode:{debut:null,fin:null},salarie:null,
+      source:{originalFileName:String(m.originalFileName||''),mimeType:FORMATS[m.format],format:m.format,size:Number(m.size),sha256:m.sha256,localRef:m.localRef,
+        disponibilite:'disponible',orientation:m.orientation==null?null:Number(m.orientation),largeur:m.largeur==null?null:Number(m.largeur),hauteur:m.hauteur==null?null:Number(m.hauteur),
+        pages:m.pages==null?null:Number(m.pages)},
+      ocr:{statut:ocrStatut,libelle:ocrStatut==='pdf_texte'?'PDF texte : texte extrait, analyse à venir':ocrStatut==='pdf_image_a_venir'?'PDF image — analyse OCR à venir':'Image : analyse OCR à venir'},
+      extraction:{texte:pdf?{disponible:!!(txt&&txt.textuel),caracteres:txt?Number(txt.caracteres)||0:0,pages:txt?Number(txt.pages)||0:0,ref:txt&&txt.textuel?String(txt.ref||''):null,sha256:txt&&txt.sha256||null}:null},
+      planningId:null,corrections:[],versions:{module:V,dictionnaire:{id:DICT_V1.id,version:DICT_V1.version}}
+    };
+  }
+
   function store(storage){
     const ls=storage||root.localStorage;
-    const lire=()=>{try{const o=JSON.parse(ls.getItem(KEY)||'null');return o&&typeof o==='object'&&o.plannings&&typeof o.plannings==='object'?o:{version:1,plannings:{}}}catch(e){return {version:1,plannings:{}}}};
+    const lire=()=>{let o;try{o=JSON.parse(ls.getItem(KEY)||'null')}catch(e){o=null}
+      if(!(o&&typeof o==='object'&&o.plannings&&typeof o.plannings==='object'))o={version:1,plannings:{}};
+      if(!o.imports||typeof o.imports!=='object')o.imports={};return o};
     const ecrire=o=>ls.setItem(KEY,JSON.stringify(o));
     return {
       key:KEY,
@@ -255,18 +286,42 @@
           return i?{planning:p.id,type:i.type,libelle:i.libelle,dureeMin:i.dureeMin,horaires:i.horaires,applicable:i.applicable,confiance:i.confiance,origine:i.origine}:null}).filter(Boolean);
       },
       /* Sauvegarde JSON : planning sans les photos (décision du 08/10/2026). */
-      exporter(){const o=lire();return Object.keys(o.plannings).length?clone(o):null},
+      /* ----- imports (lot B) ----- */
+      importsListe(){return Object.values(lire().imports).sort((a,b)=>String(b.importedAt).localeCompare(String(a.importedAt)))},
+      importLire(id){const r=lire().imports[id];return r?clone(r):null},
+      importParEmpreinte(sha){const r=Object.values(lire().imports).find(x=>x.source.sha256===sha);return r?clone(r):null},
+      /* Doublon exact (même SHA-256) refusé : jamais deux imports du même fichier. */
+      importEnregistrer(rec){
+        const o=lire(),d=Object.values(o.imports).find(x=>x.source.sha256===rec.source.sha256&&x.id!==rec.id);
+        if(d){const e=new Error('Doublon : ce fichier a déjà été importé le '+String(d.importedAt).slice(0,10)+'.');e.code='DOUBLON';e.existant=d.id;throw e}
+        o.imports[rec.id]=clone(rec);ecrire(o);return clone(rec);
+      },
+      /* Seuls l'état de disponibilité de la source et le lien vers le planning analysé sont modifiables. */
+      importMaj(id,champs){
+        const o=lire(),r=o.imports[id];if(!r)return null;champs=champs||{};
+        if('disponibilite' in champs){if(!['disponible','a_verifier'].includes(champs.disponibilite))throw new Error('Disponibilité invalide.');r.source.disponibilite=champs.disponibilite}
+        if('planningId' in champs)r.planningId=champs.planningId==null?null:String(champs.planningId);
+        ecrire(o);return clone(r);
+      },
+      importSupprimer(id){const o=lire();if(!o.imports[id])return false;delete o.imports[id];ecrire(o);return true},
+      exporter(){const o=lire();return Object.keys(o.plannings).length||Object.keys(o.imports).length?clone(o):null},
       valider(o){
         if(o==null)return null;
         if(typeof o!=='object'||!o.plannings||typeof o.plannings!=='object')throw new Error('Bloc plannings de la sauvegarde invalide.');
         Object.entries(o.plannings).forEach(([k,p])=>{if(!p||!p.periode||!isIso(p.periode.debut)||!isIso(p.periode.fin)||!p.source||!/^[0-9a-f]{64}$/.test(String(p.source.sha256||''))||!Array.isArray(p.interpretation))
           throw new Error('Planning invalide dans la sauvegarde ('+k+').')});
-        return Object.keys(o.plannings).length;
+        if(o.imports!=null&&typeof o.imports!=='object')throw new Error('Bloc imports de la sauvegarde invalide.');
+        Object.entries(o.imports||{}).forEach(([k,r])=>{if(!r||!r.source||!/^[0-9a-f]{64}$/.test(String(r.source.sha256||''))||!REF.test(String(r.source.localRef||''))||!SOURCE_TYPES.includes(r.sourceType))
+          throw new Error('Import de planning invalide dans la sauvegarde ('+k+').')});
+        return Object.keys(o.plannings).length+Object.keys(o.imports||{}).length;
       },
-      importer(o){const n=this.valider(o);if(n==null)return null;const c=clone(o);Object.values(c.plannings).forEach(p=>{p.source.original='a_verifier'}) /* photo non incluse : présence sur l’appareil à vérifier (IndexedDB, lot B) */;ecrire({version:1,plannings:c.plannings});return n}
+      /* Restauration : les fichiers ne sont pas dans la sauvegarde ; leur présence sur l'appareil est « à vérifier » (jamais « absente »). */
+      importer(o){const n=this.valider(o);if(n==null)return null;const c=clone(o);
+        Object.values(c.plannings).forEach(p=>{p.source.original='a_verifier'});Object.values(c.imports||{}).forEach(r=>{r.source.disponibilite='a_verifier'});
+        ecrire({version:1,plannings:c.plannings,imports:c.imports||{}});return n}
     };
   }
 
-  root.MHPlanning={version:V,KEY,DICT_V1,norm,interpreter,periodeDuTitre,verifierPeriode,datesPeriode,dateEntete,verifierColonnes,
+  root.MHPlanning={version:V,KEY,DICT_V1,REF,FORMATS,creerImport,norm,interpreter,periodeDuTitre,verifierPeriode,datesPeriode,dateEntete,verifierColonnes,
     scoreNom,candidats,extraireLigne,creer,corriger,sha256,store,hm};
 })(typeof window!=='undefined'?window:globalThis);

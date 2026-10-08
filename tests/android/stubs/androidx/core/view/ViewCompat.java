@@ -1,0 +1,1 @@
+package androidx.core.view; public class ViewCompat{ public interface L{ WindowInsetsCompat onApplyWindowInsets(android.view.View v,WindowInsetsCompat i);} public static void setOnApplyWindowInsetsListener(android.view.View v,L l){} public static void requestApplyInsets(android.view.View v){} }
