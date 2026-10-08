@@ -11,7 +11,7 @@
  */
 (function(){
   'use strict';
-  const V='37.1.0';   // version de l'application inscrite dans le dossier (V37.1 : section travail de nuit)
+  const V='37.1.1';   // version de l'application inscrite dans le dossier (V37.1 : section travail de nuit)
   const NR='non renseigné';
   const NC='non comparable';
   const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
@@ -117,7 +117,7 @@
     try{if(window.MHNuit&&first){nuit=[];for(let y=+first.slice(0,4);y<=+now.slice(0,4);y++){const a=window.MHNuit.annee(String(y),{today:now});
       nuit.push({annee:a.annee,debut:a.debut,fin:a.fin,cumul:a.cumul,seuil:a.seuil,franchi:a.franchi,statut:a.statut,texte:a.texte,manquants:a.manquants,
         repos:a.repos?{pourcentage:a.repos.pourcentage,heures:a.repos.heures,plancher:a.repos.plancher}:null,
-        pausesNonConformes:a.pauseControlee?a.pausesNuit.filter(x=>!x.conforme).map(x=>({date:x.date,continuMax:x.continuMax})):null,
+        pausesNonConformes:a.pauseControlee?a.pausesNuit.filter(x=>!x.conforme).map(x=>({date:x.date,continuNuit:x.continuNuit})):null,
         mois:a.mensuel.filter(m=>m.amplitude>0)})}}}catch(e){nuit=null}
 
     const chronologie=[]
@@ -226,7 +226,7 @@
       T([{t:'Mois',w:110},{t:'Amplitude de nuit',w:110,a:'r'},{t:'Travail de nuit',w:110,a:'r'},{t:'Journées',w:85,a:'r'},{t:'Journées ≥ 3 h',w:100,a:'r'}],
         mois.map(m=>[mFr(m.mois),hm(m.amplitude),hm(m.travail),String(m.jours),String(m.jours3h)]),'Aucune heure entre 22 h et 5 h enregistrée.');
       const pn=[].concat(...d.nuit.map(y=>y.pausesNonConformes||[]));
-      if(d.nuit.some(y=>y.pausesNonConformes))T([{t:'Date',w:100},{t:'Travail continu',w:120,a:'r'},{t:'Constat',w:295}],pn.map(x=>[dFr(x.date),hm(x.continuMax),'Plus de 6 h de travail continu sans pause de 20 min']),'Pause de nuit : aucun dépassement de 6 h de travail continu.');
+      if(d.nuit.some(y=>y.pausesNonConformes))T([{t:'Date',w:100},{t:'Travail continu de nuit',w:120,a:'r'},{t:'Constat',w:295}],pn.map(x=>[dFr(x.date),hm(x.continuNuit),'6 h ou plus de travail effectif continu entre 22 h et 5 h sans pause de 20 min']),'Pause de nuit : aucune période de 6 h de travail effectif continu entre 22 h et 5 h sans pause de 20 min.');
       else P('Pause de nuit (20 min après 6 h continues) : non contrôlée, statut de travailleur de nuit non établi.',true);
     }
 

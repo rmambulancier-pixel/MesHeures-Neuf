@@ -67,17 +67,17 @@ t('valeurs de référence inchangées : TTE 167h55, amplitude 173h25, Q1 112h35 
 
 console.log('Journée (période de nuit 22 h → 5 h)');
 const J=(d,k)=>{const A=load({[k||'2026-09-22']:d},{modules:['app-v371-nuit.js']});return {j:A.N.jour(k||'2026-09-22'),A}};
-t('20:00 → 04:00, pause 00:00-00:30 : amplitude 6h00, travail 5h30, continu 4h00 ; réglage paie inchangé (7h00, 21 h → 6 h)',()=>{
-  const {j,A}=J(day('20:00','04:00',[{d:'00:00',f:'00:30'}]));assert.deepEqual([F(j.amplitude),F(j.travail),F(j.continuMax)],['6h00','5h30','4h00']);assert.equal(F(A.X.cd('2026-09-22').nuit),'7h00')});
+t('20:00 → 04:00, pause 00:00-00:30 : amplitude 6h00, travail 5h30, continu de nuit 3h30 (service 4h00) ; réglage paie inchangé (7h00, 21 h → 6 h)',()=>{
+  const {j,A}=J(day('20:00','04:00',[{d:'00:00',f:'00:30'}]));assert.deepEqual([F(j.amplitude),F(j.travail),F(j.continuNuit),F(j.continuService)],['6h00','5h30','3h30','4h00']);assert.equal(F(A.X.cd('2026-09-22').nuit),'7h00')});
 t('04:00 → 14:20 (journée réelle du 01/10) : 1h00 ; 06:30 → 14:20 : 0h00 ; 21:30 → 23:00 : 1h00',()=>{
   assert.equal(F(J(day('04:00','14:20',[{d:'11:40',f:'12:10'}])).j.amplitude),'1h00');assert.equal(J(day('06:30','14:20')).j.amplitude,0);assert.equal(F(J(day('21:30','23:00')).j.amplitude),'1h00')});
 t('pause partiellement de nuit : seule la part 22 h → 5 h est déduite (20:00 → 03:00, pause 21:30-22:30 → travail 4h30)',()=>{
   const {j}=J(day('20:00','03:00',[{d:'21:30',f:'22:30'}]));assert.deepEqual([F(j.amplitude),F(j.travail)],['5h00','4h30'])});
-t('continuité : une pause de moins de 20 min n’interrompt pas le travail (8h00 continues) ; 20 min l’interrompt (4h00)',()=>{
-  assert.equal(F(J(day('21:00','05:00',[{d:'01:00',f:'01:15'}])).j.continuMax),'8h00');assert.equal(F(J(day('21:00','05:00',[{d:'01:00',f:'01:20'}])).j.continuMax),'4h00')});
+t('continuité : une pause de moins de 20 min n’interrompt pas le bloc (6h45 de nuit) ; 20 min l’interrompt (3h40)',()=>{
+  assert.equal(F(J(day('21:00','05:00',[{d:'01:00',f:'01:15'}])).j.continuNuit),'6h45');assert.equal(F(J(day('21:00','05:00',[{d:'01:00',f:'01:20'}])).j.continuNuit),'3h40')});
 t('pauses chevauchantes fusionnées par le moteur : 22:00 → 07:00, 02:00-02:30 + 02:20-02:40 → une pause de 40 min',()=>{
   const {j}=J(day('22:00','07:00',[{d:'02:00',f:'02:30'},{d:'02:20',f:'02:40'}]));assert.deepEqual(j.pauses,[[1560,1600]]);
-  assert.equal(F(j.amplitude),'7h00');assert.equal(F(j.travail),'6h20');assert.equal(F(j.continuMax),'4h20')});
+  assert.equal(F(j.amplitude),'7h00');assert.equal(F(j.travail),'6h20');assert.equal(F(j.continuNuit),'4h00');assert.equal(F(j.continuService),'4h20')});
 t('journée sans fin : incomplète, aucune valeur ; repos / CP : hors champ',()=>{
   assert.equal(J(day('22:00','')).j.incomplet,true);assert.equal(J({t:'REPOS'}).j,null);assert.equal(J({t:'CP'}).j,null)});
 t('type NUIT compté comme une journée de travail',()=>{assert.equal(F(J(day('20:00','04:00',[],{t:'NUIT'})).j.amplitude),'6h00')});
@@ -113,10 +113,38 @@ t('année close avec une journée sans fin : non déterminable',()=>{
 t('aucune donnée : non déterminable, cumul 0h00, aucune valeur invalide',()=>{const a=load({}).N.annee('2026',{today:NOW});assert.equal(a.statut,'non_determinable');assert.equal(a.cumul,0);assert.ok(!BAD.test(a.texte))});
 
 console.log('Pause de nuit (20 min après 6 h continues)');
-t('SYNTHÉTIQUE établi : nuit 20:00 → 04:00 sans pause = 8h00 continues → non conforme ; avec pause de 30 min → conforme',()=>{
+t('SYNTHÉTIQUE établi : nuit 20:00 → 04:00 sans pause = 6h00 continues entre 22 h et 4 h → non conforme ; avec pause de 30 min → conforme',()=>{
   const days={...nuits('2025-01-06',50),'2025-12-01':day('20:00','04:00',[])};const a=load(days).N.annee('2025',{today:NOW});
-  assert.equal(a.pauseControlee,true);const x=a.pausesNuit.find(p=>p.date==='2025-12-01');assert.equal(F(x.continuMax),'8h00');assert.equal(x.conforme,false);
+  assert.equal(a.pauseControlee,true);const x=a.pausesNuit.find(p=>p.date==='2025-12-01');assert.equal(F(x.continuNuit),'6h00');assert.equal(x.conforme,false);
   assert.ok(a.pausesNuit.filter(p=>p.date!=='2025-12-01').every(p=>p.conforme))});
+
+console.log('Pause de nuit : travail effectif continu entre 22 h et 5 h (correction)');
+/* Chaque cas : [libellé, journée, continu de nuit attendu, alerte attendue pour un travailleur de nuit établi] */
+const CAS=[
+  ['14:00 → 23:00 sans pause : 9h00 continues dont 6 h avant 22 h, 1h00 de nuit',day('14:00','23:00'),'1h00',false],
+  ['18:00 → 02:00 sans pause : 4h00 de nuit, sous les 6 h',day('18:00','02:00'),'4h00',false],
+  ['18:00 → 02:00, pause 23:00-23:20 : le bloc est interrompu (2h40 de nuit après la pause)',day('18:00','02:00',[{d:'23:00',f:'23:20'}]),'2h40',false],
+  ['22:00 → 05:00 sans pause : 7h00 continues de nuit',day('22:00','05:00'),'7h00',true],
+  ['22:00 → 04:00 sans pause : 6h00 atteintes',day('22:00','04:00'),'6h00',true],
+  ['22:00 → 03:59 sans pause : 5h59, sous le seuil',day('22:00','03:59'),'5h59',false],
+  ['23:00 → 06:00 sans pause (après minuit) : 6h00 entre 23 h et 5 h',day('23:00','06:00'),'6h00',true],
+  ['22:00 → 05:00, pause 01:00-01:15 (< 20 min) : n’interrompt pas le bloc, déduite (6h45)',day('22:00','05:00',[{d:'01:00',f:'01:15'}]),'6h45',true],
+  ['22:00 → 05:00, plusieurs pauses 00:00-00:10 et 02:00-02:30 : 3h50 au plus',day('22:00','05:00',[{d:'00:00',f:'00:10'},{d:'02:00',f:'02:30'}]),'3h50',false],
+  ['22:00 → 05:00, pauses chevauchantes 01:00-01:15 et 01:10-01:25 : une pause de 25 min, bloc interrompu (3h35)',day('22:00','05:00',[{d:'01:00',f:'01:15'},{d:'01:10',f:'01:25'}]),'3h35',false],
+  ['22:00 → 05:00, pause interrompue 01:00-01:10 puis 01:15-01:30 : deux pauses courtes, bloc non interrompu (6h35)',day('22:00','05:00',[{d:'01:00',f:'01:10'},{d:'01:15',f:'01:30'}]),'6h35',true],
+  ['04:00 → 12:00 sans pause : 1h00 de nuit seulement',day('04:00','12:00'),'1h00',false]
+];
+CAS.forEach(([lbl,d,att])=>t('jour : '+lbl,()=>{const j=J(d).j;assert.equal(F(j.continuNuit),att)}));
+t('Smart Control (travailleur de nuit établi, JEU SYNTHÉTIQUE) : alerte « Pause de nuit » uniquement dès 6 h continues entre 22 h et 5 h',()=>{
+  const base=nuits('2025-01-06',50),k0='2025-12-01';
+  CAS.forEach(([lbl,d,att,alerte],i)=>{const k=addDay(k0,2*i),A=load({...base,[k]:d}),s=A.win.MHControl.analyze({end:k});
+    const al=s.alerts.filter(a=>a.code==='NUIT_PAUSE');assert.equal(al.length,alerte?1:0,lbl);
+    if(alerte){assert.equal(al[0].key,k);assert.ok(al[0].result.includes(att+' entre 22 h et 5 h'),al[0].result)}
+    const sans=load({...base,[k]:d},{modules:['app-v37-control.js']}).win.MHControl.analyze({end:k});
+    assert.equal(s.controls-sans.controls,1,lbl+' : une journée de nuit contrôlée');
+    assert.deepEqual(s.alerts.filter(a=>a.code!=='NUIT_PAUSE').map(a=>a.id+a.level),sans.alerts.map(a=>a.id+a.level),lbl+' : règles existantes inchangées')})});
+t('moteur inchangé sur ces journées : cd() identique avec et sans le module (TTE, pauses)',()=>{
+  CAS.forEach(([lbl,d])=>{const A=load({'2025-12-01':d}),B=load({'2025-12-01':d},{modules:[]});const a=A.X.cd('2025-12-01'),b=B.X.cd('2025-12-01');assert.deepEqual([a.tte,a.pz,a.amp,a.nuit],[b.tte,b.pz,b.amp,b.nuit],lbl)})});
 
 console.log('Smart Control');
 const scKey=s=>JSON.stringify({c:s.controls,f:s.failed,n:s.notEvaluated,a:s.alerts.map(a=>a.id+a.level)});
@@ -129,7 +157,7 @@ t('relevés réels au 08/10 : 2 journées de nuit, statut non établi → « Non
 t('SYNTHÉTIQUE établi : nuit sans pause → 🟠 « Pause de nuit » sourcée art. 9 ; nuits avec pause → contrôles conformes',()=>{
   const days={...nuits('2025-01-06',50),...nuits('2025-12-02',3),'2025-12-09':day('20:00','04:00',[])};const A=load(days),s=A.win.MHControl.analyze({end:'2025-12-10'});
   const al=s.alerts.filter(a=>a.code==='NUIT_PAUSE');assert.equal(al.length,1);assert.equal(al[0].key,'2025-12-09');assert.equal(al[0].level,'warn');
-  assert.ok(al[0].source.includes('art. 9'));assert.ok(al[0].result.includes('8h00'));assert.ok(al[0].data.some(([l,v])=>l==='Plus long travail continu'&&v==='8h00'));
+  assert.ok(al[0].source.includes('art. 9'));assert.ok(al[0].result.includes('6h00 entre 22 h et 5 h'));assert.ok(al[0].data.some(([l,v])=>l==='Travail effectif continu de nuit'&&v==='6h00'));
   const sans=load(days,{modules:['app-v37-control.js']}).win.MHControl.analyze({end:'2025-12-10'});assert.equal(s.controls-sans.controls,4,'4 nuits contrôlées');
   assert.ok(!s.notEvaluated.some(x=>/Pause de nuit/.test(x)))});
 
@@ -159,7 +187,7 @@ t('Dossier : section « 10. Travail de nuit (art. 9) » (années 2026, mensuel o
 t('Dossier SYNTHÉTIQUE établi (51 nuits, 306h00) : repos 30h36 (à confirmer), tableau des pauses de nuit non conformes',()=>{
   const M=load({...nuits('2025-01-06',50),'2025-12-01':day('20:00','04:00',[])}).win.MHDossier,d=M.data({today:NOW,generatedAt:'2026-10-08T10:00:00'}),h=text(M.html(d,{}));
   const y=d.nuit.find(x=>x.annee==='2025');assert.equal(y.statut,'etabli');assert.equal(F(y.repos.heures),'30h36');assert.deepEqual(y.pausesNonConformes.map(x=>x.date),['2025-12-01']);
-  assert.ok(h.includes('Repos 10 % : 30h36 (à confirmer)'));assert.ok(h.includes('01/12/2025 8h00 Plus de 6 h de travail continu sans pause de 20 min'))});
+  assert.ok(h.includes('Repos 10 % : 30h36 (à confirmer)'));assert.ok(h.includes('01/12/2025 6h00 6 h ou plus de travail effectif continu entre 22 h et 5 h sans pause de 20 min'))});
 
 console.log('Lecture seule');
 t('aucune écriture : DB gelée, aucun accès en écriture au stockage, window.DB non exposé',()=>{
@@ -172,7 +200,7 @@ t('module sans calcul propre : réutilise minutesNuit / mhEffectivePauses / cd, 
   assert.ok(/minutesNuit\(/.test(src)&&/mhEffectivePauses\(/.test(src)&&/\bcd\(/.test(src));assert.ok(!/S\.taux|brutOf|calcPer|€|nuitMaj|localStorage|save\(/.test(src))});
 t('enregistré dans index.html (après app-core.js) et dans le cache du service worker',()=>{
   const idx=fs.readFileSync(path.join(REPO,'app/src/main/assets/web/index.html'),'utf8'),sw=fs.readFileSync(path.join(REPO,'app/src/main/assets/web/sw.js'),'utf8');
-  assert.ok(idx.indexOf('app-v371-nuit.js?v=37.1.0')>idx.indexOf('app-core.js?v=37.1.0'));assert.ok(idx.indexOf('app-v371-nuit.js')<idx.indexOf('app-v37-control.js'));assert.ok(sw.includes("'./scripts/app-v371-nuit.js?v=37.1.0'"))});
+  assert.ok(idx.indexOf('app-v371-nuit.js?v=37.1.1')>idx.indexOf('app-core.js?v=37.1.1'));assert.ok(idx.indexOf('app-v371-nuit.js')<idx.indexOf('app-v37-control.js'));assert.ok(sw.includes("'./scripts/app-v371-nuit.js?v=37.1.1'"))});
 
 console.log(fails?`\n${fails} échec(s)`:'\nTous les tests V37.1 travail de nuit passent.');
 process.exit(fails?1:0);

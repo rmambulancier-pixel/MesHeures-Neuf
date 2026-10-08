@@ -21,7 +21,7 @@
  */
 (function(){
   'use strict';
-  const V='37.1.0';
+  const V='37.1.1';
   const ART9={nuitDeb:'22:00',nuitFin:'05:00'};
   const SEUIL=270*60,JOUR_NUIT=3*60,PAUSE_MIN=20,CONTINU_MAX=6*60;
   const TAUX=0.10,TAUX_EXCLUSIF=0.15,PLANCHER=0.05;
@@ -30,20 +30,28 @@
   const isoDay=k=>/^\d{4}-\d{2}-\d{2}$/.test(String(k||''));
   const days=()=>(typeof DB!=='undefined'&&DB&&DB.days)||{};
 
-  /* Une journée : amplitude de nuit, travail effectif de nuit, plus longue période de travail continu. */
+  /* Une journée : amplitude de nuit, travail effectif de nuit, plus long travail effectif continu DE NUIT.
+   * Pause de nuit (V37.1, correction) : seules les pauses d'au moins 20 min coupent le travail continu ; dans chaque bloc
+   * continu, on ne compte que le travail effectif situé entre 22 h et 5 h (pauses courtes déduites). Six heures de
+   * travail avant 22 h ne constituent donc pas un dépassement en permanence de nuit. */
   function jour(k){
     const d=days()[k];
     if(!d||!WORK.includes(d.t))return null;
     const r=cd(k);
-    if(r.deb==null||r.fin==null)return {date:k,incomplet:true,amplitude:0,travail:0,continuMax:0,pauses:[]};
+    if(r.deb==null||r.fin==null)return {date:k,incomplet:true,amplitude:0,travail:0,continuNuit:0,continuService:0,pauses:[]};
     const ep=mhEffectivePauses(d,r.deb,r.fin),iv=Array.isArray(ep.iv)?ep.iv:[];
-    const amplitude=minutesNuit(r.deb,r.fin,ART9);
-    const pausesNuit=iv.reduce((s,p)=>s+minutesNuit(p[0],p[1],ART9),0);
-    /* travail continu : seules les pauses d'au moins 20 min l'interrompent */
-    let debut=r.deb,continuMax=0;
-    iv.filter(p=>p[1]-p[0]>=PAUSE_MIN).forEach(p=>{continuMax=Math.max(continuMax,p[0]-debut);debut=p[1]});
-    continuMax=Math.max(continuMax,r.fin-debut);
-    return {date:k,incomplet:false,type:d.t,amplitude,travail:Math.max(0,amplitude-pausesNuit),continuMax,pauses:iv};
+    const nuit=(a,b)=>b>a?minutesNuit(a,b,ART9):0;
+    const amplitude=nuit(r.deb,r.fin);
+    const pausesNuit=iv.reduce((s,p)=>s+nuit(p[0],p[1]),0);
+    /* blocs de travail continu : le service découpé par les pauses d'au moins 20 min */
+    const longues=iv.filter(p=>p[1]-p[0]>=PAUSE_MIN),courtes=iv.filter(p=>p[1]-p[0]<PAUSE_MIN),blocs=[];
+    let debut=r.deb;longues.forEach(p=>{blocs.push([debut,p[0]]);debut=p[1]});blocs.push([debut,r.fin]);
+    let continuNuit=0,continuService=0;
+    blocs.forEach(([a,b])=>{if(b<=a)return;
+      const court=courtes.reduce((s,p)=>s+Math.max(0,Math.min(p[1],b)-Math.max(p[0],a)),0),courtNuit=courtes.reduce((s,p)=>s+nuit(Math.max(p[0],a),Math.min(p[1],b)),0);
+      continuService=Math.max(continuService,b-a-court);
+      continuNuit=Math.max(continuNuit,nuit(a,b)-courtNuit)});
+    return {date:k,incomplet:false,type:d.t,amplitude,travail:Math.max(0,amplitude-pausesNuit),continuNuit,continuService,pauses:iv};
   }
 
   function plage(debut,fin){const out=[];for(let k=debut;k<=fin;k=addD(k,1)){const j=jour(k);if(j)out.push(j)}return out}
@@ -80,8 +88,9 @@
     const etabli=statut==='etabli';
     const repos=etabli?{taux:TAUX,pourcentage:Math.round(TAUX*100),base:cumul,heures:Math.round(cumul*TAUX),plancher:Math.round(cumul*PLANCHER),
       note:'Contrepartie en repos, pas une majoration de salaire. Base retenue : toutes les heures d’amplitude 22 h → 5 h de l’année (à confirmer : le texte renvoie à des « modalités à définir » au franchissement des 270 h). 15 % seulement en cas d’affectation exclusive de nuit prévue au contrat ou par avenant (non applicable).'}:null;
-    /* Pause de nuit : contrôlée pour un travailleur de nuit établi, sur les journées comportant des heures de nuit. */
-    const pausesNuit=l.filter(j=>j.amplitude>0&&!j.incomplet).map(j=>({date:j.date,continuMax:j.continuMax,conforme:j.continuMax<=CONTINU_MAX}));
+    /* Pause de nuit : contrôlée pour un travailleur de nuit établi, sur les journées comportant des heures de nuit ;
+       non conforme dès 6 h de travail effectif continu entre 22 h et 5 h sans pause d'au moins 20 min. */
+    const pausesNuit=l.filter(j=>j.amplitude>0&&!j.incomplet).map(j=>({date:j.date,continuNuit:j.continuNuit,conforme:j.continuNuit<CONTINU_MAX}));
     return {version:V,annee:y,debut,fin,close,cumul,seuil:SEUIL,reste:Math.max(0,SEUIL-cumul),franchi,semainesIndice:semIndice,manquants,incomplets,
       statut,texte,repos,pausesNuit,pauseControlee:etabli,mensuel:mensuel(y),source:SOURCE};
   }

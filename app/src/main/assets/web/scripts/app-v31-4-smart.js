@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const V = '37.1.0';
+  const V = '37.1.1';
 
   function getDays() {
     // V37.0-A : DB est une variable globale (let) d'app-core.js, absente de window.

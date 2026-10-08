@@ -5,7 +5,7 @@
  * - JEU SYNTHÉTIQUE « travailleur de nuit » (50 nuits 20:00 → 04:00 en 2026, seuil de 270 h franchi) : il ne décrit pas
  *   la situation réelle de l'utilisateur ; il sert à vérifier l'affichage du statut établi, du repos et du contrôle de pause ;
  * - lecture seule (stockage identique), 360 / 412 / 448 px clair et sombre, 0 erreur JavaScript ;
- * - mise à jour V37.0.0 (c426b19, cache mesheures-shell-v37.0.0) → V37.1.0 : un seul cache, données conservées.
+ * - mise à jour V37.0.0 (c426b19, cache mesheures-shell-v37.0.0) → V37.1.1 : un seul cache, données conservées.
  * Usage : node tests/v371-nuit.browser.js · sortie 0 = OK, 1 = échec, 2 = Playwright absent.
  */
 let chromium;
@@ -15,7 +15,7 @@ const REPO=path.join(__dirname,'..'),NEW=path.join(REPO,'app/src/main/assets/web
 const R1=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-08-24.json'),'utf8'));
 const R2=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-09-21.json'),'utf8'));
 const NOW=new Date('2026-10-08T10:00:00');
-const REL='37.1.0';
+const REL='37.1.1';
 const types={'.js':'text/javascript','.html':'text/html','.css':'text/css','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.wasm':'application/wasm','.gz':'application/gzip'};
 let fails=0;const ok=(c,m)=>{console.log((c?'  ok  ':'FAIL  ')+m);if(!c)fails++};
 let ROOT=NEW;
@@ -79,12 +79,29 @@ srv.listen(0,async()=>{
       const c=await pg.evaluate(()=>({st:(document.querySelector('#mh37Compteur [data-k="nuit9st"]')||{}).textContent,txt:document.getElementById('mh37Compteur').innerText}));
       ok(c.st==='travailleur de nuit'&&/repos 10 % : 30h36 \(à confirmer\)/.test(c.txt),'Compteur : « travailleur de nuit », repos 10 % 30h36 à confirmer');
       const sc=await pg.evaluate(()=>{const s=MHControl.analyze({});return s.alerts.filter(a=>a.code==='NUIT_PAUSE').map(a=>[a.key,a.level,a.result])});
-      ok(sc.length===1&&sc[0][0]==='2026-10-06'&&sc[0][1]==='warn'&&/8h00/.test(sc[0][2]),'Smart Control : 🟠 Pause de nuit le 06/10 (8h00 continues sans pause de 20 min)');
+      ok(sc.length===1&&sc[0][0]==='2026-10-06'&&sc[0][1]==='warn'&&/6h00 entre 22 h et 5 h/.test(sc[0][2]),'Smart Control : 🟠 Pause de nuit le 06/10 (6h00 de travail continu entre 22 h et 4 h sans pause de 20 min)');
       await pg.evaluate(()=>tab('paie'));await pg.waitForTimeout(400);await pg.locator('#mh37Assistant details[data-open="nuit"] > summary').click();await pg.waitForTimeout(200);
       const t=await pg.evaluate(()=>document.querySelector('#mh37Assistant details[data-open="nuit"]').innerText);
       ok(/Contrepartie en repos 10 %/.test(t)&&/au moins 5 % conservés en repos/.test(t)&&/\(non applicable\)/.test(t)&&!/€/.test(t),'Assistant Paie : repos 10 % (15 % non applicable), plancher 5 %, aucun euro');
       ok(before===await snap(pg),'lecture seule (jeu synthétique)');
       ok(errs.length===0,'0 erreur JavaScript'+(errs.length?' : '+errs.slice(0,2).join(' | '):''));await ctx.close()}
+
+    console.log('Pause de nuit : travail effectif continu entre 22 h et 5 h (JEU SYNTHÉTIQUE, travailleur de nuit établi)');
+    {/* base synthétique (statut établi) sans la nuit du 06/10, puis une journée par cas dans la fenêtre du Smart Control */
+      const base={...SYN};delete base['2026-10-06'];
+      const CAS={'2026-09-14':[day('14:00','23:00'),false,'14h → 23h, 6 h avant 22 h'],'2026-09-16':[day('18:00','02:00'),false,'18h → 02h sans pause (4h00 de nuit)'],
+        '2026-09-18':[day('18:00','02:00',[{d:'23:00',f:'23:20'}]),false,'18h → 02h, pause de 20 min'],'2026-09-20':[day('22:00','05:00',[{d:'01:00',f:'01:15'}]),true,'22h → 05h, pause de 15 min (6h45)'],
+        '2026-09-22':[day('23:00','06:00'),true,'23h → 06h après minuit (6h00)'],'2026-09-24':[day('22:00','05:00',[{d:'00:00',f:'00:10'},{d:'02:00',f:'02:30'}]),false,'plusieurs pauses'],
+        '2026-09-26':[day('22:00','05:00',[{d:'01:00',f:'01:15'},{d:'01:10',f:'01:25'}]),false,'pauses chevauchantes (25 min)'],'2026-09-28':[day('22:00','05:00',[{d:'01:00',f:'01:10'},{d:'01:15',f:'01:30'}]),true,'pause interrompue (6h35)'],
+        '2026-09-30':[day('04:00','12:00'),false,'1h00 de nuit seulement']};
+      const days={...base};Object.entries(CAS).forEach(([k,v])=>{days[k]=v[0]});
+      const {ctx,pg,errs}=await open(b,412,'dark',seed(days));const before=await snap(pg);
+      const r=await pg.evaluate(()=>{const s=MHControl.analyze({});return {al:s.alerts.filter(a=>a.code==='NUIT_PAUSE').map(a=>a.key).sort(),card:(document.querySelector('.mh37-card')||{}).innerText||''}});
+      const att=Object.keys(CAS).filter(k=>CAS[k][1]).sort();
+      ok(JSON.stringify(r.al)===JSON.stringify(att),'alertes « Pause de nuit » exactement sur : '+att.map(k=>CAS[k][2]).join(' · ')+(JSON.stringify(r.al)===JSON.stringify(att)?'':' → obtenu '+r.al.join(', ')));
+      Object.keys(CAS).filter(k=>!CAS[k][1]).forEach(k=>ok(!r.al.includes(k),'pas d’alerte : '+CAS[k][2]));
+      ok(/Pause de nuit/.test(r.card),'carte Smart Control (Accueil) : points « Pause de nuit » affichés');
+      ok(before===await snap(pg),'lecture seule');ok(errs.length===0,'0 erreur JavaScript'+(errs.length?' : '+errs[0]:''));await ctx.close()}
 
     console.log('Responsive · Compteur et Assistant Paie');
     for(const W of [360,412,448])for(const theme of ['dark','light'])for(const [lbl,days] of [['réel',REAL],['synthétique',SYN]]){

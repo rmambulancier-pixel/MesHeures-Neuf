@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d1117">
-<title>MesHeures V37.1.0</title>
-<meta name="application-version" content="37.1.0">
+<title>MesHeures V37.1.1</title>
+<meta name="application-version" content="37.1.1">
 <link rel="manifest" href="./manifest.json">
-<link rel="stylesheet" href="./style/v30.css?v=37.1.0">
-<link rel="stylesheet" href="./style/v31-home.css?v=37.1.0">
-<link rel="stylesheet" href="./style/v32-fixes.css?v=37.1.0">
+<link rel="stylesheet" href="./style/v30.css?v=37.1.1">
+<link rel="stylesheet" href="./style/v31-home.css?v=37.1.1">
+<link rel="stylesheet" href="./style/v32-fixes.css?v=37.1.1">
 <link rel="icon" href="./icon.svg">
 
 
@@ -293,12 +293,12 @@ html[data-theme="light"]{background:#f5f7f9!important;color-scheme:light}
 :root[data-theme="light"] .mh-v30-timeline *{border-color:#d0d7de!important}
 
 </style>
-<script defer src="./scripts/app-v35-romi-bridge.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v35-pa-analyse.js?v=37.1.0"></script>
+<script defer src="./scripts/app-v35-romi-bridge.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v35-pa-analyse.js?v=37.1.1"></script>
 </head>
 <body><div id="mhSplash"><img src="./icon.svg" alt=""><b>MesHeures</b><span>Suivre aujourd’hui · anticiper demain</span></div>
 <header>
-<h1><img src="./icon.svg" class="mh-header-logo" alt="" width="24" height="24"> MesHeures <span id="mhVersion" class="mut" style="font-size:9px;font-weight:500">V37.1.0</span> <span id="hBadge" style="display:none" class="badge">!</span></h1>
+<h1><img src="./icon.svg" class="mh-header-logo" alt="" width="24" height="24"> MesHeures <span id="mhVersion" class="mut" style="font-size:9px;font-weight:500">V37.1.1</span> <span id="hBadge" style="display:none" class="badge">!</span></h1>
 
 </header>
 <main>
@@ -421,7 +421,7 @@ html[data-theme="light"]{background:#f5f7f9!important;color-scheme:light}
 <div class="card">
 <h2>📋 ROMI1 <span class="sub">Récap Mensuel Salarié — relevé officiel employeur</span></h2>
 <div class="al i" style="margin-bottom:10px">C'est le document le plus fiable de l'employeur (durée du travail, RC, ancienneté) — plus fiable que ton propre suivi.
-<b>Le ROMI1 reçu est un scan (impression → PDF), sans texte à l'intérieur.</b> Le moteur ROMI1 V37.1.0 conserve les valeurs du document source séparément des calculs MesHeures. L'OCR n'est utilisé qu'en secours.</div>
+<b>Le ROMI1 reçu est un scan (impression → PDF), sans texte à l'intérieur.</b> Le moteur ROMI1 V37.1.1 conserve les valeurs du document source séparément des calculs MesHeures. L'OCR n'est utilisé qu'en secours.</div>
 <div style="margin-bottom:9px"><label>Photo ou PDF du ROMI1</label>
 <input type="file" accept=".pdf,application/pdf,image/*" id="fromi" onchange="parseRomiFile(this.files[0])"></div>
 <div id="romiOcrOut" style="margin-top:9px"></div>
@@ -480,7 +480,7 @@ html[data-theme="light"]{background:#f5f7f9!important;color-scheme:light}
 <button class="r" onclick="wipe()">🗑 Effacer tout</button>
 </div>
 </div>
-<div class="card plugin-manager"><div class="section-head"><h2>🧩 Extensions</h2><span class="period-pill">V37.1.0</span></div>
+<div class="card plugin-manager"><div class="section-head"><h2>🧩 Extensions</h2><span class="period-pill">V37.1.1</span></div>
 <div class="al i">Ajoute des modules à MesHeures sans toucher au cœur de l’application. Les extensions importées sont isolées dans un cadre sécurisé et n’accèdent qu’aux données explicitement autorisées.</div>
 <div class="row" style="margin-bottom:10px"><button onclick="$('mhPluginFile').click()">➕ Installer .mhplugin</button><button class="g" onclick="mhPluginInfo()">ℹ️ Fonctionnement</button><button class="g" onclick="mhPluginExport()">⬇️ Export plugins</button><input id="mhPluginFile" type="file" accept=".mhplugin,application/json" onchange="mhImportPlugin(this)" style="display:none"></div>
 <div id="mhPluginList"></div>
@@ -520,45 +520,45 @@ html[data-theme="light"]{background:#f5f7f9!important;color-scheme:light}
 </div>
 </div>
 
-<script defer src="./scripts/app-core.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v37-periode.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v371-nuit.js?v=37.1.0"></script>
-<script defer src="./scripts/app-pwa.js?v=37.1.0"></script>
-<script defer src="./scripts/app-ui.js?v=37.1.0"></script>
-<script defer src="./scripts/specialized-reader.js?v=37.1.0"></script>
-<script defer src="./scripts/app-parser.js?v=37.1.0"></script>
-<script defer src="./scripts/app-plugins.js?v=37.1.0"></script>
+<script defer src="./scripts/app-core.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v37-periode.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v371-nuit.js?v=37.1.1"></script>
+<script defer src="./scripts/app-pwa.js?v=37.1.1"></script>
+<script defer src="./scripts/app-ui.js?v=37.1.1"></script>
+<script defer src="./scripts/specialized-reader.js?v=37.1.1"></script>
+<script defer src="./scripts/app-parser.js?v=37.1.1"></script>
+<script defer src="./scripts/app-plugins.js?v=37.1.1"></script>
 <script src="./vendor/pdfjs/pdf.min.js"></script>
 <script>
 if(window.pdfjsLib){
   window.pdfjsLib.GlobalWorkerOptions.workerSrc="./vendor/pdfjs/pdf.worker.min.js";
 }
 </script>
-<script defer src="./scripts/romi-master.js?v=37.1.0"></script>
-<script defer src="./scripts/app.js?v=37.1.0"></script>
-<script defer src="./scripts/app-pay.js?v=37.1.0"></script>
-<script defer src="./scripts/app-roadmap.js?v=37.1.0"></script>
-<script defer src="./scripts/app-projection.js?v=37.1.0"></script>
-<script defer src="./scripts/app-legal.js?v=37.1.0"></script>
-<script defer src="./scripts/app-backup.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v31-4-smart.js?v=37.1.0"></script>
-<script defer src="./scripts/app-intelligence.js?v=37.1.0"></script>
-<script defer src="./scripts/app-evidence.js?v=37.1.0"></script>
-<script defer src="./scripts/app-dossier.js?v=37.1.0"></script>
-<script defer src="./scripts/app-reconciliation.js?v=37.1.0"></script>
-<script defer src="./scripts/app-hybrid.js?v=37.1.0"></script>
-<script defer src="scripts/app-v30.js?v=37.1.0"></script>
-<script defer src="scripts/app-v30-smart.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v37-control.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v37-dossier.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v37-romi-reconciliation.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v37-compteur.js?v=37.1.0"></script>
-<script defer src="scripts/app-v31-home.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v37-assistant-paie.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v33-assistant.js?v=37.1.0"></script>
-<script defer src="./scripts/app-theme.js?v=37.1.0"></script>
+<script defer src="./scripts/romi-master.js?v=37.1.1"></script>
+<script defer src="./scripts/app.js?v=37.1.1"></script>
+<script defer src="./scripts/app-pay.js?v=37.1.1"></script>
+<script defer src="./scripts/app-roadmap.js?v=37.1.1"></script>
+<script defer src="./scripts/app-projection.js?v=37.1.1"></script>
+<script defer src="./scripts/app-legal.js?v=37.1.1"></script>
+<script defer src="./scripts/app-backup.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v31-4-smart.js?v=37.1.1"></script>
+<script defer src="./scripts/app-intelligence.js?v=37.1.1"></script>
+<script defer src="./scripts/app-evidence.js?v=37.1.1"></script>
+<script defer src="./scripts/app-dossier.js?v=37.1.1"></script>
+<script defer src="./scripts/app-reconciliation.js?v=37.1.1"></script>
+<script defer src="./scripts/app-hybrid.js?v=37.1.1"></script>
+<script defer src="scripts/app-v30.js?v=37.1.1"></script>
+<script defer src="scripts/app-v30-smart.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v37-control.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v37-dossier.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v37-romi-reconciliation.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v37-compteur.js?v=37.1.1"></script>
+<script defer src="scripts/app-v31-home.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v37-assistant-paie.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v33-assistant.js?v=37.1.1"></script>
+<script defer src="./scripts/app-theme.js?v=37.1.1"></script>
 <script>(function(){var hide=function(){var s=document.getElementById('mhSplash');if(s)s.classList.add('off')};setTimeout(hide,300);setTimeout(hide,1000);})();</script>
-<script defer src="./scripts/app-v35-7-romi-reconciliation.js?v=37.1.0"></script>
-<script defer src="./scripts/app-v35-8-correction.js?v=37.1.0"></script>
+<script defer src="./scripts/app-v35-7-romi-reconciliation.js?v=37.1.1"></script>
+<script defer src="./scripts/app-v35-8-correction.js?v=37.1.1"></script>
 </body>
 </html>

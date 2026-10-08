@@ -49,7 +49,7 @@
     REPOS:{scope:'day',title:'Repos entre deux services',rule:'Repos quotidien : 11 h. En dessous de 9 h : critique.',source:'Code du travail, art. L3131-1 ; accord du 16/06/2016, art. 7',warn:660,bad:540},
     SEMAINE:{scope:'week',title:'Durée hebdomadaire',rule:'Le TTE d’une semaine (lundi → dimanche) ne doit pas dépasser 48 h.',source:'Accord transport sanitaire du 16/06/2016, art. 4',bad:2880},
     MOYENNE:{scope:'period',title:'Moyenne sur 12 semaines',rule:'La moyenne hebdomadaire de TTE sur 12 semaines consécutives ne doit pas dépasser 46 h.',source:'Accord transport sanitaire du 16/06/2016, art. 4',bad:2760},
-    NUIT_PAUSE:{scope:'day',title:'Pause de nuit',rule:'Travailleur de nuit en permanence de nuit : une pause d’au moins 20 min après 6 h de travail effectif continu. Contrôlé seulement si le statut de travailleur de nuit est établi.',source:'Accord transport sanitaire du 16/06/2016, art. 9',continu:360,pause:20},
+    NUIT_PAUSE:{scope:'day',title:'Pause de nuit',rule:'Travailleur de nuit en permanence de nuit : une pause d’au moins 20 min dès 6 h de travail effectif continu entre 22 h et 5 h (une pause de moins de 20 min n’interrompt pas le travail). Contrôlé seulement si le statut de travailleur de nuit est établi.',source:'Accord transport sanitaire du 16/06/2016, art. 9',continu:360,pause:20},
     ROMI_TTE:{scope:'romi',title:'TTE ROMI1 / MesHeures',rule:'Le TTE du relevé ROMI1 (référence employeur) est comparé au TTE calculé par MesHeures sur exactement la même période. Écart toléré : 15 min.',source:'Relevé ROMI1 (référence employeur)',tol:15}
   };
   const DAY_FAMILIES=['HORAIRES','AMPLITUDE','TTE','PAUSE','SAISIE','REPAS','FERIE'];
@@ -184,9 +184,9 @@
         const nonEtabli=nuits.filter(j=>!statut(j.date.slice(0,4)).pauseControlee);
         nuits.filter(j=>statut(j.date.slice(0,4)).pauseControlee).forEach(j=>{
           out.controls++;
-          if(j.continuMax>RULES.NUIT_PAUSE.continu)out.alerts.push(mk('NUIT_PAUSE','warn',j.date,dLong(j.date),
-            dayData(j.date,days[j.date],R[j.date]).concat([['Heures de nuit (22h → 5h)',fmt(j.amplitude)],['Plus long travail continu',fmt(j.continuMax)],['Seuil','6h00 sans pause de 20 min']]),
-            'Travail continu de '+fmt(j.continuMax)+' sans pause d’au moins 20 min.',[actDay(j.date)]));
+          if(j.continuNuit>=RULES.NUIT_PAUSE.continu)out.alerts.push(mk('NUIT_PAUSE','warn',j.date,dLong(j.date),
+            dayData(j.date,days[j.date],R[j.date]).concat([['Heures de nuit (22h → 5h)',fmt(j.amplitude)],['Travail effectif continu de nuit',fmt(j.continuNuit)],['Seuil','6h00 entre 22h et 5h sans pause de 20 min']]),
+            'Travail effectif continu de '+fmt(j.continuNuit)+' entre 22 h et 5 h sans pause d’au moins 20 min.',[actDay(j.date)]));
         });
         if(nonEtabli.length)out.notEvaluated.push('Pause de nuit (art. 9) : '+nonEtabli.length+' journée'+(nonEtabli.length>1?'s':'')+' avec heures de nuit, statut de travailleur de nuit non établi.');
       }
