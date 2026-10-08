@@ -73,7 +73,7 @@ srv.listen(0,async()=>{
       let f=await txt(pg);
       ok(/Planning importé/.test(f)&&f.includes(SHA('planning-photo-exif6.jpg'))&&/à analyser/.test(f)&&/source disponible/.test(f),'photo JPG : fiche ouverte, SHA-256 exact, « à analyser », « source disponible »');
       ok(/à pivoter de 90° \(sens horaire\)/.test(f)&&/380 × 120 px/.test(f)&&/original non modifié/.test(f),'orientation EXIF 6 lue, dimensions, original non modifié');
-      ok(/Analyse du planning/.test(f)&&await pg.locator('#s-prevu [data-k="analyse"] button[disabled]').count()===1,'fiche : emplacement « Analyse du planning » prévu, sans analyse lancée');
+      ok(/Analyse du planning/.test(f)&&await pg.locator('#s-prevu [data-k="analyse"] button[data-k="lancer"]:not([disabled])').count()===1&&await pg.evaluate(()=>!JSON.parse(localStorage.getItem('mh_planning_v372')).analyses),'fiche : « Analyser le planning » disponible (lot C), aucune analyse lancée à l’import');
       await pg.waitForTimeout(300);
       ok(await pg.evaluate(()=>{const i=document.querySelector('#mh372Prev img');return !!i&&i.complete&&i.naturalWidth===120&&i.naturalHeight===380&&i.src.startsWith('blob:')}),'aperçu : original relu depuis le stockage local, affiché redressé selon l’EXIF (380 × 120 → 120 × 380)');
       ok(await pg.evaluate(async h=>{const r=MHPlanning.store().importsListe()[0];const u=await MHPlanningImport.sources.url(r.source.localRef);const b=new Uint8Array(await (await fetch(u)).arrayBuffer());return (await MHPlanning.sha256(b))===h},SHA('planning-photo-exif6.jpg')),'original stocké intact : SHA-256 relu identique (aucune rotation appliquée au fichier)');

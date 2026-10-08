@@ -59,7 +59,7 @@ t('photo JPG : fiche « à analyser », original rangé intact (android:<sha256>
   assert.deepEqual([x.statut,x.sourceType,x.source.mimeType,x.source.size,x.source.sha256,x.source.localRef,x.source.originalFileName,x.source.orientation,x.source.largeur,x.source.hauteur],
     ['a_analyser','photo','image/jpeg',b.length,h,'android:'+h+'.jpg','planning-photo-exif6.jpg',6,380,120]);
   assert.deepEqual([x.periode,x.salarie,x.planningId,x.corrections,x.ocr.statut,x.nature],[{debut:null,fin:null},null,null,[],'a_venir','prévisionnel']);
-  assert.ok(x.createdAt&&x.importedAt&&x.id);assert.deepEqual(x.versions,{module:'37.2.0-B',dictionnaire:{id:'mh-planning',version:1}});
+  assert.ok(x.createdAt&&x.importedAt&&x.id);assert.deepEqual(x.versions,{module:P.version,dictionnaire:{id:'mh-planning',version:1}});
   assert.ok(Buffer.from(A.files.get(h+'.jpg')).equals(Buffer.from(b)),'original identique octet pour octet');assert.deepEqual(P.store().importLire(x.id),x)});
 t('galerie PNG et WEBP : acceptés',async()=>{const {I}=load();for(const n of ['planning-galerie.png','planning-galerie.webp']){const r=await I.importer(file(n),{sourceType:'galerie'});assert.equal(r.statut,'ok',n);assert.equal(r.record.sourceType,'galerie')}});
 t('PDF texte : texte extrait et rangé avec la source (<sha256>.txt), fiche sans le texte (noms des collègues)',async()=>{

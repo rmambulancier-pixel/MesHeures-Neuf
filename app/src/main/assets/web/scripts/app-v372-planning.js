@@ -17,7 +17,7 @@
  */
 (function(root){
   'use strict';
-  const V='37.2.0-B';
+  const V='37.2.0-C';
   const KEY='mh_planning_v372';
   const ISO=/^\d{4}-\d{2}-\d{2}$/;
   const MAX_JOURS=62;
@@ -301,9 +301,22 @@
         const o=lire(),r=o.imports[id];if(!r)return null;champs=champs||{};
         if('disponibilite' in champs){if(!['disponible','a_verifier'].includes(champs.disponibilite))throw new Error('Disponibilité invalide.');r.source.disponibilite=champs.disponibilite}
         if('planningId' in champs)r.planningId=champs.planningId==null?null:String(champs.planningId);
+        if('planningIds' in champs)r.planningIds=Array.isArray(champs.planningIds)?champs.planningIds.map(String):[];
+        if(champs.historique)(r.historique=Array.isArray(r.historique)?r.historique:[]).push(clone(champs.historique));
         ecrire(o);return clone(r);
       },
-      importSupprimer(id){const o=lire();if(!o.imports[id])return false;delete o.imports[id];ecrire(o);return true},
+      /* ----- analyses (lot C) : une par import, ligne du salarié seulement ----- */
+      analyseLire(importId){const a=(lire().analyses||{})[importId];return a?clone(a):null},
+      analyseEnregistrer(importId,a){const o=lire();if(!o.imports[importId])throw new Error('Import inconnu.');
+        if(!a||a.sourceSha256!==o.imports[importId].source.sha256)throw new Error('Analyse sans rapport avec cette source (SHA-256).');
+        const c=clone(a);delete c._candidats;(o.analyses=o.analyses||{})[importId]=c;ecrire(o);return clone(c)},
+      analyseSupprimer(importId){const o=lire();if(!o.analyses||!o.analyses[importId])return false;delete o.analyses[importId];ecrire(o);return true},
+      /* ----- réglages du planning (lot C) : nom tel qu'il figure sur les plannings, pour proposer ta ligne ----- */
+      reglages(){const r=lire().reglages;return {nomRef:r&&typeof r.nomRef==='string'?r.nomRef:''}},
+      reglagesMaj(ch){const o=lire(),r=o.reglages&&typeof o.reglages==='object'?o.reglages:{};
+        if(ch&&'nomRef' in ch){const v=String(ch.nomRef==null?'':ch.nomRef).replace(/\s+/g,' ').trim();if(v.length>80)throw new Error('Nom trop long.');r.nomRef=v}
+        o.reglages=r;ecrire(o);return this.reglages()},
+      importSupprimer(id){const o=lire();if(!o.imports[id])return false;delete o.imports[id];if(o.analyses)delete o.analyses[id];ecrire(o);return true},
       exporter(){const o=lire();return Object.keys(o.plannings).length||Object.keys(o.imports).length?clone(o):null},
       valider(o){
         if(o==null)return null;
@@ -318,7 +331,7 @@
       /* Restauration : les fichiers ne sont pas dans la sauvegarde ; leur présence sur l'appareil est « à vérifier » (jamais « absente »). */
       importer(o){const n=this.valider(o);if(n==null)return null;const c=clone(o);
         Object.values(c.plannings).forEach(p=>{p.source.original='a_verifier'});Object.values(c.imports||{}).forEach(r=>{r.source.disponibilite='a_verifier'});
-        ecrire({version:1,plannings:c.plannings,imports:c.imports||{}});return n}
+        ecrire({version:1,plannings:c.plannings,imports:c.imports||{},analyses:c.analyses||{},reglages:c.reglages&&typeof c.reglages==='object'?{nomRef:String(c.reglages.nomRef||'').slice(0,80)}:{}});return n}
     };
   }
 
