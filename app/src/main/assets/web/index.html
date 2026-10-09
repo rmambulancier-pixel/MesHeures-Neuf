@@ -7,9 +7,9 @@
 <title>MesHeures V37.2.0</title>
 <meta name="application-version" content="37.2.0">
 <link rel="manifest" href="./manifest.json">
-<link rel="stylesheet" href="./style/v30.css?v=37.2.0-C">
-<link rel="stylesheet" href="./style/v31-home.css?v=37.2.0-C">
-<link rel="stylesheet" href="./style/v32-fixes.css?v=37.2.0-C">
+<link rel="stylesheet" href="./style/v30.css?v=37.2.0-D">
+<link rel="stylesheet" href="./style/v31-home.css?v=37.2.0-D">
+<link rel="stylesheet" href="./style/v32-fixes.css?v=37.2.0-D">
 <link rel="icon" href="./icon.svg">
 
 
@@ -293,8 +293,8 @@ html[data-theme="light"]{background:#f5f7f9!important;color-scheme:light}
 :root[data-theme="light"] .mh-v30-timeline *{border-color:#d0d7de!important}
 
 </style>
-<script defer src="./scripts/app-v35-romi-bridge.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v35-pa-analyse.js?v=37.2.0-C"></script>
+<script defer src="./scripts/app-v35-romi-bridge.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v35-pa-analyse.js?v=37.2.0-D"></script>
 </head>
 <body><div id="mhSplash"><img src="./icon.svg" alt=""><b>MesHeures</b><span>Suivre aujourd’hui · anticiper demain</span></div>
 <header>
@@ -338,7 +338,7 @@ html[data-theme="light"]{background:#f5f7f9!important;color-scheme:light}
   <div class="month-toolbar-top"><div><span class="month-mini-label">SUIVI DU MOIS</span><strong id="mSummaryLine">—</strong></div><button class="g month-today" onclick="goTodayMonth()">Aujourd'hui</button></div>
   <div class="month-modes" role="tablist" aria-label="Affichage du mois">
     <button id="mModeCal" class="on" onclick="setMonthMode('calendar')">▦ Calendrier</button>
-    <button id="mModePlan" onclick="setMonthMode('planning')">☰ Planning</button>
+    <button id="mModePlan" onclick="setMonthMode('planning')">☰ Journées</button>
   </div>
 </div>
 <div class="card month-calendar-card"><div class="month-legend"><span><i class="lg-work"></i>Travail</span><span><i class="lg-leave"></i>CP</span><span><i class="lg-rest"></i>RC</span><span><i class="lg-alert"></i>Alerte</span></div><div class="cal" id="mCal"></div>
@@ -521,53 +521,54 @@ html[data-theme="light"]{background:#f5f7f9!important;color-scheme:light}
 </div>
 </div>
 
-<script defer src="./scripts/app-core.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v37-periode.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v371-nuit.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v372-planning.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v372-planning-import.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v372-planning-grid.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v372-planning-ocr.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v372-planning-analysis.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v372-planning-validation.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v372-planning-loader.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v372-planning-ui.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-pwa.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-ui.js?v=37.2.0-C"></script>
-<script defer src="./scripts/specialized-reader.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-parser.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-plugins.js?v=37.2.0-C"></script>
+<script defer src="./scripts/app-core.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v37-periode.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v371-nuit.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v372-planning.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v372-planning-import.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v372-planning-grid.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v372-planning-ocr.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v372-planning-analysis.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v372-planning-validation.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v372-planning-loader.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v372-planning-calendrier.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v372-planning-ui.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-pwa.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-ui.js?v=37.2.0-D"></script>
+<script defer src="./scripts/specialized-reader.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-parser.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-plugins.js?v=37.2.0-D"></script>
 <script src="./vendor/pdfjs/pdf.min.js"></script>
 <script>
 if(window.pdfjsLib){
   window.pdfjsLib.GlobalWorkerOptions.workerSrc="./vendor/pdfjs/pdf.worker.min.js";
 }
 </script>
-<script defer src="./scripts/romi-master.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-pay.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-roadmap.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-projection.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-legal.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-backup.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v31-4-smart.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-intelligence.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-evidence.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-dossier.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-reconciliation.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-hybrid.js?v=37.2.0-C"></script>
-<script defer src="scripts/app-v30.js?v=37.2.0-C"></script>
-<script defer src="scripts/app-v30-smart.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v37-control.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v37-dossier.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v37-romi-reconciliation.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v37-compteur.js?v=37.2.0-C"></script>
-<script defer src="scripts/app-v31-home.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v37-assistant-paie.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v33-assistant.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-theme.js?v=37.2.0-C"></script>
+<script defer src="./scripts/romi-master.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-pay.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-roadmap.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-projection.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-legal.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-backup.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v31-4-smart.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-intelligence.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-evidence.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-dossier.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-reconciliation.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-hybrid.js?v=37.2.0-D"></script>
+<script defer src="scripts/app-v30.js?v=37.2.0-D"></script>
+<script defer src="scripts/app-v30-smart.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v37-control.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v37-dossier.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v37-romi-reconciliation.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v37-compteur.js?v=37.2.0-D"></script>
+<script defer src="scripts/app-v31-home.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v37-assistant-paie.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v33-assistant.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-theme.js?v=37.2.0-D"></script>
 <script>(function(){var hide=function(){var s=document.getElementById('mhSplash');if(s)s.classList.add('off')};setTimeout(hide,300);setTimeout(hide,1000);})();</script>
-<script defer src="./scripts/app-v35-7-romi-reconciliation.js?v=37.2.0-C"></script>
-<script defer src="./scripts/app-v35-8-correction.js?v=37.2.0-C"></script>
+<script defer src="./scripts/app-v35-7-romi-reconciliation.js?v=37.2.0-D"></script>
+<script defer src="./scripts/app-v35-8-correction.js?v=37.2.0-D"></script>
 </body>
 </html>

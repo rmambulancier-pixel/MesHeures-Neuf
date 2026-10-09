@@ -1,11 +1,12 @@
 /*
- * MesHeures V37.2.0-C — onglet « Prévu » : planning prévisionnel (import, liste, fiche, suppression, analyse à valider).
+ * MesHeures V37.2.0-D — onglet « Prévu » : 📅 Planning (calendrier du prévisionnel validé) | 🔎 OCR / Validation (import,
+ * analyse, corrections, validation, fiches). Le calendrier ne lit que les fiches validées (MHPrevuCalendrier).
  * Lot C : « Analyser le planning » lit l'original conservé (MHPlanningLoader), affiche l'analyse de TA ligne, permet de
  * corriger (tracé), confirmer, valider (planning PRÉVISIONNEL) ou rejeter. Aucune écriture dans DB ni dans les journées.
  */
 (function(root){
   'use strict';
-  const V='37.2.0-C';
+  const V='37.2.0-D';
   const $=id=>document.getElementById(id);
   const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const p2=n=>String(n).padStart(2,'0');
@@ -16,6 +17,8 @@
   const ETAT={a_analyser:'à analyser',brouillon:'brouillon',enregistre:'enregistré'};
   const FORMAT={jpeg:'JPG',png:'PNG',webp:'WEBP',pdf:'PDF'};
   let vue={fiche:null},message=null,occupe=false,urls=[];
+  /* sous-onglet de Prévu ('planning' | 'ocr') ; null = choix par défaut (Planning dès qu'une fiche validée existe) */
+  let onglet=null,calMois=null,calJour=null;
   /* analyse en cours d'affichage : en mémoire seulement (les noms des autres lignes, nécessaires au choix manuel, n'y restent que le temps de l'écran) */
   let courante=null,edition=false,choixOuvert=false,progression='';
   const STATUT_UI={'interprété':['OK','ok'],'lu':['Lu','ok'],'à vérifier':['À vérifier','warn'],'illisible':['Illisible','warn'],'vide':['Vide','dim'],'non_interprété':['Non interprété','warn']};
@@ -46,7 +49,24 @@
       '.mh372-an .mh372-head{display:grid;grid-template-columns:minmax(0,38%) minmax(0,62%);gap:4px 10px;font-size:13px;margin:6px 0}.mh372-an .mh372-head dt{color:var(--dim)}.mh372-an .mh372-head dd{margin:0;overflow-wrap:anywhere}'+
       '.mh372-an .mh372-conf{font-size:22px;font-weight:700}.mh372-an .mh372-warn{font-size:12.5px;margin:4px 0 0;padding-left:18px}.mh372-an .mh372-warn li{margin:2px 0}'+
       '.mh372-an .mh372-cand button{display:block;width:100%;text-align:left;margin-top:6px;min-height:40px}.mh372-an .mh372-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.mh372-an .mh372-bar button{flex:1 1 30%;min-height:44px}'+
-      '.mh372-an .mh372-nom{display:flex;gap:6px;margin-top:6px}.mh372-an .mh372-nom input{flex:1;min-width:0}';
+      '.mh372-an .mh372-nom{display:flex;gap:6px;margin-top:6px}.mh372-an .mh372-nom input{flex:1;min-width:0}'+
+      '.mh372-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 10px}.mh372-tabs button{min-height:44px;font-size:14px;font-weight:600;border-radius:12px}'+
+      '.mh372-tabs button[aria-selected="false"]{background:var(--card);color:var(--txt);border:1px solid var(--line)}'+
+      '.mh372-prevu-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:999px;border:1.5px solid #5b8def;color:#5b8def}'+
+      '.mh372-cal .mh372-nav{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:6px;margin:8px 0 4px}.mh372-cal .mh372-nav h2{margin:0;text-align:center;font-size:18px}'+
+      '.mh372-cal .mh372-nav button{min-height:44px;padding:0;font-size:20px}'+
+      '.mh372-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;margin-top:6px}'+
+      '.mh372-grid .mh372-dow{font-size:11px;color:var(--dim);text-align:center;font-weight:600;padding:2px 0}'+
+      '.mh372-grid .mh372-j{min-height:58px;padding:3px 2px 3px 4px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--txt);text-align:left;display:flex;flex-direction:column;gap:1px;position:relative;overflow:hidden;font-weight:400;margin:0;min-width:0}'+
+      '.mh372-grid .mh372-j[data-hors="1"]{opacity:.38}.mh372-grid .mh372-j[data-etat="aucun"] .mh372-l{color:var(--dim)}'+
+      '.mh372-grid .mh372-j .mh372-n{font-size:12px;font-weight:700;line-height:1.1}.mh372-grid .mh372-j .mh372-l{font-size:10.5px;line-height:1.15;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}'+
+      '.mh372-grid .mh372-j .mh372-c{position:absolute;left:0;top:0;bottom:0;width:3px}'+
+      '.mh372-grid .mh372-j[data-etat="conflit"]{border:2px solid #b26a00}.mh372-grid .mh372-j[data-aujourdhui="1"]{box-shadow:inset 0 0 0 2px #5b8def}'+
+      '.mh372-grid .mh372-j[aria-pressed="true"]{outline:2px solid var(--txt);outline-offset:1px}'+
+      '.mh372-grid .mh372-j .mh372-x{font-size:10px;color:var(--dim)}'+
+      '.mh372-jour{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px}.mh372-jour h3{margin:0 0 4px;font-size:16px}'+
+      '.mh372-jour .mh372-val{border-top:1px solid var(--line);padding-top:8px;margin-top:8px;font-size:13px}.mh372-jour .mh372-val .mh372-prev{font-size:16px}'+
+      '.mh372-src{font-size:12.5px;margin-top:8px}.mh372-src li{margin:2px 0}';
     document.head.appendChild(s);
   }
   const P=()=>root.MHPlanning,I=()=>root.MHPlanningImport;
@@ -298,6 +318,61 @@
     if(courante&&courante.sourceSha256===p.source.sha256)courante=null;
     vue={fiche:null};message={tone:'k',texte:txt};render()}
 
+  /* ---------- 📅 Planning : calendrier du prévisionnel validé (lot D) ---------- */
+  const CAL=()=>root.MHPrevuCalendrier;
+  const aujourdhui=()=>{try{const d=new Date();return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())}catch(e){return ''}};
+  const hm=m=>m==null?'—':Math.floor(m/60)+'h'+(m%60?p2(m%60):'');
+  function ongletCourant(){if(onglet)return onglet;return CAL()&&CAL().fiches(st()).length?'planning':'ocr'}
+  function ongletsHtml(o){return '<div class="mh372-tabs" role="tablist" data-k="onglets">'+
+    '<button role="tab" data-k="onglet-planning" aria-selected="'+(o==='planning')+'" onclick="MHPrevu.onglet(\'planning\')">📅 Planning</button>'+
+    '<button role="tab" data-k="onglet-ocr" aria-selected="'+(o==='ocr')+'" onclick="MHPrevu.onglet(\'ocr\')">🔎 OCR / Validation</button></div>'}
+  function provTxt(pr){return esc(pr.source||'fichier')+(pr.page!=null?' · page '+pr.page:'')+(pr.tableau!=null?' · tableau '+pr.tableau:'')}
+  /* correction faite pendant la validation OCR (journal de l'analyse) pour cette date */
+  function correctionOcr(pr,date){try{const a=pr.importId&&st().analyseLire(pr.importId);if(!a)return null;
+    const c=(a.cells||[]).find(x=>x.date===date&&(pr.tableau==null||x.table===pr.tableau-1)&&x.texteCorrige!=null);return c?{lu:String(c.rawText||'').replace(/\n/g,' '),corrige:c.texteCorrige}:null}catch(e){return null}}
+  function valeurHtml(v,date){const pr=v.provenance,cor=correctionOcr(pr,date),kv=(k,x)=>'<dt>'+k+'</dt><dd>'+x+'</dd>';
+    return '<div class="mh372-val" data-k="valeur" data-planning="'+esc(pr.planningId)+'"><div>Prévu : <span class="mh372-prev" style="font-weight:700;display:inline;border:0;padding:0;background:none">'+esc(v.libelle||'—')+'</span></div>'+
+      '<dl class="mh372-kv">'+(v.dureeMin!=null?kv('Durée prévue',hm(v.dureeMin)):'')+
+        (v.horaires?kv('Horaires prévus',esc(v.horaires.debut)+' → '+esc(v.horaires.fin)+(v.amplitudeMin!=null?' (amplitude '+hm(v.amplitudeMin)+')':'')):'')+
+        (v.applicable===false?kv('Remarque','code déclaré non concerné'):'')+
+        kv('Source',provTxt(pr)+(pr.pageRetournee?' <span class="mut">(page lue retournée)</span>':''))+
+        kv('Période du planning',dFr(pr.periode.debut)+' → '+dFr(pr.periode.fin))+
+        kv('Statut','validé'+(pr.valideLe?' le '+dtFr(pr.valideLe):''))+
+        kv('Correction',cor?'oui : lu « '+esc(cor.lu)+' », corrigé en « '+esc(cor.corrige)+' »':v.saisie==='corrigée sur la fiche'?'oui, sur la fiche':'non')+'</dl>'+
+      '<button class="g" onclick="MHPrevu.ouvrirFiche(\''+esc(pr.planningId)+'\',\'planning\')">Ouvrir la fiche</button></div>'}
+  function jourHtml(e){
+    const t=CAL().dateLongue(e.date);
+    if(e.etat==='aucun')return '<div class="mh372-jour" data-k="jour-detail" data-date="'+e.date+'" data-etat="aucun"><h3>'+t+'</h3><span class="mh372-prevu-badge">PRÉVISIONNEL</span>'+
+      '<p class="mut" style="font-size:13px;margin:8px 0 0">Aucune valeur prévue pour cette date dans les plannings validés. Cela ne dit rien de ton travail réel.</p></div>';
+    return '<div class="mh372-jour" data-k="jour-detail" data-date="'+e.date+'" data-etat="'+esc(e.etat)+'"><h3>'+t+'</h3><span class="mh372-prevu-badge">PRÉVISIONNEL</span>'+
+      '<p class="mut" style="font-size:12.5px;margin:6px 0 0">Valeur prévue par un planning validé : elle ne prouve pas que cette journée a été travaillée.</p>'+
+      (e.etat==='conflit'?'<div class="al w" data-k="conflit" style="margin-top:8px">⚠ Conflit prévisionnel : '+e.valeurs.length+' plannings validés prévoient des valeurs différentes. Aucune n’est retenue automatiquement.</div>':'')+
+      (e.etat==='identique'?'<div class="al i" data-k="identique" style="margin-top:8px">Même valeur dans '+e.valeurs.length+' plannings validés (provenances conservées ci-dessous).</div>':'')+
+      e.valeurs.map(v=>valeurHtml(v,e.date)).join('')+'</div>'}
+  function calendrierHtml(){
+    const C=CAL();if(!C)return '<div class="card"><p class="mut">Calendrier indisponible.</p></div>';
+    const auj=aujourdhui(),f=C.fiches(st());
+    if(!f.length)return '<div class="card mh372 mh372-cal" data-k="calendrier" data-vide="1"><span class="mh372-prevu-badge">PRÉVU</span><h2 style="margin:6px 0">Planning prévisionnel</h2>'+
+      '<p class="mut">Aucun planning prévisionnel validé pour l’instant.</p><p class="mut" style="font-size:13px">Importe un planning et valide son analyse dans 🔎 OCR / Validation : il apparaîtra ici.</p>'+
+      '<button onclick="MHPrevu.onglet(\'ocr\')">🔎 Aller à OCR / Validation</button></div>';
+    if(!calMois)calMois=C.moisInitial(st(),auj);
+    const M=C.mois(st(),calMois),DOW=['L','M','M','J','V','S','D'];
+    const cel=c=>{const e=c.entree,lab=e.etat==='conflit'?'⚠ Conflit':e.libelle||'',coul=e.valeurs[0]&&e.valeurs[0].couleur;
+      return '<button class="mh372-j" data-date="'+c.date+'" data-etat="'+esc(e.etat)+'" data-hors="'+(c.dansMois?0:1)+'" data-aujourdhui="'+(c.date===auj?1:0)+'" aria-pressed="'+(calJour===c.date)+'"'+
+        ' aria-label="'+esc(C.dateLongue(c.date)+(lab?' : prévu '+lab:' : rien de prévu'))+'" onclick="MHPrevu.jour(\''+c.date+'\')">'+
+        (coul&&e.etat!=='conflit'?'<span class="mh372-c" style="background:'+esc(coul)+'"></span>':'')+
+        '<span class="mh372-n">'+(+c.date.slice(8))+'</span><span class="mh372-l">'+esc(lab)+'</span>'+(e.etat==='identique'?'<span class="mh372-x">×'+e.valeurs.length+'</span>':'')+'</button>'};
+    const e=calJour&&C.entree(st(),calJour);
+    return '<div class="card mh372 mh372-cal" data-k="calendrier" data-mois="'+M.mois+'"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span class="mh372-prevu-badge" data-k="badge-prevu">PRÉVU</span>'+
+      '<button class="g" data-k="aujourdhui" style="min-height:36px;padding:4px 12px;font-size:13px" onclick="MHPrevu.aujourdhui()">Aujourd’hui</button></div>'+
+      '<div class="mh372-nav"><button class="g" data-k="mois-prec" aria-label="Mois précédent" onclick="MHPrevu.moisPrecedent()">‹</button><h2 data-k="mois-titre">'+esc(M.titre)+'</h2>'+
+      '<button class="g" data-k="mois-suiv" aria-label="Mois suivant" onclick="MHPrevu.moisSuivant()">›</button></div>'+
+      '<p class="mut" style="font-size:12px;margin:0;text-align:center">Planning prévisionnel validé · ne prouve pas une heure travaillée'+(M.resume.conflits?' · <b style="color:#b26a00">'+M.resume.conflits+' conflit'+(M.resume.conflits>1?'s':'')+'</b>':'')+'</p>'+
+      '<div class="mh372-grid" data-k="grille">'+DOW.map(d=>'<div class="mh372-dow">'+d+'</div>').join('')+M.semaines.flat().map(cel).join('')+'</div>'+
+      (e?jourHtml(e):'<p class="mut" style="font-size:12.5px;margin:8px 0 0">Touche une date pour voir le détail prévu et sa provenance.</p>')+
+      (M.plannings.length?'<div class="mh372-src" data-k="sources"><b>Plannings de ce mois</b><ul style="padding-left:18px;margin:4px 0 0">'+M.plannings.map(pr=>'<li>'+dFr(pr.periode.debut)+' → '+dFr(pr.periode.fin)+' · '+provTxt(pr)+'</li>').join('')+'</ul></div>':
+        '<p class="mut" style="font-size:12.5px" data-k="sources">Aucun planning validé ne couvre ce mois.</p>')+'</div>'}
+
   function render(){
     const sec=$('s-prevu');if(!sec||!P()||!I())return;
     css();urls.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});urls=[];
@@ -307,7 +382,9 @@
     if(fp){sec.innerHTML=msgHtml()+fichePlanningHtml(fp);return}
     if(r&&vue.analyse){const a=analyseCourante(r);if(a){sec.innerHTML=msgHtml()+analyseHtml(r,a);sourceVignette(r);return}vue={fiche:r.id}}
     if(r){sec.innerHTML=msgHtml()+ficheHtml(r);apercu(r);return}
-    sec.innerHTML='<div class="card mh372"><span class="mh31-eyebrow">PLANNING PRÉVISIONNEL</span><h2 style="margin:4px 0 6px">📋 Prévu</h2>'+
+    const og=ongletCourant();
+    if(og==='planning'){sec.innerHTML='<div class="mh372">'+ongletsHtml(og)+'</div>'+msgHtml()+calendrierHtml();return}
+    sec.innerHTML='<div class="mh372">'+ongletsHtml(og)+'</div><div class="card mh372"><span class="mh31-eyebrow">PLANNING PRÉVISIONNEL · OCR / VALIDATION</span><h2 style="margin:4px 0 6px">📋 Prévu</h2>'+
       '<div class="al i">Planning prévisionnel : il ne prouve pas une heure réellement travaillée et ne modifie jamais tes journées.</div>'+
       '<button id="mh372Open" onclick="MHPrevu.ouvrirImport()" aria-expanded="'+(vue.import?'true':'false')+'">＋ Importer un planning</button>'+
       (vue.import?importHtml():'')+msgHtml()+'</div>'+listeHtml();
@@ -361,12 +438,17 @@
   async function verifier(){try{await I().verifierSources()}catch(e){}if(root.curTab==='prevu')render()}
 
   root.MHPrevu={version:V,render,verifier,
-    ouvrirImport(){vue={fiche:null,import:true};message=null;render();try{const b=$('mh372Imp');if(b&&b.scrollIntoView)b.scrollIntoView({block:'nearest'})}catch(e){}},
-    ouvrir(id){vue={fiche:id};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
+    onglet(o){onglet=o==='planning'?'planning':'ocr';vue={fiche:null};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
+    moisPrecedent(){calMois=CAL().ajouterMois(calMois,-1);calJour=null;render()},
+    moisSuivant(){calMois=CAL().ajouterMois(calMois,1);calJour=null;render()},
+    aujourdhui(){const a=aujourdhui();calMois=a.slice(0,7);calJour=a;render()},
+    jour(d){calJour=calJour===d?null:d;if(d&&d.slice(0,7)!==calMois)calMois=d.slice(0,7);render();try{const el=document.querySelector('#s-prevu [data-k="jour-detail"]');if(el&&el.scrollIntoView)el.scrollIntoView({block:'nearest'})}catch(e){}},
+    ouvrirImport(){onglet='ocr';vue={fiche:null,import:true};message=null;render();try{const b=$('mh372Imp');if(b&&b.scrollIntoView)b.scrollIntoView({block:'nearest'})}catch(e){}},
+    ouvrir(id){onglet='ocr';vue={fiche:id};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
     retour(){vue={fiche:null};message=null;render()},supprimer,texte,
     analyser(){return lancerAnalyse([])},choisirLigne,corrigerCellule,confirmerCellule,validerAnalyse,rejeterAnalyse,
     validerUnite,validerSelection,selectionnerUnite,supprimerFiche,
-    ouvrirFiche(id){vue={planning:id};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
+    ouvrirFiche(id,depuis){if(depuis)onglet=depuis;vue={planning:id};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
     ouvrirUnite(t){if(!vue.fiche)return;vue={fiche:vue.fiche,analyse:true,unite:t};edition=false;choixOuvert=false;message=null;render();try{root.scrollTo(0,0)}catch(e){}},
     toutesUnites(){if(!vue.fiche)return;vue={fiche:vue.fiche,analyse:true,unite:null};edition=false;choixOuvert=false;message=null;render()},
     voirAnalyse(){if(!vue.fiche)return;vue={fiche:vue.fiche,analyse:true};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
