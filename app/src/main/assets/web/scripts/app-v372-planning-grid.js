@@ -149,7 +149,20 @@
       if(suite.length>=3){suite.forEach(x=>{if(!x.comble)pris.add(x.pos)});suites.push(suite)}else pris.add(q)});
     /* suites qui se chevauchent : la plus longue l'emporte */
     suites.sort((a,b)=>b.length-a.length);const gardees=[];
-    suites.forEach(su=>{const a=su[0].pos,b=su[su.length-1].pos;if(gardees.every(g=>b<g[0].pos-pas0*0.5||a>g[g.length-1].pos+pas0*0.5))gardees.push(su)});
+    /* deux suites qui se touchent (un seul liseré commun ou presque, ex. au pli du papier) et de même pas forment une seule
+       rangée : elles sont raccordées, le liseré de jonction douteux est remplacé par des liserés comblés à pas régulier */
+    const raccorder=(g,su)=>{const [A,B]=g[0].pos<su[0].pos?[g,su]:[su,g],pa=(A[A.length-1].pos-A[0].pos)/Math.max(1,A.length-1),pb=(B[B.length-1].pos-B[0].pos)/Math.max(1,B.length-1);
+      if(Math.abs(pa-pb)>0.08*Math.max(pa,pb))return null;const fin=A[A.length-1].pos,deb=B[0].pos,p=(pa+pb)/2;
+      if(deb<fin-0.6*pa)return null;
+      if(deb<=fin+0.6*pa){   /* jonction commune : le liseré partagé, douteux, est remplacé */
+        const a=A.slice(0,-1),b=B.slice(1),x0=a[a.length-1].pos,x1=b[0].pos,n=Math.round((x1-x0)/p);if(n<1||n>3)return null;
+        const mid=[];for(let k=1;k<n;k++)mid.push({pos:x0+(x1-x0)*k/n,comble:true});return a.concat(mid,b)}
+      /* écart de 2 à 4 pas exactement (colonnes délavées au pli) : liserés manquants comblés */
+      const n=Math.round((deb-fin)/p);if(n<2||n>4||Math.abs(deb-fin-n*p)>0.2*p)return null;
+      const mid=[];for(let k=1;k<n;k++)mid.push({pos:fin+(deb-fin)*k/n,comble:true});return A.concat(mid,B)};
+    suites.forEach(su=>{const a=su[0].pos,b=su[su.length-1].pos;
+      for(let i=0;i<gardees.length;i++){const r=raccorder(gardees[i],su);if(r){gardees[i]=r;return}}
+      if(gardees.every(g=>b<g[0].pos-pas0*0.5||a>g[g.length-1].pos+pas0*0.5))gardees.push(su)});
     return gardees.sort((a,b)=>a[0].pos-b[0].pos).map(su=>({pas:(su[su.length-1].pos-su[0].pos)/Math.max(1,su.length-1),positions:su.map(x=>x.pos),
       combles:su.filter(x=>x.comble).length,erreur:0}));
   }
@@ -158,6 +171,10 @@
     positions.forEach(c=>{let b=null;pk.forEach(q=>{if(Math.abs(q-c)<pas*0.5&&(b==null||Math.abs(q-c)<Math.abs(b-c)))b=q});if(b!=null)d.push(b-c)});
     if(d.length<3)return null;d.sort((a,b)=>a-b);return d[Math.floor(d.length/2)]}
 
+  /* Un planning couvre au moins une semaine : un « tableau » de moins de 7 colonnes est un motif de texte ou de décor. */
+  const MIN_COLONNES=7;
+  /* cellules de moins de 15 px de large : texture (mur, liège), illisibles de toute façon */
+  const MIN_PAS=15;
   /* Détection de tous les tableaux de l'image. Retourne [] si aucun tableau structuré n'est trouvé. */
   function detecterTableaux(img){
     const W=img.width,H=img.height;if(!W||!H||W<60||H<60)return [];
@@ -174,7 +191,7 @@
       if(pc2.length){pc.length=0;pc.push(...pc2);const ch=cretes(img,0,Math.round(med(pc)*0.6)),pl2=[];bs.forEach(([y0,y1])=>{const b=pasDe(frac(ch.hori,W,0,W,y0,y1,'y'),Math.max(5,c.k+1));if(b)pl2.push(b)});if(pl2.length){pl.length=0;pl.push(...pl2)}}}
     const c2=pl.length&&pc.length?cretes(img,Math.round(med(pl)*0.6),Math.round(med(pc)*0.6)):c;
     bs.forEach(([y0,y1])=>{
-      reseau(frac(c2.vert,W,0,W,y0,y1,'x'),Math.max(5,c2.k+1)).forEach(rc=>{const t=structurer(c2,img,rc,y0,y1);if(t)out.push(t)});
+      reseau(frac(c2.vert,W,0,W,y0,y1,'x'),Math.max(5,c2.k+1)).forEach(rc=>{const t=structurer(c2,img,rc,y0,y1);if(t&&t.colonnes>=MIN_COLONNES&&t.pasColonne>=MIN_PAS&&t.pasLigne>=MIN_PAS*0.6)out.push(t)});
     });
     return out.map((t,i)=>Object.assign(t,{index:i}));
   }
@@ -189,23 +206,35 @@
     let Y=rr.positions.map(v=>v+by0),pasL=rr.pas;
     /* bords extérieurs : une rangée de cellules au-delà du dernier liseré n'a pas de liseré côté papier. Elle est ajoutée si elle est
        nettement plus sombre ou plus colorée que la bande suivante vers l'extérieur (papier, colonne des noms, en-têtes). */
+    /* niveau du papier autour du tableau (photo à l'ombre : papier gris) ; « blanc » = au plus 28 sous ce niveau, jamais au-delà de 200 */
+    const seuilBlanc=(()=>{const d=img.data,v=[],ya=Math.max(0,Math.round(by0-3*rc.pas)),yb=Math.min(H,Math.round(by1+3*rc.pas));
+      for(let y=ya;y<yb;y+=3)for(let x=0;x<W;x+=3){const i=(y*W+x)*4;v.push(Math.max(d[i],d[i+1],d[i+2]))}
+      if(!v.length)return 200;v.sort((p,q)=>p-q);return Math.min(200,v[Math.floor(v.length*0.92)]-28)})();
     const stats=(xa,xb,ya,yb)=>{xa=Math.max(0,Math.round(xa));xb=Math.min(W,Math.round(xb));ya=Math.max(0,Math.round(ya));yb=Math.min(H,Math.round(yb));
       if(xb-xa<2||yb-ya<2)return null;const d=img.data,vs=[];let sat=0,t=0;
       for(let y=ya;y<yb;y++)for(let x=xa;x<xb;x+=2){const i=(y*W+x)*4,mx=Math.max(d[i],d[i+1],d[i+2]),mn=Math.min(d[i],d[i+1],d[i+2]);vs.push(mx);t++;if(mx&&(mx-mn)/mx>0.3)sat++}
-      let blanc=0;vs.forEach(x=>{if(x>200)blanc++});vs.sort((a,b)=>a-b);return {v:vs[Math.floor(vs.length/2)],sat:sat/t,blanc:blanc/t}};
+      let blanc=0;vs.forEach(x=>{if(x>seuilBlanc)blanc++});vs.sort((a,b)=>a-b);return {v:vs[Math.floor(vs.length/2)],sat:sat/t,blanc:blanc/t}};
     /* une bande de cellules contient peu de « papier » et se distingue de la bande extérieure (papier, noms, en-têtes) */
     const cellesVsDehors=(dedans,dehors)=>!!(dedans&&dehors&&dedans.blanc<0.45&&(dehors.v-dedans.v>=18||dedans.sat-dehors.sat>=0.2));
     /* rognage : une colonne ou une rangée d'extrémité qui est surtout du papier (noms, en-têtes, marge) n'est pas une cellule */
     const papier=(xa,xb,ya,yb)=>{const st=stats(xa,xb,ya,yb);return !st||st.blanc>=0.45};
+    /* rangées d'extrémité : papier seulement si le cinquième gauche ET toute la largeur le sont (des cellules pâles au début
+       d'une rangée, ex. « Formation » délavée, ne la font plus prendre pour du papier). Rangées rognées avant ET après les
+       colonnes : des rangées d'en-tête blanches ne font plus prendre les colonnes pour du papier. */
+    const xr1f=()=>X[Math.min(X.length-1,Math.max(4,Math.round(X.length/5)))];
+    const rognerRangees=()=>{const xr1=xr1f(),xr2=X[X.length-1],papierR=(ya,yb)=>papier(X[0],xr1,ya,yb)&&papier(X[0],xr2,ya,yb);
+      while(Y.length>2&&papierR(Y[0],Y[1]))Y.shift();
+      while(Y.length>2&&papierR(Y[Y.length-2],Y[Y.length-1]))Y.pop()};
+    rognerRangees();
     while(X.length>4&&papier(X[0],X[1],Y[0],Y[Y.length-1]))X.shift();
     while(X.length>4&&papier(X[X.length-2],X[X.length-1],Y[0],Y[Y.length-1]))X.pop();
-    const xr1=X[Math.min(X.length-1,Math.max(4,Math.round(X.length/5)))];
-    while(Y.length>2&&papier(X[0],xr1,Y[0],Y[1]))Y.shift();
-    while(Y.length>2&&papier(X[0],xr1,Y[Y.length-2],Y[Y.length-1]))Y.pop();
+    rognerRangees();
+    const xr1=xr1f(),xr2=X[X.length-1];
     const ya=Y[0],yb=Y[Y.length-1],xa=X[0],xb=X[X.length-1];
     const yp=ya-(Y[1]-Y[0]),yn=yb+(yb-Y[Y.length-2]),xp=xa-(X[1]-X[0]),xn=xb+(xb-X[X.length-2]);
-    if(cellesVsDehors(stats(xa,xr1,yp+(ya-yp)*0.15,yp+(ya-yp)*0.85),stats(xa,xr1,yp-(ya-yp)*0.85,yp-(ya-yp)*0.15)))Y.unshift(yp);
-    if(cellesVsDehors(stats(xa,xr1,yb+(yn-yb)*0.15,yb+(yn-yb)*0.85),stats(xa,xr1,yn+(yn-yb)*0.15,yn+(yn-yb)*0.85)))Y.push(yn);
+    const rangeeEnPlus=(y0,y1,z0,z1)=>[xr1,xr2].some(xr=>cellesVsDehors(stats(xa,xr,y0,y1),stats(xa,xr,z0,z1)));
+    if(rangeeEnPlus(yp+(ya-yp)*0.15,yp+(ya-yp)*0.85,yp-(ya-yp)*0.85,yp-(ya-yp)*0.15))Y.unshift(yp);
+    if(rangeeEnPlus(yb+(yn-yb)*0.15,yb+(yn-yb)*0.85,yn+(yn-yb)*0.15,yn+(yn-yb)*0.85))Y.push(yn);
     if(cellesVsDehors(stats(xp+(xa-xp)*0.15,xp+(xa-xp)*0.85,Y[0],Y[Y.length-1]),stats(xp-(xa-xp)*0.85,xp-(xa-xp)*0.15,Y[0],Y[Y.length-1])))X.unshift(xp);
     if(cellesVsDehors(stats(xb+(xn-xb)*0.15,xb+(xn-xb)*0.85,Y[0],Y[Y.length-1]),stats(xn+(xn-xb)*0.15,xn+(xn-xb)*0.85,Y[0],Y[Y.length-1])))X.push(xn);
     const nbL=Y.length-1,nbC=X.length-1;if(nbL<1||nbC<3)return null;
@@ -234,15 +263,32 @@
     const cellules=[];
     for(let i=0;i<nbL;i++){const row=[];for(let j=0;j<nbC;j++){const a=pt(i,j),b=pt(i,j+1),cc=pt(i+1,j+1),d=pt(i+1,j);
       const XS=[a[0],b[0],cc[0],d[0]],YS=[a[1],b[1],cc[1],d[1]],x=Math.min(...XS),y=Math.min(...YS);
-      row.push({ligne:i,colonne:j,bounds:{x:Math.round(x),y:Math.round(y),w:Math.round(Math.max(...XS)-x),h:Math.round(Math.max(...YS)-y)}})}cellules.push(row)}
+      const bx={x:Math.round(x),y:Math.round(y),w:Math.round(Math.max(...XS)-x),h:Math.round(Math.max(...YS)-y)};
+      row.push({ligne:i,colonne:j,bounds:recaler(img,bx,pasL),maillage:bx})}cellules.push(row)}
     const a00=pt(0,0),aN0=pt(nbL,0),a0N=pt(0,nbC);
     return {bounds:{x:Math.round(a00[0]),y:Math.round(a00[1]),w:Math.round(a0N[0]-a00[0]),h:Math.round(aN0[1]-a00[1])},lignes:nbL,colonnes:nbC,
       pasLigne:+pasL.toFixed(2),pasColonne:+pasC.toFixed(2),inclinaison:+(Math.atan(sy)*180/Math.PI).toFixed(2),maillage:{bandesLignes:MR.ajustees+'/'+MR.nb,bandesColonnes:MC.ajustees+'/'+MC.nb},
       regularite:+Math.max(rc.erreur,rr.erreur).toFixed(2),liseresComblés:(rc.combles||0)+(rr.combles||0),cellules,
       /* zones à lire : noms à gauche, en-têtes de dates au-dessus, titre plus haut */
       zoneNom:i=>{const a=pt(i,0),b=pt(i+1,0),xr=Math.min(a[0],b[0])-2,xl=Math.max(0,xr-pasC*4.4);return {x:Math.round(xl),y:Math.round(Math.min(a[1],b[1])),w:Math.max(1,Math.round(xr-xl)),h:Math.max(1,Math.round(Math.abs(b[1]-a[1])))}},
-      zoneEntete:j=>{const a=pt(0,j),b=pt(0,j+1),h=pasL*1.25,yb=Math.min(a[1],b[1])-1;return {x:Math.round(a[0]),y:Math.max(0,Math.round(yb-h)),w:Math.max(1,Math.round(b[0]-a[0])),h:Math.max(1,Math.round(Math.min(h,yb)))}},
+      zoneEntete:j=>{const a=pt(0,j),b=pt(0,j+1),h=pasL*1.25,cb=cellules[0][j].bounds,yb=Math.min(cb.y,Math.round(Math.max(a[1],b[1])))-1;   /* au-dessus de la 1re cellule recalée */return {x:Math.round(a[0]),y:Math.max(0,Math.round(yb-h)),w:Math.max(1,Math.round(b[0]-a[0])),h:Math.max(1,Math.round(Math.min(h,yb)))}},
       zoneTitre:()=>{const yb=a00[1]-pasL*1.3,h=pasL*3.4,xl=Math.max(0,a00[0]-pasC*4.4);return {x:Math.round(xl),y:Math.max(0,Math.round(yb-h)),w:Math.max(1,Math.round(Math.min(W,a0N[0])-xl)),h:Math.max(1,Math.round(Math.min(h,yb)))}}};
+  }
+
+  /* Recalage vertical d'une cellule (papier bombé, perspective) : la cellule est la bande continue de lignes de pixels dont
+   * la partie centrale a la couleur de fond de la cellule (texte toléré), bornée par les liserés clairs. Recalage limité à
+   * ±0,4 pas ; sinon (cellule pâle, fond proche du liseré) la position du maillage est gardée. */
+  function recaler(img,b,pas){
+    const f=couleur(img,b);if(!f||!f.rempli)return b;const W=img.width,H=img.height,d=img.data;
+    const xa=Math.max(0,Math.round(b.x+b.w*0.2)),xb=Math.min(W,Math.round(b.x+b.w*0.8)),m=Math.round(pas*0.4);
+    const ya=Math.max(0,b.y-m),yb=Math.min(H,b.y+b.h+m),sc=[];
+    for(let y=ya;y<yb;y++){let n=0,t=0;for(let x=xa;x<xb;x+=2){const i=(y*W+x)*4;t++;if(Math.abs(d[i]-f.rgb[0])+Math.abs(d[i+1]-f.rgb[1])+Math.abs(d[i+2]-f.rgb[2])<75)n++}sc.push(n/Math.max(1,t))}
+    const c=Math.round(b.y+b.h/2)-ya;if(!(sc[c]>0.25))return b;
+    let h0=c,h1=c;while(h0>0&&sc[h0-1]>0.25)h0--;while(h1<sc.length-1&&sc[h1+1]>0.25)h1++;
+    const y0=ya+h0,y1=ya+h1+1,hh=y1-y0;
+    if(hh<b.h*0.55||hh>b.h*1.15||h0===0||h1===sc.length-1)return b;
+    /* marge : le liseré n'est pas compris dans la cellule ; on garde 1 px de fond autour */
+    return {x:b.x,y:Math.max(0,y0-1),w:b.w,h:Math.min(H-Math.max(0,y0-1),hh+2)};
   }
 
   /* ---------- couleur d'une cellule ---------- */
@@ -274,5 +320,5 @@
     const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);return {x:Math.min(...xs),y:Math.min(...ys),w:Math.abs(xs[1]-xs[0]),h:Math.abs(ys[1]-ys[0])};
   }
 
-  root.MHPlanningGrid={version:V,hsv,hsl,hex,dist,gris,contraste,binaire,otsu,recadrer,agrandir,vueOcr,detecterTableaux,couleur,grouper,versOriginal,dimsOrientees,_interne:{pics,regulariser,bandes,cretes}};
+  root.MHPlanningGrid={version:V,hsv,hsl,hex,dist,gris,contraste,binaire,otsu,recadrer,agrandir,vueOcr,detecterTableaux,couleur,grouper,versOriginal,dimsOrientees,_interne:{pics,regulariser,bandes,cretes,recaler}};
 })(typeof window!=='undefined'?window:globalThis);

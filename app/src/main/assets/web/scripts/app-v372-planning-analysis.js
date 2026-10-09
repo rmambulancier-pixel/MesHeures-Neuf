@@ -58,8 +58,12 @@
   }
 
   /* ---------- une cellule ---------- */
+  /* Liserés lus comme caractères aux BORDS du texte (« | », « [ », « ] », « { », « } ») : retirés avant interprétation, et dit
+     dans la justification. Jamais une lettre ni un chiffre ; rawText reste la lecture brute. */
+  const BORD=/^[|\[\]{}]+\s*|\s*[|\[\]{}]+$/g;
   function cellule(lecture,col,couleur){
-    const I=P().interpreter(lecture.text),txt=String(lecture.text||'').trim(),conf=lecture.conf==null?0:lecture.conf;
+    const brut=String(lecture.text||''),net=brut.trim().replace(BORD,'').trim(),bords=net!==brut.trim();
+    const I=P().interpreter(net),txt=net,conf=lecture.conf==null?0:lecture.conf;
     const chemin=I.correspondance==='exacte'?'exacte':I.correspondance==='approchée'?(I.tolerance==='variante'?'variante':'generale'):'aucune';
     const fiable=!!col.date,confiance=Math.round((conf/100)*FACTEUR[chemin]*(fiable?1:0.6)*100)/100;
     let status,motif;
@@ -73,7 +77,7 @@
     else{status='interprété';motif=null}
     const ok=status!=='illisible'&&status!=='vide';
     const justification=!txt?'Aucun texte lu : aucune valeur n’est déduite.':
-      'Lecture « '+txt.replace(/\n/g,' ')+' » (confiance OCR '+conf+' %) → '+(I.regle?'règle '+I.regle+' ('+CHEMIN[chemin]+(I.variante?' « '+I.variante+' »':'')+')':'aucune règle')+'.'+(motif?' À vérifier : '+motif+'.':'');
+      'Lecture « '+brut.trim().replace(/\n/g,' ')+' »'+(bords?' (bords « | [ ] { } » retirés : « '+txt.replace(/\n/g,' ')+' »)':'')+' (confiance OCR '+conf+' %) → '+(I.regle?'règle '+I.regle+' ('+CHEMIN[chemin]+(I.variante?' « '+I.variante+' »':'')+')':'aucune règle')+'.'+(motif?' À vérifier : '+motif+'.':'');
     return {date:col.date,dateProposee:col.dateProposee,colonne:col.colonne,rawText:String(lecture.text||''),normalizedText:I.normalise,confOcr:conf,
       color:couleur?{rgb:couleur.rgb,hex:couleur.hex,hsl:couleur.hsl,rempli:couleur.rempli,groupe:null}:null,bounds:null,boundsOriginal:null,
       interpretation:ok&&I.type!=='VIDE'?{type:I.type,libelle:I.libelle,dureeMin:I.dureeMin,horaires:I.horaires,amplitudeMin:I.amplitudeMin,applicable:I.applicable,regle:I.regle,chemin}:null,
@@ -81,56 +85,73 @@
   }
 
   /* ---------- analyse complète ---------- */
+  /* Copie tournée de 180° (page scannée à l'envers) ; l'image reçue n'est jamais modifiée. */
+  function tourner180(img){const W=img.width,H=img.height,s=img.data,o=new Uint8ClampedArray(s.length);
+    for(let p=0,q=(W*H-1)*4;p<s.length;p+=4,q-=4){o[q]=s[p];o[q+1]=s[p+1];o[q+2]=s[p+2];o[q+3]=s[p+3]}return {width:W,height:H,data:o,cle:(img.cle||'')+':180'}}
   /* opts : {image (ImageData de l'image ORIENTÉE, éventuellement réduite), orientation (EXIF 1-8),
    *        largeurOrientee, hauteurOrientee (image orientée, pleine résolution), largeurOriginale, hauteurOriginale (fichier stocké,
    *        AVANT orientation), echelle (image analysée / image orientée pleine résolution), sourceSha256, ocr:{lire}, nomRef,
    *        choix:[{table,ligne}], maintenant}
-   * Sans dimensions fournies : image orientée = image analysée / échelle, original déduit de l'orientation (largeur ↔ hauteur en 5-8). */
+   *   ou pages:[{image, orientation, largeurOrientee, hauteurOrientee, largeurOriginale, hauteurOriginale, echelle, page}] (PDF de
+   *        plusieurs pages) ; les tableaux sont numérotés de suite d'une page à l'autre.
+   * Sans dimensions fournies : image orientée = image analysée / échelle, original déduit de l'orientation (largeur ↔ hauteur en 5-8).
+   * Une page sans tableau daté est relue tournée de 180° (scan à l'envers) ; la rotation est reportée dans les coordonnées. */
   async function analyser(opts){
     opts=opts||{};const now=opts.maintenant||new Date().toISOString(),ref=now.slice(0,10);
     const base={version:V,sourceSha256:opts.sourceSha256||null,analyzedAt:now,tableCandidates:[],selectedEmployee:null,period:null,cells:[],warnings:[],confidence:0,status:'analyse_incomplète',corrections:[],
       moteur:opts.ocr&&opts.ocr.moteur||'',_candidats:null};
     if(!/^[0-9a-f]{64}$/.test(String(opts.sourceSha256||''))){base.warnings.push({code:'SOURCE_INVALIDE',texte:'Empreinte SHA-256 de la source invalide : analyse refusée.'});base.status='analyse_incomplète';return base}
-    const img=opts.image;if(!img||!img.width||!img.height||!img.data){base.warnings.push({code:'SOURCE_INVALIDE',texte:'Image indisponible ou illisible.'});return base}
+    const pages=Array.isArray(opts.pages)&&opts.pages.length?opts.pages:[Object.assign({},opts,{page:null})];
+    if(pages.some(p=>!p.image||!p.image.width||!p.image.height||!p.image.data)){base.warnings.push({code:'SOURCE_INVALIDE',texte:'Image indisponible ou illisible.'});return base}
     if(!opts.ocr||typeof opts.ocr.lire!=='function'){base.warnings.push({code:'OCR_INDISPONIBLE',texte:'Lecture OCR indisponible sur cet appareil.'});return base}
-    const T=G().detecterTableaux(img);
-    if(!T.length){base.warnings.push({code:'TABLEAU_ABSENT',texte:'Aucun tableau de planning reconnu dans l’image (cadrage, netteté, éclairage).'});return base}
-    const k=opts.echelle||1,o=Number(opts.orientation)||1;
-    const Lo=opts.largeurOrientee||img.width/k,Ho=opts.hauteurOrientee||img.height/k,inv=G().dimsOrientees(Lo,Ho,o);   // l'échange largeur/hauteur est sa propre réciproque
-    const W0=opts.largeurOriginale||inv.largeur,H0=opts.hauteurOriginale||inv.hauteur;
-    const vers=b=>G().versOriginal({x:b.x/k,y:b.y/k,w:b.w/k,h:b.h/k},o,W0,H0);
-    const candidatsParTable=[],tables=[];
-    for(const t of T){
+    /* lecture des tableaux d'une image : titre, en-têtes (dates), noms */
+    const lireTables=async(img,vers)=>{const out=[];for(const t of G().detecterTableaux(img)){
       const titre=await opts.ocr.lire(img,t.zoneTitre(),'titre'),periode=P().periodeDuTitre(titre.text);
       const entetes=[];for(let j=0;j<t.colonnes;j++)entetes.push(await opts.ocr.lire(img,t.zoneEntete(j),'entete'));
       const D=datesColonnes(entetes,periode,ref);
       const noms=[];for(let i=0;i<t.lignes;i++){const r=await opts.ocr.lire(img,t.zoneNom(i),'nom');noms.push({ligne:i,texte:r.text.replace(/\n/g,' ').trim(),conf:r.conf})}
-      const cand=P().candidats(noms,opts.nomRef||'');
-      candidatsParTable.push({table:t.index,candidats:cand.candidats,preselection:cand.preselection});
-      tables.push({t,titre,periode,D,noms});
-      base.tableCandidates.push({index:t.index,bounds:t.bounds,boundsOriginal:vers(t.bounds),lignes:t.lignes,colonnes:t.colonnes,pasLigne:t.pasLigne,pasColonne:t.pasColonne,
-        inclinaison:t.inclinaison,titreLu:titre.text,periodeTitre:periode,premiereDate:D.premiere,datesFiables:D.colonnes.filter(c=>c.date).length});
-      D.warnings.forEach(w=>base.warnings.push(Object.assign({table:t.index},w)));
-      if(!periode)base.warnings.push({code:'DATE_MANQUANTE',table:t.index,texte:'Tableau '+(t.index+1)+' : titre « Planning du … au … » non lu ; dates établies par les en-têtes seuls.'});
+      out.push({t,titre,periode,D,noms,img,vers})}return out};
+    const score=l=>l.reduce((s,x)=>s+x.D.colonnes.filter(c=>c.date).length+(x.periode?5:0),0);
+    const tables=[];
+    for(const pg of pages){
+      const img=pg.image,k=pg.echelle||1,o=Number(pg.orientation)||1;
+      const Lo=pg.largeurOrientee||img.width/k,Ho=pg.hauteurOrientee||img.height/k,inv=G().dimsOrientees(Lo,Ho,o);   // l'échange largeur/hauteur est sa propre réciproque
+      const W0=pg.largeurOriginale||inv.largeur,H0=pg.hauteurOriginale||inv.hauteur;
+      const vers=b=>G().versOriginal({x:b.x/k,y:b.y/k,w:b.w/k,h:b.h/k},o,W0,H0);
+      let lus=await lireTables(img,vers),rot=false;
+      if(opts.essai180!==false&&score(lus)===0){const r=tourner180(img),vers180=b=>vers({x:img.width-b.x-b.w,y:img.height-b.y-b.h,w:b.w,h:b.h});
+        const l2=await lireTables(r,vers180);if(score(l2)>score(lus)){lus=l2;rot=true}}
+      lus.forEach(x=>{x.gi=tables.length;x.page=pg.page;x.rot180=rot;x.lecturePage=pg.source||null;tables.push(x)});
+      if(rot)base.warnings.push({code:'PAGE_RETOURNEE',page:pg.page,texte:(pg.page!=null?'Page '+pg.page:'Image')+' à l’envers : lue tournée de 180° (l’original n’est pas modifié).'});
     }
+    if(!tables.length){base.warnings.push({code:'TABLEAU_ABSENT',texte:'Aucun tableau de planning reconnu dans l’image (cadrage, netteté, éclairage).'});return base}
+    const candidatsParTable=[];
+    tables.forEach(x=>{const {t,titre,periode,D,noms,gi}=x;
+      const cand=P().candidats(noms,opts.nomRef||'');
+      candidatsParTable.push({table:gi,candidats:cand.candidats,preselection:cand.preselection});
+      base.tableCandidates.push({index:gi,page:x.page,lecturePage:x.lecturePage,rotation180:x.rot180,bounds:t.bounds,boundsOriginal:x.vers(t.bounds),lignes:t.lignes,colonnes:t.colonnes,pasLigne:t.pasLigne,pasColonne:t.pasColonne,
+        inclinaison:t.inclinaison,titreLu:titre.text,periodeTitre:periode,premiereDate:D.premiere,datesFiables:D.colonnes.filter(c=>c.date).length});
+      D.warnings.forEach(w=>base.warnings.push(Object.assign({table:gi},w)));
+      if(!periode)base.warnings.push({code:'DATE_MANQUANTE',table:gi,texte:'Tableau '+(gi+1)+' : titre « Planning du … au … » non lu ; dates établies par les en-têtes seuls.'});
+    });
     base._candidats=candidatsParTable;
     /* ligne du salarié : choix manuel, sinon présélection sûre et unique dans chaque tableau */
     const choisies=[];
-    tables.forEach(({t,noms})=>{const c=candidatsParTable.find(x=>x.table===t.index),man=(opts.choix||[]).find(x=>x.table===t.index);
+    tables.forEach(({t,noms,gi})=>{const c=candidatsParTable.find(x=>x.table===gi),man=(opts.choix||[]).find(x=>x.table===gi);
       const ligne=man?man.ligne:c.preselection;
-      if(ligne==null||ligne<0||ligne>=t.lignes){base.warnings.push({code:'LIGNE_AMBIGUE',table:t.index,texte:'Tableau '+(t.index+1)+' : '+(opts.nomRef?'aucune ligne ne correspond avec certitude à « '+opts.nomRef+' »':'nom de référence non renseigné')+' : choisis ta ligne.'});return}
+      if(ligne==null||ligne<0||ligne>=t.lignes){base.warnings.push({code:'LIGNE_AMBIGUE',table:gi,texte:'Tableau '+(gi+1)+' : '+(opts.nomRef?'aucune ligne ne correspond avec certitude à « '+opts.nomRef+' »':'nom de référence non renseigné')+' : choisis ta ligne.'});return}
       const lu=noms[ligne],sc=c.candidats.find(x=>x.ligne===ligne);
-      choisies.push({table:t.index,ligne,nomLu:lu.texte,confOcr:lu.conf,score:sc&&sc.score,auto:!man});
+      choisies.push({table:gi,ligne,nomLu:lu.texte,confOcr:lu.conf,score:sc&&sc.score,auto:!man});
     });
     if(choisies.length)base.selectedEmployee={nom:opts.nomRef||choisies[0].nomLu,parTableau:choisies,confirme:false};
     /* cellules de la ligne choisie, et seulement elle */
     for(const ch of choisies){
-      const {t,D}=tables.find(x=>x.t.index===ch.table),row=t.cellules[ch.ligne];
+      const {t,D,img,vers,page}=tables[ch.table],row=t.cellules[ch.ligne];
       const couleursTable=t.cellules.map(r=>r.map(c=>G().couleur(img,c.bounds)));   // couleurs de tout le tableau : en mémoire, pour l'indice seulement
       const groupes=G().grouper(couleursTable.flat());
       const gid=(i,j)=>{const idx=i*t.colonnes+j,g=groupes.find(x=>x.membres.includes(idx));return g?g.id:null};
       for(let j=0;j<row.length;j++){const b=row[j].bounds,lec=await opts.ocr.lire(img,b,'cellule'),c=cellule(lec,D.colonnes[j],couleursTable[ch.ligne][j]);
-        c.table=ch.table;c.bounds=b;c.boundsOriginal=vers(b);if(c.color)c.color.groupe=gid(ch.ligne,j);base.cells.push(c)}
+        c.table=ch.table;if(page!=null)c.page=page;c.bounds=b;c.boundsOriginal=vers(b);if(c.color)c.color.groupe=gid(ch.ligne,j);base.cells.push(c)}
     }
     controles(base);
     /* période et confiance globales */
@@ -173,5 +194,5 @@
   /* Objet à conserver : sans la liste des noms lus (collègues) ni les données transitoires. */
   function serialiser(a){const o=JSON.parse(JSON.stringify(Object.assign({},a,{_candidats:undefined})));delete o._candidats;return o}
 
-  root.MHPlanningAnalysis={version:V,STATUTS,CHEMIN,analyser,serialiser,datesColonnes,dateLibre,cellule,controles};
+  root.MHPlanningAnalysis={version:V,STATUTS,CHEMIN,analyser,tourner180,serialiser,datesColonnes,dateLibre,cellule,controles};
 })(typeof window!=='undefined'?window:globalThis);

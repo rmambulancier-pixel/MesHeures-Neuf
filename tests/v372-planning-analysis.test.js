@@ -30,7 +30,7 @@ function scenario(o){o=o||{};
   const fin=S.addJ(debut,n-1),tf=k=>k.slice(8)+'/'+k.slice(5,7)+'/'+k.slice(0,4);
   const tables=[{titre:o.titre!==undefined?o.titre:'Planning du '+tf(debut)+' au '+tf(fin),colonnes:cols,lignes,entetes:o.entetes}];
   if(o.second)tables.push(o.second);
-  return Object.assign(S.generer({W:o.W||1400,tables,inclinaison:o.inclinaison||0,bruit:o.bruit||0}),{cols})}
+  return Object.assign(S.generer(Object.assign({W:o.W||1400,tables,inclinaison:o.inclinaison||0,bruit:o.bruit||0},o.fond?{fond:o.fond}:{})),{cols})}
 async function analyse(sc,opts){const m=opts&&opts.mods||load();
   const a=await m.A.analyser(Object.assign({image:sc.image,sourceSha256:SHA,ocr:S.ocrSimule(sc.zones),nomRef:'ROTH Mickael',maintenant:NOW},opts||{},{mods:undefined}));return Object.assign(a,{_m:m})}
 const codes=a=>a.warnings.map(w=>w.code);
@@ -93,6 +93,33 @@ t('peu de colonnes (14) et jambages des noms alignés d’une ligne à l’autre
   const {image,zones}=S.generer({W:1178,cell:[58,38],gap:4,x0:270,lettres:true,tables:[{titre:'x',colonnes:cols,lignes:NOMS.slice(0,4).map((nom,i)=>({nom,cellules:cols.map((_,j)=>CYCLE[(i+j)%CYCLE.length])}))}]});
   const T=G.detecterTableaux(image);assert.equal(T.length,1);assert.equal(T[0].colonnes,14);assert.equal(T[0].lignes,4);assert.ok(Math.abs(T[0].bounds.w/14-62)<2,String(T[0].bounds.w));
   zones.cellule.forEach(z=>{const b=T[0].cellules[z.ligne][z.col].bounds;assert.ok(Math.abs(b.x+b.w/2-(z.x+z.w/2))<5)})});
+/* ---- photos réelles du 09/10/2026 (2576 px, PDF scanné) : cas reproduits en synthétique ---- */
+const peindre=(img,x,y,w,h,c)=>{for(let yy=Math.max(0,Math.round(y));yy<Math.min(img.height,Math.round(y+h));yy++)for(let xx=Math.max(0,Math.round(x));xx<Math.min(img.width,Math.round(x+w));xx++){const i=(yy*img.width+xx)*4;img.data[i]=c[0];img.data[i+1]=c[1];img.data[i+2]=c[2]}};
+const cellulesAlignees=(T,zones,tol)=>zones.cellule.every(z=>{const b=T.cellules[z.ligne]&&T.cellules[z.ligne][z.col]&&T.cellules[z.ligne][z.col].bounds;return b&&Math.abs(b.x+b.w/2-(z.x+z.w/2))<tol&&Math.abs(b.y+b.h/2-(z.y+z.h/2))<tol});
+t('1re rangée aux 5 premières cellules délavées (« Formation » presque blanche) : la rangée est gardée (4 lignes, pas 3)',()=>{const {G}=load(),sc=scenario();
+  sc.zones.cellule.filter(z=>z.ligne===0&&z.col<5).forEach(z=>peindre(sc.image,z.x,z.y,z.w,z.h,[246,246,244]));
+  const T=G.detecterTableaux(sc.image);assert.equal(T.length,1);assert.equal(T[0].lignes,4);assert.equal(T[0].colonnes,31);
+  assert.ok(cellulesAlignees(T[0],{cellule:sc.zones.cellule.filter(z=>!(z.ligne===0&&z.col<5))},4))});
+t('photo à l’ombre (papier gris ~178, Repos ~139) et en-têtes encadrés : ni le titre ni les en-têtes ne deviennent une rangée',()=>{const {G}=load(),cols=S.semaine('2026-11-02',31);
+  const lignes=NOMS.slice(0,4).map((nom,i)=>({nom,cellules:cols.map((_,j)=>{const l=CYCLE[(i+j)%CYCLE.length];return l==='Repos'?{t:l,couleur:[139,139,142]}:l})}));
+  const {image,zones}=S.generer({W:1400,fond:[178,178,175],tables:[{titre:'Planning du 02/11/2026 au 02/12/2026',colonnes:cols,lignes}]});
+  zones.entete.forEach(z=>{peindre(image,z.x-2,z.y-2,z.w+4,z.h+4,[192,192,190]);peindre(image,z.x,z.y,z.w,z.h,[170,170,168])});
+  zones.titre.forEach(z=>{for(let k=0;k<31;k++)peindre(image,200+k*33-2,z.y+z.h-6,3,10,[192,192,190])});
+  const T=G.detecterTableaux(image);assert.equal(T.length,1);assert.deepEqual([T[0].lignes,T[0].colonnes],[4,31]);assert.ok(cellulesAlignees(T[0],zones,4))});
+t('pli du papier : deux colonnes délavées et un faux trait sombre → une seule rangée de 31 colonnes (liserés comblés), alignée',()=>{const {G}=load(),sc=scenario();
+  sc.zones.cellule.filter(z=>z.col===15||z.col===16).forEach(z=>peindre(sc.image,z.x-3,z.y,z.w+3,z.h,[250,250,250]));
+  sc.zones.cellule.filter(z=>z.col===15).forEach(z=>peindre(sc.image,z.x+12,z.y,4,z.h,[60,60,60]));
+  const T=G.detecterTableaux(sc.image);assert.equal(T.length,1);assert.equal(T[0].colonnes,31);assert.ok(T[0].liseresComblés>=2);
+  assert.ok(cellulesAlignees(T[0],{cellule:sc.zones.cellule.filter(z=>z.col!==15&&z.col!==16)},6))});
+t('textures (moins de 7 colonnes, ou cellules de moins de 15 px) : jamais prises pour un tableau',()=>{const {G}=load();
+  const cols5=S.semaine('2026-11-02',5),t5=S.generer({W:600,tables:[{titre:'x',colonnes:cols5,lignes:NOMS.slice(0,4).map(nom=>({nom,cellules:cols5.map(()=>'Repos')}))}]});
+  assert.deepEqual(G.detecterTableaux(t5.image),[]);
+  const cols=S.semaine('2026-11-02',20),petit=S.generer({W:700,cell:[9,7],gap:3,x0:200,tables:[{titre:'x',colonnes:cols,lignes:NOMS.slice(0,4).map(nom=>({nom,cellules:cols.map(()=>'Samu')}))}]});
+  assert.deepEqual(G.detecterTableaux(petit.image),[])});
+t('recalage vertical : une case du maillage décalée d’un tiers de hauteur est recalée sur la cellule, une case pâle reste telle quelle',()=>{const {G}=load(),sc=scenario(),z=sc.zones.cellule.find(z=>z.ligne===1&&z.col===4);
+  const pas=21,decal={x:Math.round(z.x),y:Math.round(z.y+6),w:Math.round(z.w),h:Math.round(z.h)},r=G._interne.recaler(sc.image,decal,pas);
+  assert.ok(Math.abs(r.y-z.y)<=2&&Math.abs(r.y+r.h-(z.y+z.h))<=2,JSON.stringify([z,r]));
+  peindre(sc.image,z.x,z.y,z.w,z.h,[250,250,250]);assert.deepEqual(G._interne.recaler(sc.image,decal,pas),decal)});
 t('plusieurs tableaux : deux périodes analysées séparément, une ligne utilisateur par tableau',async()=>{
   const c2=S.semaine('2026-12-03',31),l2=NOMS.slice(0,4).map((nom,i)=>({nom,cellules:c2.map((_,j)=>CYCLE[(i+j+3)%CYCLE.length])}));
   const a=await analyse(scenario({second:{titre:'Planning du 03/12/2026 au 02/01/2027',colonnes:c2,lignes:l2}}));
@@ -188,6 +215,38 @@ t('aucune couleur codée en dur : une palette inversée ne change pas les lectur
 t('texte d’en-tête lu dans une cellule : CONTRADICTION_STRUCTURE, à vérifier',async()=>{const a=await CAS({4:'L 06/11'});
   assert.equal(a.cells[4].status,'à vérifier');assert.ok(a.warnings.some(w=>w.code==='CONTRADICTION_STRUCTURE'&&w.cellule===4))});
 t('code déclaré non concerné (« Matin ») : à vérifier, jamais ignoré',async()=>{const a=await CAS({4:'Matin'});assert.equal(a.cells[4].status,'à vérifier');assert.match(a.cells[4].motif,/non concerné/)});
+
+t('liserés lus aux bords (« Jour 7h| », « | Repos », « [repos ») : retirés et dits dans la justification ; jamais une lettre ni un chiffre',()=>{const {A}=load(),col={date:'2026-11-02',colonne:0};
+  const c1=A.cellule({text:'Jour 7h|',conf:90},col,null),c2=A.cellule({text:'| Repos',conf:90},col,null),c3=A.cellule({text:'Jour 7h 1)',conf:90},col,null),c4=A.cellule({text:'|',conf:90},col,null),c5=A.cellule({text:'x|y',conf:90},col,null);
+  assert.deepEqual([c1.status,c1.interpretation.regle,c1.rawText],['interprété','JOUR','Jour 7h|']);assert.match(c1.justification,/retirés/);
+  assert.equal(c2.interpretation.regle,'REPOS');assert.equal(c3.status,'non_interprété');assert.equal(c4.status,'illisible');assert.equal(c4.interpretation,null);assert.equal(c5.status,'non_interprété')});
+
+console.log('Pages, rotation');
+/* page scannée à l'envers : image tournée de 180°, texte lisible seulement une fois l'image remise à l'endroit */
+function retourner(sc){const W=sc.image.width,H=sc.image.height,s=sc.image.data,o=new Uint8ClampedArray(s.length);for(let p=0,q=(W*H-1)*4;p<s.length;p+=4,q-=4){o[q]=s[p];o[q+1]=s[p+1];o[q+2]=s[p+2];o[q+3]=255}
+  const r=z=>Object.assign({},z,{x:W-z.x-z.w,y:H-z.y-z.h});const zones=Object.fromEntries(Object.entries(sc.zones).map(([k,l])=>[k,l.map(r)]));
+  return {image:{width:W,height:H,data:o},zones,W,H}}
+function ocrPhysique(ud){const sim=S.ocrSimule(ud.zones);   /* lit ce qui est imprimé à l'endroit seulement */
+  return {moteur:'OCR simulé',async lire(img,r,mode){if(!String(img.cle||'').endsWith(':180'))return {text:'',conf:0};return sim.lire(img,{x:ud.W-r.x-r.w,y:ud.H-r.y-r.h,w:r.w,h:r.h},mode)}}}
+t('page à l’envers : relue tournée de 180°, PAGE_RETOURNEE, dates et ligne trouvées, coordonnées reportées dans l’image reçue',async()=>{
+  const sc=scenario(),ud=retourner(sc),m=load();ud.image.cle='p1';
+  const a=await m.A.analyser({image:ud.image,sourceSha256:SHA,ocr:ocrPhysique(ud),nomRef:'ROTH Mickael',maintenant:NOW});
+  assert.equal(a.status,'à_valider');assert.ok(codes(a).includes('PAGE_RETOURNEE'));assert.equal(a.tableCandidates[0].rotation180,true);
+  assert.deepEqual(a.cells.map(c=>c.date),sc.cols);assert.equal(a.cells[0].interpretation.regle,'SAMU');
+  a.cells.forEach((c,j)=>{const z=ud.zones.cellule.find(z=>z.ligne===2&&z.col===j),b=c.boundsOriginal;assert.ok(Math.abs(b.x+b.w/2-(z.x+z.w/2))<4&&Math.abs(b.y+b.h/2-(z.y+z.h/2))<4,j)});
+  const b=await m.A.analyser({image:ud.image,sourceSha256:SHA,ocr:ocrPhysique(ud),nomRef:'ROTH Mickael',maintenant:NOW,essai180:false});
+  assert.notEqual(b.status,'à_valider');assert.ok(!codes(b).includes('PAGE_RETOURNEE'))});
+t('page à l’endroit : jamais relue tournée',async()=>{const a=await analyse(scenario());assert.ok(!codes(a).includes('PAGE_RETOURNEE'));assert.equal(a.tableCandidates[0].rotation180,false)});
+t('PDF de deux pages : tableaux numérotés de suite, chaque cellule porte sa page, contrôles sur l’ensemble',async()=>{const m=load();
+  const s1=scenario(),c2=S.semaine('2026-12-03',31),s2=S.generer({W:1400,tables:[{titre:'Planning du 03/12/2026 au 02/01/2027',colonnes:c2,lignes:NOMS.slice(0,4).map((nom,i)=>({nom,cellules:c2.map((_,j)=>CYCLE[(i+j+2)%CYCLE.length])}))}]});
+  const o1=S.ocrSimule(s1.zones),o2=S.ocrSimule(s2.zones),ocr={moteur:'sim',lire:(img,r,mo)=>(img===s1.image?o1:o2).lire(img,r,mo)};
+  const a=await m.A.analyser({pages:[{image:s1.image,page:1},{image:s2.image,page:2}],sourceSha256:SHA,ocr,nomRef:'ROTH Mickael',maintenant:NOW});
+  assert.equal(a.status,'à_valider');assert.deepEqual(a.tableCandidates.map(t=>[t.index,t.page]),[[0,1],[1,2]]);assert.equal(a.cells.length,62);
+  assert.deepEqual([...new Set(a.cells.map(c=>c.page))],[1,2]);assert.deepEqual(a.period,{debut:'2026-11-02',fin:'2027-01-02',titres:a.tableCandidates.map(t=>t.periodeTitre)})});
+t('chargement d’un PDF de plusieurs pages : une image par page transmise à l’analyse (échelle propre à chaque page)',async()=>{const m=load(),sc=scenario(),b=new Uint8Array([4,2]);
+  const rec=recDe(b,{format:'pdf',mimeType:'application/pdf',orientation:null}),deps=loaderDeps(new Map([[rec.source.localRef,b]]));
+  deps.decodeur.pdf=async()=>({image:sc.image,largeur:sc.image.width,hauteur:sc.image.height,pages:2,images:[{page:1,image:sc.image,largeur:sc.image.width,hauteur:sc.image.height},{page:2,image:sc.image,largeur:sc.image.width*2,hauteur:sc.image.height*2}]});
+  const r=await m.L.charger(rec,deps);assert.equal(r.ok,true);assert.deepEqual(r.images.map(p=>[p.page,p.echelle,p.orientation]),[[1,1,1],[2,0.5,1]])});
 
 console.log('Confiance');
 t('confiance = OCR × chemin (exacte 1, variante 0,9, générale 0,7) × date sûre ; globale = moyenne des cellules non vides',async()=>{

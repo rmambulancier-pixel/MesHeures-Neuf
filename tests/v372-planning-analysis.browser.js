@@ -35,8 +35,22 @@ function dessiner(o){
   o.noms.forEach((nom,i)=>{const y=150+i*(ch+g);x.textAlign='left';x.font='bold 15px Arial';x.fillStyle='#111';x.fillText(nom,40,y+ch/2);
     o.lignes[i].forEach((lab,j)=>{x.fillStyle=o.coul[lab]||'#2a4aa0';x.fillRect(x0+j*(cw+g),y,cw,ch);x.fillStyle='#fff';x.textAlign='center';x.font='bold 13px Arial';
       String(lab).split('\n').forEach((l,k,a)=>x.fillText(l,x0+j*(cw+g)+cw/2,y+ch/2+(k-(a.length-1)/2)*15))})});
+  if(o.retourne){const r=document.createElement('canvas');r.width=W;r.height=H;const rx=r.getContext('2d');rx.translate(W,H);rx.rotate(Math.PI);rx.drawImage(c,0,0);
+    return {b64:r.toDataURL('image/jpeg',0.9).split(',')[1],w:W,h:H}}
+  if(o.jpeg)return {b64:c.toDataURL('image/jpeg',0.9).split(',')[1],w:W,h:H};
   return c.toDataURL('image/png').split(',')[1];
 }
+/* PDF « scanné » minimal : une image JPEG (DCTDecode) pleine page par page, sans texte (comme un scan de téléphone) */
+function pdfScan(pages){const parts=[],off=[];let n=0;const push=b=>{parts.push(Buffer.isBuffer(b)?b:Buffer.from(b,'latin1'));n+=parts[parts.length-1].length};
+  push('%PDF-1.4\n');const nb=pages.length,kids=pages.map((_,i)=>(3+i*3)+' 0 R').join(' ');
+  const obj=(id,body)=>{off[id]=n;push(id+' 0 obj\n');(Array.isArray(body)?body:[body]).forEach(push);push('\nendobj\n')};
+  obj(1,'<< /Type /Catalog /Pages 2 0 R >>');obj(2,'<< /Type /Pages /Kids ['+kids+'] /Count '+nb+' >>');
+  pages.forEach((p,i)=>{const id=3+i*3,W=Math.round(p.w*0.4),H=Math.round(p.h*0.4),cs='q '+W+' 0 0 '+H+' 0 0 cm /Im0 Do Q';
+    obj(id,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+W+' '+H+'] /Resources << /XObject << /Im0 '+(id+1)+' 0 R >> >> /Contents '+(id+2)+' 0 R >>');
+    obj(id+1,['<< /Type /XObject /Subtype /Image /Width '+p.w+' /Height '+p.h+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+p.jpeg.length+' >>\nstream\n',p.jpeg,'\nendstream']);
+    obj(id+2,'<< /Length '+cs.length+' >>\nstream\n'+cs+'\nendstream')});
+  const total=3+nb*3,x=n;push('xref\n0 '+total+'\n0000000000 65535 f \n');for(let i=1;i<total;i++)push(String(off[i]).padStart(10,'0')+' 00000 n \n');
+  push('trailer\n<< /Size '+total+' /Root 1 0 R >>\nstartxref\n'+x+'\n%%EOF\n');return Buffer.concat(parts)}
 async function open(b,W,theme){
   const ctx=await b.newContext({serviceWorkers:'block',viewport:{width:W,height:915},deviceScaleFactor:2,colorScheme:theme,isMobile:true,hasTouch:true});
   const pg=await ctx.newPage(),errs=[];pg.on('pageerror',e=>errs.push(e.message));pg.on('console',m=>{if(m.type()==='error'&&!/planning-source|Failed to load resource/.test(m.text()))errs.push(m.text())});
@@ -121,6 +135,32 @@ srv.listen(0,async()=>{
       ok(/validé \(prévisionnel\)/.test(await txt(pg))&&/31 journées/.test(await txt(pg)),'liste : « validé (prévisionnel) · 31 journées »');
       ok(!errs.length,'0 erreur JS'+(errs.length?' : '+errs.slice(0,2).join(' | '):''));
       etat=await pg.evaluate(()=>localStorage.getItem('mh_planning_v372'));
+      await ctx.close()}
+
+    console.log('PDF scanné de deux pages (la 2e à l’envers), image embarquée, OCR réel');
+    {const {ctx,pg,errs}=await open(b,412,'light');
+      const debutO='2026-10-05',lO=NOMS.map((_,i)=>Array.from({length:31},(_,j)=>CYCLE[(i+j+3)%CYCLE.length])),verO=lO[2].map((l,j)=>({date:add(debutO,j),lab:l}));
+      const p1=await pg.evaluate(dessiner,{debut,n:31,titre:'Planning du 02/11/2026 au 02/12/2026',noms:NOMS,lignes,coul:COUL,jpeg:true});
+      const p2=await pg.evaluate(dessiner,{debut:debutO,n:31,titre:'Planning du 05/10/2026 au 04/11/2026',noms:NOMS,lignes:lO,coul:COUL,retourne:true});
+      const pdf=pdfScan([p1,p2].map(p=>({jpeg:Buffer.from(p.b64,'base64'),w:p.w,h:p.h})));
+      await tabPrevu(pg);await pg.locator('#mh372Open').click();
+      await pg.locator('#mh372Imp input[data-src="fichier"]').setInputFiles({name:'planning-scan.pdf',mimeType:'application/pdf',buffer:pdf});
+      await pg.waitForFunction(()=>!/Import en cours/.test(document.getElementById('s-prevu').innerText),null,{timeout:20000});await pg.waitForTimeout(150);
+      await pg.locator('#mh372Nom').fill('ROTH Mickael');const ms=await analyser(pg);
+      const st=await stockees(pg),imp=Object.values(st.imports)[0],a=st.analyses&&st.analyses[imp.id];
+      info('PDF 2 pages : '+(ms/1000).toFixed(1)+' s');
+      ok(a&&a.tableCandidates.length===2&&a.tableCandidates.map(t=>t.page).join()==='1,2','deux pages, un tableau par page');
+      ok(a&&a.tableCandidates.every(t=>t.lecturePage==='image embarquée'),'scan lu sur l’image embarquée de chaque page (pas un rendu rééchantillonné)');
+      ok(a&&a.tableCandidates[1].rotation180===true&&a.warnings.some(w=>w.code==='PAGE_RETOURNEE'),'page 2 à l’envers : lue tournée de 180° et signalée');
+      ok(a&&JSON.stringify(a.tableCandidates.map(t=>t.periodeTitre))===JSON.stringify([{debut:'2026-11-02',fin:'2026-12-02'},{debut:'2026-10-05',fin:'2026-11-04'}]),'périodes des deux pages lues');
+      ok(a&&a.selectedEmployee&&a.selectedEmployee.parTableau.length===2&&a.selectedEmployee.parTableau.every(x=>x.ligne===2),'ta ligne trouvée sur les deux pages');
+      const typ={'Jour 7h':'JOUR','Repos':'REPOS','Samu':'SAMU','Condom':'CONDOM'},V={0:verite,1:verO};let justes=0,okFaux=0,okN=0;
+      (a?a.cells:[]).forEach(c=>{const v=V[c.table].find(x=>x.date===(c.date||c.dateProposee))||V[c.table][c.colonne],bon=c.interpretation&&c.interpretation.regle===typ[v.lab];if(bon)justes++;
+        if(c.status==='interprété'){okN++;if(!bon||c.date!==v.date)okFaux++}});
+      info('OCR réel PDF : '+justes+'/62 justes ; '+okN+' « OK »');
+      ok(a&&a.cells.length===62&&okFaux===0,'62 cellules (ta ligne, 2 pages), aucune « OK » fausse ('+okFaux+')');
+      ok(a&&a.cells.every(c=>c.page===1||c.page===2),'chaque cellule porte sa page');
+      ok(!errs.length,'0 erreur JS'+(errs.length?' : '+errs.slice(0,2).join(' | '):''));
       await ctx.close()}
 
     console.log('Homonyme : choix manuel de la ligne, puis rejet');

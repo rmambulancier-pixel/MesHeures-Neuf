@@ -9,7 +9,7 @@
  */
 (function(root){
   'use strict';
-  const V='37.2.0-C',MAX=3200;
+  const V='37.2.0-C',MAX=3200,MAX_PAGES=6;
   const echec=(code,message)=>({ok:false,code,message});
   /* échelle de la copie d'analyse : jamais d'agrandissement, côté max ≤ max */
   function echelleCible(w,h,max){max=max||MAX;const m=Math.max(Number(w)||0,Number(h)||0);return m>max?max/m:1}
@@ -23,6 +23,22 @@
     finally{if(/^blob:/.test(url)&&root.URL&&URL.revokeObjectURL)try{URL.revokeObjectURL(url)}catch(e){}}
   }
   /* décodeur navigateur : retourne {image:ImageData, largeur, hauteur} (dimensions de l'image orientée, avant réduction) */
+  /* Image unique d'une page PDF (scan), sans transformation : {image, largeur, hauteur} ou null. */
+  async function imageEmbarquee(lib,page,max){
+    const ops=await page.getOperatorList(),O=lib.OPS,noms=[];let autres=0;
+    for(let i=0;i<ops.fnArray.length;i++){const f=ops.fnArray[i];if(f===O.paintImageXObject||f===O.paintJpegXObject)noms.push(ops.argsArray[i][0]);
+      else if(f===O.showText||f===O.fill||f===O.stroke||f===O.paintInlineImageXObject||f===O.paintImageMaskXObject)autres++}
+    if(noms.length!==1||autres)return null;
+    const obj=await new Promise(res=>{try{page.objs.get(noms[0],res)}catch(e){res(null)}});if(!obj||!(obj.width>200&&obj.height>200))return null;
+    const W=obj.width,H=obj.height,k=echelleCible(W,H,max),c=document.createElement('canvas');c.width=Math.round(W*k);c.height=Math.round(H*k);
+    const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';
+    if(obj.bitmap)x.drawImage(obj.bitmap,0,0,c.width,c.height);
+    else if(obj.data){const t=document.createElement('canvas');t.width=W;t.height=H;const tx=t.getContext('2d'),id=tx.createImageData(W,H),d=obj.data,n=W*H;
+      if(obj.kind===3)id.data.set(d.subarray(0,n*4));else if(obj.kind===2)for(let i=0,j=0;i<n;i++,j+=3){id.data[i*4]=d[j];id.data[i*4+1]=d[j+1];id.data[i*4+2]=d[j+2];id.data[i*4+3]=255}
+      else return null;tx.putImageData(id,0,0);x.drawImage(t,0,0,c.width,c.height)}
+    else return null;
+    return {image:x.getImageData(0,0,c.width,c.height),largeur:W,hauteur:H};
+  }
   const decodeurNavigateur={
     async image(bytes,mime,max){
       const blob=new Blob([bytes],{type:mime||''});let src;
@@ -33,13 +49,20 @@
       const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(src,0,0,c.width,c.height);if(src.close)src.close();
       return {image:x.getImageData(0,0,c.width,c.height),largeur:W,hauteur:H};
     },
+    /* PDF : chaque page (6 au plus) rendue en image ; page 1 = image principale */
     async pdf(bytes,max){
       await root.mhLoadLib('pdf');const lib=root.pdfjsLib;if(!lib)throw new Error('pdf.js indisponible');
       const doc=await lib.getDocument({data:bytes.slice()}).promise;
-      try{const page=await doc.getPage(1),v1=page.getViewport({scale:1}),k=Math.min(4,echelleCible(v1.width*4,v1.height*4,max)*4),vp=page.getViewport({scale:k});
-        const c=document.createElement('canvas');c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);const x=c.getContext('2d',{willReadFrequently:true});
-        x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);await page.render({canvasContext:x,viewport:vp}).promise;
-        return {image:x.getImageData(0,0,c.width,c.height),largeur:c.width,hauteur:c.height,pages:doc.numPages}}
+      try{const pages=[];for(let n=1;n<=Math.min(doc.numPages,MAX_PAGES);n++){const page=await doc.getPage(n);
+          /* PDF scanné (une seule image par page) : l'image embarquée est lue telle quelle, à sa résolution d'origine (le rendu
+             de la page la rééchantillonne et dégrade le petit texte) ; sinon, rendu de la page */
+          const emb=await imageEmbarquee(lib,page,max).catch(()=>null);
+          if(emb){pages.push(Object.assign({page:n,source:'image embarquée'},emb));continue}
+          const v1=page.getViewport({scale:1}),k=Math.min(4,echelleCible(v1.width*4,v1.height*4,max)*4),vp=page.getViewport({scale:k});
+          const c=document.createElement('canvas');c.width=Math.ceil(vp.width);c.height=Math.ceil(vp.height);const x=c.getContext('2d',{willReadFrequently:true});
+          x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);await page.render({canvasContext:x,viewport:vp}).promise;
+          pages.push({page:n,source:'rendu',image:x.getImageData(0,0,c.width,c.height),largeur:c.width,hauteur:c.height})}
+        return {image:pages[0].image,largeur:pages[0].largeur,hauteur:pages[0].hauteur,pages:doc.numPages,images:pages}}
       finally{try{doc.destroy()}catch(e){}}
     }
   };
@@ -63,7 +86,9 @@
     if([5,6,7,8].includes(orientation)&&W&&H&&W!==H&&Lo===W&&Ho===H){orientation=1;orientationAppliquee=false}
     const dO=root.MHPlanningGrid.dimsOrientees(Lo,Ho,orientation);
     return {ok:true,sha256:sha,image:d.image,echelle:d.image.width/Lo,orientation,orientationExif:Number(rec.source.orientation)||null,orientationAppliquee,
-      largeurOrientee:Lo,hauteurOrientee:Ho,largeurOriginale:dO.largeur,hauteurOriginale:dO.hauteur,pages:d.pages||null};
+      largeurOrientee:Lo,hauteurOrientee:Ho,largeurOriginale:dO.largeur,hauteurOriginale:dO.hauteur,pages:d.pages||null,
+      /* PDF de plusieurs pages : une image par page (coordonnées propres à chaque page, en pixels de rendu) */
+      images:Array.isArray(d.images)&&d.images.length>1?d.images.map(x=>({page:x.page,source:x.source,image:x.image,orientation:1,echelle:x.image.width/x.largeur,largeurOrientee:x.largeur,hauteurOrientee:x.hauteur,largeurOriginale:x.largeur,hauteurOriginale:x.hauteur})):null};
   }
   /* Chaîne complète. opts : {nomRef, choix, progression(texte), ocr (moteur injecté), cache (Map, lectures déjà faites), deps} */
   async function analyser(rec,opts){
@@ -74,10 +99,11 @@
     if(!ocr){try{ocr=await root.MHPlanningOCR.creer({progression:n=>say('Lecture des zones… '+n)});propre=true}catch(e){ocr=null}}
     const moteur=ocr;
     /* cache des lectures (même original, mêmes zones) : un changement de ligne ne relit que ce qui manque */
-    if(ocr&&opts.cache){const base=ocr,m=opts.cache;ocr={moteur:base.moteur,async lire(img,r,mode){const k=mode+':'+[r.x,r.y,r.w,r.h].map(Math.round).join(',');
+    if(ocr&&opts.cache){const base=ocr,m=opts.cache;ocr={moteur:base.moteur,async lire(img,r,mode){const k=(img.cle||'')+'|'+mode+':'+[r.x,r.y,r.w,r.h].map(Math.round).join(',');
       if(m.has(k))return m.get(k);const v=await base.lire(img,r,mode);m.set(k,v);return v}}}
     try{say('Analyse du tableau…');
-      const a=await root.MHPlanningAnalysis.analyser({image:c.image,orientation:c.orientation,largeurOrientee:c.largeurOrientee,hauteurOrientee:c.hauteurOrientee,largeurOriginale:c.largeurOriginale,hauteurOriginale:c.hauteurOriginale,echelle:c.echelle,
+      if(c.images)c.images.forEach(p=>{p.image.cle='p'+p.page});else c.image.cle='p1';
+      const a=await root.MHPlanningAnalysis.analyser({pages:c.images||undefined,image:c.image,orientation:c.orientation,largeurOrientee:c.largeurOrientee,hauteurOrientee:c.hauteurOrientee,largeurOriginale:c.largeurOriginale,hauteurOriginale:c.hauteurOriginale,echelle:c.echelle,
         sourceSha256:c.sha256,ocr,nomRef:opts.nomRef||'',choix:opts.choix||[]});
       if(!c.orientationAppliquee)a.warnings.push({code:'ORIENTATION_NON_APPLIQUEE',texte:'Orientation EXIF '+c.orientationExif+' non appliquée par l’appareil au décodage : image analysée telle que stockée (coordonnées sans rotation).'});
       return a}

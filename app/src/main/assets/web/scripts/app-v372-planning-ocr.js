@@ -9,7 +9,7 @@
   'use strict';
   const V='37.2.0-C';
   const SRC=()=>root._mhLibSrc||{};
-  const PARAMS={titre:{psm:'7',wl:''},entete:{psm:'7',wl:'LMJVSDlmjvsd0123456789/ '},nom:{psm:'7',wl:''},cellule:{psm:'6',wl:''}};
+  const PARAMS={titre:{psm:'6',wl:''},entete:{psm:'7',wl:'LMJVSDlmjvsd0123456789/ '},nom:{psm:'7',wl:''},cellule:{psm:'6',wl:''}};
   /* hauteur visée de la zone agrandie (le texte d'une cellule fait ~1/3 de sa hauteur) et marge intérieure (liserés exclus) */
   const HAUTEUR={titre:110,entete:120,nom:100,cellule:130},MARGE={titre:0,entete:0.06,nom:0.04,cellule:0.07};
 
