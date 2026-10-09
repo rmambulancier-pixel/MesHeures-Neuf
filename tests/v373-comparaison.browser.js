@@ -25,10 +25,10 @@ function creerFiches(d){const P=MHPlanning,st=P.store(),add=(k,n)=>new Date(Date
     origine:{importId:null,sourceSha256:o.sha,page:o.page,tableId:o.tableId||0,orientation:{exif:1,rotation180:false}}});return st.enregistrer(Object.assign(p,{id:'pl-'+o.sha.slice(0,12)+'-'+o.debut}))};
   f({debut:'2026-09-07',labels:d.S,sha:'5a'.repeat(32),nom:'septembre.pdf',page:1});f({debut:'2026-09-19',labels:['Repos','Jour 7h'],sha:'7c'.repeat(32),nom:'rectificatif.jpg',page:null});
   f({debut:'2026-10-05',labels:d.A,sha:'a1'.repeat(32),nom:'octobre.pdf',page:2,tableId:1})}
-async function open(b,W,theme){
+async function open(b,W,theme,now){
   const ctx=await b.newContext({serviceWorkers:'block',viewport:{width:W,height:915},deviceScaleFactor:2,colorScheme:theme,isMobile:true,hasTouch:true});
   const pg=await ctx.newPage(),errs=[];pg.on('pageerror',e=>errs.push(e.message));pg.on('console',m=>{if(m.type()==='error'&&!/planning-source|Failed to load resource/.test(m.text()))errs.push(m.text())});
-  await pg.clock.setFixedTime(NOW);
+  await pg.clock.setFixedTime(now||NOW);
   await pg.addInitScript(d=>{try{if(!sessionStorage.getItem('s')){localStorage.setItem('mesheures_v3',JSON.stringify(d.db));localStorage.setItem('mesheures_theme',d.t);sessionStorage.setItem('s','1')}}catch(e){}},{db:seed(),t:theme});
   await pg.goto(`http://127.0.0.1:${srv.address().port}/index.html`);await pg.waitForTimeout(2000);
   await pg.evaluate(creerFiches,{S:S_LAB,A:A_LAB});
@@ -61,7 +61,7 @@ srv.listen(0,async()=>{
       ok(l19.res==='prevu_sans_reel'&&/aucun réel saisi/.test(l19.t)&&!/à venir/.test(l19.t),'19/10 (passé) : 🔵 Prévu mais aucun réel');
       ok(l26.res==='prevu_sans_reel'&&/à venir/.test(l26.t),'26/10 (futur) : 🔵 « à venir »');
       const st=await pg.locator('#s-prevu [data-k="stats"]').innerText(),tx=await pg.locator('#s-prevu [data-k="taux"]').innerText();
-      ok(/Taux de conformité : 50 % \(7 conformes sur 14 jours comparables\)/.test(tx)&&/6 jour\(s\) à venir non comptés/.test(tx),'taux défini : conformes / jours comparables, à venir exclus ('+tx.split('\n')[0]+')');
+      ok(/Taux de conformité : 50 % \(7 conformes sur 14 jours comparables\)/.test(tx)&&/7 jour\(s\) à venir non comptés/.test(tx),'taux défini : conformes / jours comparables, à venir exclus ('+tx.split('\n')[0]+')');
       await pg.locator('#s-prevu tr[data-date="2026-10-05"]').click();await pg.waitForTimeout(100);
       const d5=await pg.locator('#s-prevu [data-k="cmp-detail"]').innerText();
       ok(/Lundi 05\/10\/2026/.test(d5)&&/TTE réel \d+h\d\d pour 7h00 prévues/.test(d5)&&/ne changent pas le résultat/.test(d5)&&/octobre\.pdf · page 2 · tableau 2/.test(d5)&&/lecture seule/.test(d5),'détail 05/10 : écart TTE (information), provenance, réel en lecture seule');
@@ -86,6 +86,20 @@ srv.listen(0,async()=>{
       await pg.locator('#mhV30Nav [data-nav-tab="mois"]').click();await pg.waitForTimeout(150);
       ok(await pg.evaluate(()=>document.getElementById('mModePlan').innerText.trim())==='☰ Journées','page réelle : « Journées » inchangé');
       ok(await pg.evaluate(()=>document.getElementById('mhVersion').textContent)==='V37.3.0','version affichée V37.3.0');
+      ok(!errs.length,'0 erreur JS'+(errs.length?' : '+errs.slice(0,2).join(' | '):''));await ctx.close()}
+
+    console.log('Cas Pixel (37.3.0-A) : horloge au 09/10, jours futurs ouverts dans Journées (« Repos » vide créé par gd())');
+    {const {ctx,pg,errs}=await open(b,412,'light',new Date('2026-10-09T12:00:00'));
+      const crees=await pg.evaluate(()=>{const out=[];for(let d=10;d<=31;d++){const k='2026-10-'+String(d).padStart(2,'0');if(!DB.days[k]){gd(k);out.push(k)}}return out.length});
+      const vides=await pg.evaluate(()=>Object.keys(DB.days).filter(k=>k>='2026-10-10'&&k<='2026-10-31'&&DB.days[k].t==='REPOS'&&!DB.days[k].deb&&!DB.days[k].fin).length);
+      ok(crees===13&&vides===22,'10/10 → 31/10 : 22 « Repos » vides (9 déjà dans les données, 13 créés par gd() en ouvrant les jours), comme sur le Pixel');
+      const avant=await reel(pg);await tabPrevu(pg);await pg.locator('#s-prevu [data-k="onglet-comparaison"]').click();await pg.waitForTimeout(200);
+      const fut=await pg.evaluate(()=>[...document.querySelectorAll('#s-prevu tr[data-date]')].filter(r=>r.dataset.date>='2026-10-09').map(r=>r.dataset.resultat));
+      ok(fut.length===23&&fut.every(r=>r==='prevu_sans_reel'),'09/10 → 31/10 : 23 lignes 🔵 à venir, aucun 🟠 Différent ni 🟢 Conforme ('+[...new Set(fut)].join(',')+')');
+      const l20=await ligne(pg,'2026-10-20');ok(/aucun réel saisi/.test(l20.t)&&/à venir/.test(l20.t),'20/10 : « aucun réel saisi · à venir » (le Repos par défaut n’est pas affiché comme réel)');
+      const tx=await pg.locator('#s-prevu [data-k="taux"]').innerText();
+      ok(/Taux de conformité : 75 % \(3 conformes sur 4 jours comparables\)/.test(tx)&&/23 jour\(s\) à venir non comptés/.test(tx),'taux : 05-07/10 conformes, 08/10 différent ; futurs hors taux ('+tx.split('\n')[0]+')');
+      ok(await reel(pg)===avant,'Réel inchangé par la comparaison (les Repos créés par l’application restent tels quels)');
       ok(!errs.length,'0 erreur JS'+(errs.length?' : '+errs.slice(0,2).join(' | '):''));await ctx.close()}
 
     console.log('Responsive · 360 / 412 / 448 px, clair et sombre');

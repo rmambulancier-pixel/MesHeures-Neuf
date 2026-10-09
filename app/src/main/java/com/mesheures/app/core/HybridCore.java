@@ -14,7 +14,7 @@ import androidx.webkit.WebViewFeature;
 public final class HybridCore {
     public static final String VERSION = "37.3.0";
     public static final String DOMAIN = "appassets.androidplatform.net";
-    public static final String ENTRY_URL = "https://" + DOMAIN + "/assets/web/index.html?v=37.3.0";
+    public static final String ENTRY_URL = "https://" + DOMAIN + "/assets/web/index.html?v=37.3.0-A";
     private final WebViewAssetLoader assetLoader;
     public HybridCore(Context context) {
         /* V37.2 : originaux des plannings prévisionnels, servis en lecture seule depuis files/plannings uniquement

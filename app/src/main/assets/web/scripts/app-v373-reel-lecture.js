@@ -23,8 +23,11 @@
     const d=jours[k];if(!d||typeof d!=='object')return null;
     let r=null;try{r=calc?calc(k):null}catch(e){r=null}
     const nb=x=>typeof x==='number'&&isFinite(x)?x:null;
+    /* journée « vide » : REPOS sans horaires, pauses ni note. L'application en crée une dès qu'on ouvre un jour (gd() de app.js)
+       et la traite elle-même comme vide (app-ui.js) : ce n'est pas une saisie. */
+    const vide=d.t==='REPOS'&&!d.deb&&!d.fin&&!d.note&&!(Array.isArray(d.p)&&d.p.length);
     return fige({date:k,t:typeof d.t==='string'?d.t:null,deb:typeof d.deb==='string'?d.deb:null,fin:typeof d.fin==='string'?d.fin:null,
-      ferie:!!d.fer,enCours:!!d.running,
+      ferie:!!d.fer,enCours:!!d.running,vide,
       calcul:r?{tte:nb(r.tte),amp:nb(r.amp),pz:nb(r.pz),nuit:nb(r.nuit),debMin:nb(r.deb),finMin:nb(r.fin),
         horairesIncomplets:Array.isArray(r.al)&&r.al.some(a=>a&&/Horaires incomplets/.test(String(a.m||'')))}:null});
   }

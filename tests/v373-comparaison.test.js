@@ -54,7 +54,7 @@ t('2. prévu différent du réel : « Jour 7h » / CP, « Repos » / CP, « Samu
   ['2026-09-08','2026-09-10','2026-09-11','2026-09-20'].forEach(d=>assert.equal(res(R,d),'different',d));assert.match(L(R,'2026-09-08').motif,/prévu : travail ; réel : congé/)});
 t('3. prévu sans réel : passé → 🔵 prévu sans réel ; après aujourd’hui → 🔵 « à venir » (jamais « non travaillé »)',()=>{const m=app(true);scenario(m);const R=m.K.mois('2026-10',{store:m.st,aujourdhui:AUJ});
   const p=L(R,'2026-10-19'),f=L(R,'2026-10-26');assert.deepEqual([p.resultat,p.futur,p.reel],['prevu_sans_reel',false,null]);assert.deepEqual([f.resultat,f.futur],['prevu_sans_reel',true]);
-  assert.match(p.motif,/ne veut pas dire qu’elle n’a pas été travaillée/);assert.match(f.motif,/à venir/);assert.equal(R.stats.prevusSansReel,7);assert.equal(R.stats.aVenir,6)});
+  assert.match(p.motif,/ne veut pas dire qu’elle n’a pas été travaillée/);assert.match(f.motif,/à venir/);assert.equal(R.stats.prevusSansReel,6);assert.equal(R.stats.aVenir,7,'aujourd’hui (25/10) compris dans « à venir »')});
 t('4. réel sans prévu : travail réel prévu « Repos » → 🔴 réel non prévu ; travail réel sans aucun planning → 🔴 (compté à part)',()=>{const m=app(true);scenario(m);
   const S=m.K.mois('2026-09',{store:m.st,aujourdhui:AUJ}),A=m.K.mois('2026-08',{store:m.st,aujourdhui:AUJ});
   assert.equal(res(S,'2026-09-14'),'reel_non_prevu');assert.match(L(S,'2026-09-14').motif,/« Repos » était prévu/);
@@ -77,6 +77,18 @@ t('natures réelles : NUIT = travail, RC et MAL ≠ repos (différents), type in
   assert.equal(m.K.comparer('2026-09-01',e,j('NUIT'),AUJ).resultat,'conforme');assert.equal(m.K.comparer('2026-09-01',rep,j('RC'),AUJ).resultat,'different');
   assert.equal(m.K.comparer('2026-09-01',e,j('MAL'),AUJ).resultat,'different');assert.equal(m.K.comparer('2026-09-01',e,j('ZZZ'),AUJ).resultat,'non_comparable');
   const inc=m.K.comparer('2026-09-01',e,j('T',{horairesIncomplets:true}),AUJ);assert.equal(inc.resultat,'conforme');assert.match(inc.ecarts[0].texte,/incomplets/)});
+t('« Repos » vide à une date FUTURE (créé en ouvrant le jour) : ignoré → 🔵 à venir, jamais 🟠 ni 🟢 ; passé : repos affiché par l’application',()=>{
+  const m=app(true);scenario(m);const R=m.K.mois('2026-10',{store:m.st,aujourdhui:'2026-10-09'});   /* capture Pixel du 09/10 : 10 → 18/10 = « Repos » vides futurs */
+  assert.ok(m.R.jour('2026-10-12').vide&&m.X.DB.days['2026-10-12'].t==='REPOS');
+  [['2026-10-12','Jour 7h'],['2026-10-10','Repos'],['2026-10-19','Jour 7h']].forEach(([d,lab])=>{const l=L(R,d);assert.equal(l.prevu.libelle,lab);assert.deepEqual([l.resultat,l.futur,l.reel],['prevu_sans_reel',true,null],d)});
+  assert.match(L(R,'2026-10-12').motif,/créé par défaut, il n’est pas une saisie/);
+  assert.equal(R.stats.differents,1,'seul le 08/10 (passé : Jour 7h / repos) reste différent');assert.equal(L(R,'2026-10-09').resultat,'prevu_sans_reel','aujourd’hui, repos vide : à venir');
+  assert.equal(R.stats.aVenir,23);assert.equal(R.stats.comparables,4);
+  const P=m.K.mois('2026-10',{store:m.st,aujourdhui:AUJ});assert.equal(res(P,'2026-10-12'),'different');assert.equal(res(P,'2026-10-10'),'conforme')});
+t('journée future NON vide (horaires, pauses ou note saisis) : comparée normalement, marquée « futur »',()=>{const m=app(true);scenario(m);
+  const e=m.C.entree(m.st,'2026-10-12'),base={date:'2026-10-12',t:'REPOS',deb:null,fin:null,vide:false,calcul:{tte:0,amp:0,horairesIncomplets:false}};
+  const l=m.K.comparer('2026-10-12',e,base,'2026-10-09');assert.deepEqual([l.resultat,l.futur],['different',true]);
+  assert.equal(m.K.comparer('2026-10-12',e,Object.assign({},base,{vide:true}),'2026-10-09').resultat,'prevu_sans_reel')});
 t('8. correction d’une fiche prévisionnelle : la comparaison suit',()=>{const m=app(true),{S}=scenario(m);assert.equal(res(m.K.mois('2026-09',{store:m.st,aujourdhui:AUJ}),'2026-09-08'),'different');
   m.st.enregistrer(m.P.corriger(m.st.lire(S.id),{date:'2026-09-08',champ:'libelle',valeur:'Congés 35'}));assert.equal(res(m.K.mois('2026-09',{store:m.st,aujourdhui:AUJ}),'2026-09-08'),'conforme')});
 t('9. suppression d’une fiche : le conflit du 19/09 disparaît, la date redevient comparable',()=>{const m=app(true),{X}=scenario(m);m.st.ficheSupprimer(X.id);

@@ -16,7 +16,10 @@
  *    travail réel sur un jour prévu sans travail = réel non prévu ; autre différence de nature = différent.
  *  - écarts d'heures (TTE réel − durée prévue ; début/fin réels − horaires prévus) : AFFICHÉS, ils ne changent jamais la
  *    catégorie (aucune tolérance inventée).
- *  - une date sans réel n'est jamais « non travaillée » ; après aujourd'hui elle est « à venir ».
+ *  - une date sans réel n'est jamais « non travaillée » ; à partir d'aujourd'hui (journée en cours comprise) elle est « à venir ».
+ *  - « Repos » vide (sans horaires, pauses ni note) aujourd'hui ou à une date FUTURE : créé automatiquement par l'application quand on ouvre
+ *    le jour (gd()), traité comme vide par l'application elle-même → ignoré (« à venir »). À une date passée, il reste le repos
+ *    tel que l'application l'affiche.
  */
 (function(root){
   'use strict';
@@ -62,7 +65,10 @@
 
   /* Une date : entrée prévue (calendrier D), journée réelle (pont de lecture), date du jour. */
   function comparer(date,e,j,aujourdhui){
-    const futur=!!aujourdhui&&date>aujourdhui;
+    /* « à venir » : aujourd'hui (journée pas terminée) et après */
+    const futur=!!aujourdhui&&date>=aujourdhui;
+    /* repos « vide » aujourd'hui ou plus tard : créé automatiquement en ouvrant le jour, ce n'est pas un réel → ignoré */
+    const repoParDefaut=!!(j&&j.vide&&futur);if(repoParDefaut)j=null;
     const ligne={date,futur,prevu:{etat:e.etat,libelle:e.libelle,valeurs:e.valeurs.map(v=>({libelle:v.libelle,type:v.type,dureeMin:v.dureeMin,horaires:v.horaires,provenance:v.provenance})),
       provenances:e.provenances},reel:j?{t:j.t,libelle:libelleReel(j),deb:j.deb,fin:j.fin,tte:j.calcul?j.calcul.tte:null,amp:j.calcul?j.calcul.amp:null}:null,resultat:null,motif:'',ecarts:[]};
     const fin=(r,m)=>{ligne.resultat=r;ligne.motif=m;return ligne};
@@ -75,7 +81,7 @@
     }
     const v=e.valeurs[0],np=naturePrevu(v);
     if(!np.nature)return fin('non_comparable',np.raison+'.');
-    if(!j)return fin('prevu_sans_reel',futur?'à venir : aucun réel saisi pour l’instant.':'aucune journée réelle saisie pour cette date (cela ne veut pas dire qu’elle n’a pas été travaillée).');
+    if(!j)return fin('prevu_sans_reel',futur?'à venir : aucun réel saisi pour l’instant'+(repoParDefaut?' (le « Repos » vide affiché pour ce jour futur est créé par défaut, il n’est pas une saisie)':'')+'.':'aucune journée réelle saisie pour cette date (cela ne veut pas dire qu’elle n’a pas été travaillée).');
     if(!nr.nature)return fin('non_comparable',nr.raison+'.');
     if(np.nature===nr.nature){ligne.ecarts=np.nature==='travail'?ecarts(v,j):[];return fin('conforme','même nature de journée ('+NATURES[np.nature]+').'+(ligne.ecarts.some(x=>x.ecart)?' Écarts d’heures affichés à titre d’information.':''))}
     if(nr.nature==='travail')return fin('reel_non_prevu','travail réel alors que « '+v.libelle+' » était prévu.');
@@ -86,7 +92,7 @@
   function periode(debut,fin,opts){
     opts=opts||{};const st=opts.store||P().store(),idx=CAL().index(st),lire=opts.reel||REEL().jour,auj=opts.aujourdhui||null;
     const lignes=[];let vides=0;
-    for(let d=debut;d<=fin;d=addJ(d,1)){const e=CAL().entree(st,d,idx),j=lire(d),l=comparer(d,e,j,auj);if(e.etat==='aucun'&&!j){vides++;continue}lignes.push(l)}
+    for(let d=debut;d<=fin;d=addJ(d,1)){const e=CAL().entree(st,d,idx),j=lire(d),l=comparer(d,e,j,auj);if(e.etat==='aucun'&&!l.reel){vides++;continue}lignes.push(l)}
     return {debut,fin,aujourdhui:auj,lignes,vides,stats:statistiques(lignes)};
   }
   /* Statistiques. Taux de conformité = conformes / jours comparables, où « comparable » = une prévision unique de nature
