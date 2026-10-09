@@ -11,21 +11,21 @@ const read=p=>fs.readFileSync(path.join(REPO,p),'utf8');
 const clone=o=>JSON.parse(JSON.stringify(o));
 let fails=0;
 function t(name,fn){try{fn();console.log('  ok  '+name)}catch(e){fails++;console.log('FAIL  '+name+'\n      '+(e&&e.message))}}
-const REL='37.2.0';   // version courante (V37.1.1 / 3711 → V37.2.0 / 3720)
+const REL='37.3.0';   // version courante (V37.2.0 / 3720 → V37.3.0 / 3730)
 /* V37.2 : la version reste 37.2.0 pendant les sous-lots ; la révision du cache change à chaque lot (37.2.0-B, -C…),
    sinon le service worker continuerait de servir les scripts du lot précédent sur le téléphone. */
 const REV=(fs.readFileSync(path.join(REPO,'app/src/main/assets/web/sw.js'),'utf8').match(/const CACHE='mesheures-shell-v([^']+)'/)||[])[1];
 
 console.log('Version Android');
-t('version.properties : VERSION=37.2.0, VERSION_CODE=3720 (37.1.1 / 3711 → 37.2.0 / 3720, même schéma)',()=>{
-  const p=Object.fromEntries(read('version.properties').trim().split(/\n/).map(l=>l.split('=')));assert.equal(p.VERSION,REL);assert.equal(p.VERSION_CODE,'3720');
-  const [a,b,c]=p.VERSION.split('.').map(Number);assert.equal(Number(p.VERSION_CODE),a*100+b*10+c);assert.ok(Number(p.VERSION_CODE)>3711,'versionCode croissant')});
+t('version.properties : VERSION=37.3.0, VERSION_CODE=3730 (37.2.0 / 3720 → 37.3.0 / 3730, même schéma)',()=>{
+  const p=Object.fromEntries(read('version.properties').trim().split(/\n/).map(l=>l.split('=')));assert.equal(p.VERSION,REL);assert.equal(p.VERSION_CODE,'3730');
+  const [a,b,c]=p.VERSION.split('.').map(Number);assert.equal(Number(p.VERSION_CODE),a*100+b*10+c);assert.ok(Number(p.VERSION_CODE)>3720,'versionCode croissant (installation par-dessus V37.2.0)')});
 t('build.gradle lit version.properties (versionName / versionCode non codés en dur)',()=>{
   const g=read('app/build.gradle');assert.ok(/versionCode releaseCode/.test(g)&&/versionName releaseVersion/.test(g)&&/version\.properties/.test(g))});
-t('HybridCore : VERSION 37.2.0, ENTRY_URL ?v=<révision du cache>',()=>{const j=read('app/src/main/java/com/mesheures/app/core/HybridCore.java');
+t('HybridCore : VERSION 37.3.0, ENTRY_URL ?v=<révision du cache>',()=>{const j=read('app/src/main/java/com/mesheures/app/core/HybridCore.java');
   assert.ok(j.includes('VERSION = "'+REL+'"'));assert.ok(j.includes('index.html?v='+REV+'"'))});
-t('révision du cache : 37.2.0 ou 37.2.0-<lot>',()=>{assert.ok(REV===REL||new RegExp('^'+REL.replace(/\./g,'\\.')+'-[A-Z]$').test(REV),REV)});
-t('version affichée et métadonnées web : 37.2.0 partout, plus aucun 36.2.0',()=>{
+t('révision du cache : '+REL+' ou '+REL+'-<lot>',()=>{assert.ok(REV===REL||new RegExp('^'+REL.replace(/\./g,'\\.')+'-[A-Z]$').test(REV),REV)});
+t('version affichée et métadonnées web : '+REL+' partout, plus aucun 36.2.0',()=>{
   const idx=read('app/src/main/assets/web/index.html');assert.ok(idx.includes('<title>MesHeures V'+REL+'</title>'));assert.ok(idx.includes('content="'+REL+'"'));assert.ok(idx.includes('>V'+REL+'</span>'));
   assert.equal(JSON.parse(read('app/src/main/assets/web/manifest.json')).version,REL);
   const walk=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?(e.name==='vendor'?[]:walk(path.join(d,e.name))):[path.join(d,e.name)]);
@@ -95,5 +95,5 @@ t('ROMI1 : 150h15 · HS 39h25 (39,42 h) · 16 j · écart 17h40 non expliqué',(
   assert.deepEqual([F(r.employeur.tte),F(r.employeur.hs),r.employeur.presence,F(r.ecartTte)],['150h15','39h25',16,'17h40']);
   assert.equal(r.journalier.disponible,false);assert.equal(r.journalier.ecartExplique,null);assert.equal(r.journalier.ecartRestant,1060)});
 
-console.log(fails?`\n${fails} échec(s)`:'\nTous les tests du Release (V37.2.0, révision '+REV+') passent.');
+console.log(fails?`\n${fails} échec(s)`:'\nTous les tests du Release (V'+REL+', révision '+REV+') passent.');
 process.exit(fails?1:0);

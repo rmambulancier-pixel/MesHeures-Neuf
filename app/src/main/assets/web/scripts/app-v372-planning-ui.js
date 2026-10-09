@@ -50,7 +50,7 @@
       '.mh372-an .mh372-conf{font-size:22px;font-weight:700}.mh372-an .mh372-warn{font-size:12.5px;margin:4px 0 0;padding-left:18px}.mh372-an .mh372-warn li{margin:2px 0}'+
       '.mh372-an .mh372-cand button{display:block;width:100%;text-align:left;margin-top:6px;min-height:40px}.mh372-an .mh372-bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.mh372-an .mh372-bar button{flex:1 1 30%;min-height:44px}'+
       '.mh372-an .mh372-nom{display:flex;gap:6px;margin-top:6px}.mh372-an .mh372-nom input{flex:1;min-width:0}'+
-      '.mh372-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 10px}.mh372-tabs button{min-height:44px;font-size:14px;font-weight:600;border-radius:12px}'+
+      '.mh372-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0 0 10px}.mh372-tabs button{min-height:44px;font-size:13px;font-weight:600;border-radius:12px;padding:4px 4px;line-height:1.15}'+
       '.mh372-tabs button[aria-selected="false"]{background:var(--card);color:var(--txt);border:1px solid var(--line)}'+
       '.mh372-prevu-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:999px;border:1.5px solid #5b8def;color:#5b8def}'+
       '.mh372-cal .mh372-nav{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:6px;margin:8px 0 4px}.mh372-cal .mh372-nav h2{margin:0;text-align:center;font-size:18px}'+
@@ -325,6 +325,7 @@
   function ongletCourant(){if(onglet)return onglet;return CAL()&&CAL().fiches(st()).length?'planning':'ocr'}
   function ongletsHtml(o){return '<div class="mh372-tabs" role="tablist" data-k="onglets">'+
     '<button role="tab" data-k="onglet-planning" aria-selected="'+(o==='planning')+'" onclick="MHPrevu.onglet(\'planning\')">📅 Planning</button>'+
+    (root.MHComparaisonUI?'<button role="tab" data-k="onglet-comparaison" aria-selected="'+(o==='comparaison')+'" onclick="MHPrevu.onglet(\'comparaison\')">📊 Comparaison</button>':'')+
     '<button role="tab" data-k="onglet-ocr" aria-selected="'+(o==='ocr')+'" onclick="MHPrevu.onglet(\'ocr\')">🔎 OCR / Validation</button></div>'}
   function provTxt(pr){return esc(pr.source||'fichier')+(pr.page!=null?' · page '+pr.page:'')+(pr.tableau!=null?' · tableau '+pr.tableau:'')}
   /* correction faite pendant la validation OCR (journal de l'analyse) pour cette date */
@@ -384,6 +385,8 @@
     if(r){sec.innerHTML=msgHtml()+ficheHtml(r);apercu(r);return}
     const og=ongletCourant();
     if(og==='planning'){sec.innerHTML='<div class="mh372">'+ongletsHtml(og)+'</div>'+msgHtml()+calendrierHtml();return}
+    /* V37.3 : 📊 Comparaison Prévu ↔ Réel (analyse en lecture seule, module isolé) */
+    if(og==='comparaison'&&root.MHComparaisonUI){sec.innerHTML='<div class="mh372">'+ongletsHtml(og)+'</div>'+msgHtml()+root.MHComparaisonUI.html(st());return}
     sec.innerHTML='<div class="mh372">'+ongletsHtml(og)+'</div><div class="card mh372"><span class="mh31-eyebrow">PLANNING PRÉVISIONNEL · OCR / VALIDATION</span><h2 style="margin:4px 0 6px">📋 Prévu</h2>'+
       '<div class="al i">Planning prévisionnel : il ne prouve pas une heure réellement travaillée et ne modifie jamais tes journées.</div>'+
       '<button id="mh372Open" onclick="MHPrevu.ouvrirImport()" aria-expanded="'+(vue.import?'true':'false')+'">＋ Importer un planning</button>'+
@@ -438,7 +441,7 @@
   async function verifier(){try{await I().verifierSources()}catch(e){}if(root.curTab==='prevu')render()}
 
   root.MHPrevu={version:V,render,verifier,
-    onglet(o){onglet=o==='planning'?'planning':'ocr';vue={fiche:null};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
+    onglet(o){onglet=o==='planning'||o==='comparaison'?o:'ocr';vue={fiche:null};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
     moisPrecedent(){calMois=CAL().ajouterMois(calMois,-1);calJour=null;render()},
     moisSuivant(){calMois=CAL().ajouterMois(calMois,1);calJour=null;render()},
     aujourdhui(){const a=aujourdhui();calMois=a.slice(0,7);calJour=a;render()},
