@@ -81,7 +81,11 @@
   }
 
   /* ---------- analyse complète ---------- */
-  /* opts : {image (ImageData orientée), orientation, largeurOriginale, hauteurOriginale, echelle, sourceSha256, ocr:{lire}, nomRef, choix:[{table,ligne}], maintenant} */
+  /* opts : {image (ImageData de l'image ORIENTÉE, éventuellement réduite), orientation (EXIF 1-8),
+   *        largeurOrientee, hauteurOrientee (image orientée, pleine résolution), largeurOriginale, hauteurOriginale (fichier stocké,
+   *        AVANT orientation), echelle (image analysée / image orientée pleine résolution), sourceSha256, ocr:{lire}, nomRef,
+   *        choix:[{table,ligne}], maintenant}
+   * Sans dimensions fournies : image orientée = image analysée / échelle, original déduit de l'orientation (largeur ↔ hauteur en 5-8). */
   async function analyser(opts){
     opts=opts||{};const now=opts.maintenant||new Date().toISOString(),ref=now.slice(0,10);
     const base={version:V,sourceSha256:opts.sourceSha256||null,analyzedAt:now,tableCandidates:[],selectedEmployee:null,period:null,cells:[],warnings:[],confidence:0,status:'analyse_incomplète',corrections:[],
@@ -91,7 +95,10 @@
     if(!opts.ocr||typeof opts.ocr.lire!=='function'){base.warnings.push({code:'OCR_INDISPONIBLE',texte:'Lecture OCR indisponible sur cet appareil.'});return base}
     const T=G().detecterTableaux(img);
     if(!T.length){base.warnings.push({code:'TABLEAU_ABSENT',texte:'Aucun tableau de planning reconnu dans l’image (cadrage, netteté, éclairage).'});return base}
-    const vers=b=>opts.orientation&&opts.largeurOriginale?G().versOriginal({x:b.x/(opts.echelle||1),y:b.y/(opts.echelle||1),w:b.w/(opts.echelle||1),h:b.h/(opts.echelle||1)},opts.orientation,img.width/(opts.echelle||1),img.height/(opts.echelle||1)):{x:b.x/(opts.echelle||1),y:b.y/(opts.echelle||1),w:b.w/(opts.echelle||1),h:b.h/(opts.echelle||1)};
+    const k=opts.echelle||1,o=Number(opts.orientation)||1;
+    const Lo=opts.largeurOrientee||img.width/k,Ho=opts.hauteurOrientee||img.height/k,inv=G().dimsOrientees(Lo,Ho,o);   // l'échange largeur/hauteur est sa propre réciproque
+    const W0=opts.largeurOriginale||inv.largeur,H0=opts.hauteurOriginale||inv.hauteur;
+    const vers=b=>G().versOriginal({x:b.x/k,y:b.y/k,w:b.w/k,h:b.h/k},o,W0,H0);
     const candidatsParTable=[],tables=[];
     for(const t of T){
       const titre=await opts.ocr.lire(img,t.zoneTitre(),'titre'),periode=P().periodeDuTitre(titre.text);

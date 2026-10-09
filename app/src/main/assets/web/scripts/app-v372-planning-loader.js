@@ -54,9 +54,16 @@
     let d;try{d=f==='pdf'?await dec.pdf(o.bytes,max):['jpeg','png','webp'].includes(f)?await dec.image(o.bytes,rec.source.mimeType,max):null}
     catch(e){return echec('DECODAGE','Image illisible : '+(e&&e.message||e)+'.')}
     if(!d||!d.image)return echec('FORMAT','Format non analysable.');
-    /* orientation déjà appliquée au décodage : les coordonnées de l'image orientée sont reportées dans le fichier stocké */
-    const orientation=f==='pdf'?1:Number(rec.source.orientation)||1;
-    return {ok:true,sha256:sha,image:d.image,echelle:d.image.width/d.largeur,orientation,largeurOriginale:rec.source.largeur||null,hauteurOriginale:rec.source.hauteur||null,pages:d.pages||null};
+    /* Dimensions explicites : image ORIENTÉE (décodée, pleine résolution) et fichier ORIGINAL (avant orientation EXIF).
+       L'original se déduit de l'image orientée (largeur ↔ hauteur pour les orientations 5 à 8) ; si le décodeur n'a pas
+       appliqué une rotation EXIF (dimensions non échangées alors que l'en-tête l'exige), l'image analysée EST l'original :
+       orientation 1 retenue pour les coordonnées, et signalée. */
+    let orientation=f==='pdf'?1:Number(rec.source.orientation)||1,orientationAppliquee=true;
+    const Lo=d.largeur,Ho=d.hauteur,W=Number(rec.source.largeur)||0,H=Number(rec.source.hauteur)||0;
+    if([5,6,7,8].includes(orientation)&&W&&H&&W!==H&&Lo===W&&Ho===H){orientation=1;orientationAppliquee=false}
+    const dO=root.MHPlanningGrid.dimsOrientees(Lo,Ho,orientation);
+    return {ok:true,sha256:sha,image:d.image,echelle:d.image.width/Lo,orientation,orientationExif:Number(rec.source.orientation)||null,orientationAppliquee,
+      largeurOrientee:Lo,hauteurOrientee:Ho,largeurOriginale:dO.largeur,hauteurOriginale:dO.hauteur,pages:d.pages||null};
   }
   /* Chaîne complète. opts : {nomRef, choix, progression(texte), ocr (moteur injecté), cache (Map, lectures déjà faites), deps} */
   async function analyser(rec,opts){
@@ -70,8 +77,10 @@
     if(ocr&&opts.cache){const base=ocr,m=opts.cache;ocr={moteur:base.moteur,async lire(img,r,mode){const k=mode+':'+[r.x,r.y,r.w,r.h].map(Math.round).join(',');
       if(m.has(k))return m.get(k);const v=await base.lire(img,r,mode);m.set(k,v);return v}}}
     try{say('Analyse du tableau…');
-      return await root.MHPlanningAnalysis.analyser({image:c.image,orientation:c.orientation,largeurOriginale:c.largeurOriginale,hauteurOriginale:c.hauteurOriginale,echelle:c.echelle,
-        sourceSha256:c.sha256,ocr,nomRef:opts.nomRef||'',choix:opts.choix||[]})}
+      const a=await root.MHPlanningAnalysis.analyser({image:c.image,orientation:c.orientation,largeurOrientee:c.largeurOrientee,hauteurOrientee:c.hauteurOrientee,largeurOriginale:c.largeurOriginale,hauteurOriginale:c.hauteurOriginale,echelle:c.echelle,
+        sourceSha256:c.sha256,ocr,nomRef:opts.nomRef||'',choix:opts.choix||[]});
+      if(!c.orientationAppliquee)a.warnings.push({code:'ORIENTATION_NON_APPLIQUEE',texte:'Orientation EXIF '+c.orientationExif+' non appliquée par l’appareil au décodage : image analysée telle que stockée (coordonnées sans rotation).'});
+      return a}
     finally{if(propre&&moteur&&moteur.terminer)await moteur.terminer()}
   }
   root.MHPlanningLoader={version:V,MAX,echelleCible,charger,analyser};

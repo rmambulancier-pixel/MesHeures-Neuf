@@ -261,11 +261,18 @@
     return g;
   }
   /* Coordonnées dans l'image ORIGINALE (avant orientation EXIF) d'un rectangle mesuré sur l'image orientée. */
-  function versOriginal(b,orientation,W,H){
+  /* Orientation EXIF (1-8) : dimensions de l'image orientée (affichée) à partir de celles du fichier stocké. */
+  const tourne=o=>[5,6,7,8].includes(Number(o));
+  function dimsOrientees(W0,H0,orientation){return tourne(orientation)?{largeur:H0,hauteur:W0}:{largeur:W0,hauteur:H0}}
+  /* Rectangle de l'image ORIENTÉE (pixels pleine résolution) → rectangle dans le fichier ORIGINAL stocké (avant orientation).
+   * W0 × H0 = dimensions de l'ORIGINAL (largeur et hauteur du fichier, telles que lues dans l'en-tête, avant EXIF).
+   * Transformation EXIF de l'original (u,v) vers l'image orientée (x,y), inversée ici :
+   *   1 (x,y)=(u,v) · 2 (W0-u,v) · 3 (W0-u,H0-v) · 4 (u,H0-v) · 5 (v,u) · 6 (H0-v,u) · 7 (H0-v,W0-u) · 8 (v,W0-u) */
+  function versOriginal(b,orientation,W0,H0){
     const o=Number(orientation)||1,pts=[[b.x,b.y],[b.x+b.w,b.y+b.h]].map(([x,y])=>{
-      switch(o){case 2:return [W-x,y];case 3:return [W-x,H-y];case 4:return [x,H-y];case 5:return [y,x];case 6:return [y,W-x];case 7:return [H-y,W-x];case 8:return [H-y,x];default:return [x,y]}});
+      switch(o){case 2:return [W0-x,y];case 3:return [W0-x,H0-y];case 4:return [x,H0-y];case 5:return [y,x];case 6:return [y,H0-x];case 7:return [W0-y,H0-x];case 8:return [W0-y,x];default:return [x,y]}});
     const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);return {x:Math.min(...xs),y:Math.min(...ys),w:Math.abs(xs[1]-xs[0]),h:Math.abs(ys[1]-ys[0])};
   }
 
-  root.MHPlanningGrid={version:V,hsv,hsl,hex,dist,gris,contraste,binaire,otsu,recadrer,agrandir,vueOcr,detecterTableaux,couleur,grouper,versOriginal,_interne:{pics,regulariser,bandes,cretes}};
+  root.MHPlanningGrid={version:V,hsv,hsl,hex,dist,gris,contraste,binaire,otsu,recadrer,agrandir,vueOcr,detecterTableaux,couleur,grouper,versOriginal,dimsOrientees,_interne:{pics,regulariser,bandes,cretes}};
 })(typeof window!=='undefined'?window:globalThis);

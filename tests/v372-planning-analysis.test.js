@@ -196,8 +196,38 @@ t('confiance = OCR × chemin (exacte 1, variante 0,9, générale 0,7) × date s�
   const l=a.cells.filter(c=>c.status!=='vide');assert.equal(a.confidence,Math.round(l.reduce((s,c)=>s+c.confidence,0)/l.length*100)/100)});
 t('date non sûre : confiance × 0,6 ; illisible = 0',async()=>{const sc=scenario({cellules:{4:{t:'Repos',lu:'',conf:0}}});sc.zones.entete.find(z=>z.col===6).text='~';
   const a=await analyse(sc);assert.equal(a.cells[4].confidence,0);assert.equal(a.cells[6].confidence,Math.round(0.9*1*0.6*100)/100)});
-t('coordonnées dans l’original : échelle et orientation EXIF reportées (boundsOriginal)',async()=>{const sc=scenario(),a=await analyse(sc,{orientation:6,largeurOriginale:sc.image.height*2,hauteurOriginale:sc.image.width*2,echelle:0.5});
-  const c=a.cells[0],b=c.bounds,o=c.boundsOriginal;assert.equal(o.x,b.y*2);assert.equal(o.y,(sc.image.width-b.x-b.w)*2);assert.equal(o.w,b.h*2);assert.equal(o.h,b.w*2)});
+/* Référence INDÉPENDANTE du code testé : orientation EXIF appliquée pixel par pixel à un original W0 × H0 (définition EXIF :
+   6 = rotation de 90° dans le sens horaire pour l'affichage, etc.). Un rectangle connu de l'original est marqué, l'image
+   orientée est construite, son rectangle y est mesuré, puis reporté dans l'original par versOriginal(). */
+const EXIF_PIX={1:(u,v,W,H)=>[u,v],2:(u,v,W,H)=>[W-1-u,v],3:(u,v,W,H)=>[W-1-u,H-1-v],4:(u,v,W,H)=>[u,H-1-v],
+  5:(u,v,W,H)=>[v,u],6:(u,v,W,H)=>[H-1-v,u],7:(u,v,W,H)=>[H-1-v,W-1-u],8:(u,v,W,H)=>[v,W-1-u]};
+function orienter(W0,H0,R,o){const rot=[5,6,7,8].includes(o),Wd=rot?H0:W0,Hd=rot?W0:H0,m=new Uint8Array(Wd*Hd);
+  for(let v=0;v<H0;v++)for(let u=0;u<W0;u++)if(u>=R.x&&u<R.x+R.w&&v>=R.y&&v<R.y+R.h){const [x,y]=EXIF_PIX[o](u,v,W0,H0);m[y*Wd+x]=1}
+  let x0=Infinity,y0=Infinity,x1=-1,y1=-1;for(let y=0;y<Hd;y++)for(let x=0;x<Wd;x++)if(m[y*Wd+x]){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y)}
+  return {Wd,Hd,b:{x:x0,y:y0,w:x1-x0+1,h:y1-y0+1}}}
+const W0=40,H0=24,RECT={x:5,y:3,w:10,h:6};   /* original paysage, rectangle non centré : toute erreur d'axe se voit */
+for(const o of [1,2,3,4,5,6,7,8])t('EXIF '+o+' : rectangle connu de l’original retrouvé exactement (x/y/w/h) depuis l’image orientée',()=>{const {G}=load(),r=orienter(W0,H0,RECT,o);
+  assert.deepEqual(G.dimsOrientees(W0,H0,o),{largeur:r.Wd,hauteur:r.Hd});assert.deepEqual(G.versOriginal(r.b,o,W0,H0),RECT,JSON.stringify(r.b))});
+t('EXIF 6, 7, 8 : versOriginal attend les dimensions de l’ORIGINAL (les dimensions orientées donneraient un autre rectangle ; 5 n’en dépend pas)',()=>{const {G}=load();
+  for(const o of [6,7,8]){const r=orienter(W0,H0,RECT,o);assert.deepEqual(G.versOriginal(r.b,o,W0,H0),RECT);assert.notDeepEqual(G.versOriginal(r.b,o,r.Wd,r.Hd),RECT,'orientation '+o)}});
+t('analyse : échelle + orientation 1 à 8 → boundsOriginal = cellule dans le fichier stocké (dimensions orientée et originale explicites)',async()=>{
+  const sc=scenario(),m=load(),k=0.5,Lo=sc.image.width/k,Ho=sc.image.height/k;
+  for(const o of [1,2,3,4,5,6,7,8]){const d=m.G.dimsOrientees(Lo,Ho,o);   /* original : échange largeur/hauteur en 5-8 */
+    const a=await analyse(sc,{mods:m,orientation:o,echelle:k,largeurOrientee:Lo,hauteurOrientee:Ho,largeurOriginale:d.largeur,hauteurOriginale:d.hauteur});
+    a.cells.slice(0,3).forEach(c=>{const b=c.bounds,full={x:b.x/k,y:b.y/k,w:b.w/k,h:b.h/k},att=EXIF_PIX[o];
+      /* les deux coins du rectangle original, renvoyés dans l'image orientée par la transformation EXIF directe, redonnent la cellule */
+      const O=c.boundsOriginal,cs=[[O.x,O.y],[O.x+O.w-1,O.y+O.h-1]].map(([u,v])=>att(u,v,d.largeur,d.hauteur));
+      const xs=cs.map(p=>p[0]),ys=cs.map(p=>p[1]);
+      assert.deepEqual({x:Math.min(...xs),y:Math.min(...ys),w:Math.abs(xs[1]-xs[0])+1,h:Math.abs(ys[1]-ys[0])+1},full,'orientation '+o)});
+    /* sans dimensions explicites : même résultat (original déduit de l'orientation) */
+    const b=await analyse(sc,{mods:m,orientation:o,echelle:k});assert.deepEqual(b.cells.map(c=>c.boundsOriginal),a.cells.map(c=>c.boundsOriginal),'déduction '+o)}});
+t('chargement : dimensions orientée et originale explicites ; rotation EXIF non appliquée par le décodeur → orientation 1 et alerte',async()=>{
+  const {L}=load(),b=new Uint8Array([7,7]);
+  for(const o of [1,3,6,8]){const rec=recDe(b,{orientation:o,largeur:3000,hauteur:4000}),rot=[5,6,7,8].includes(o),deps=loaderDeps(new Map([[rec.source.localRef,b]]),{W:rot?4000:3000,H:rot?3000:4000});
+    const r=await L.charger(rec,deps);assert.equal(r.ok,true);
+    assert.deepEqual([r.largeurOrientee,r.hauteurOrientee,r.largeurOriginale,r.hauteurOriginale,r.orientation,r.orientationAppliquee],[rot?4000:3000,rot?3000:4000,3000,4000,o,true],'orientation '+o)}
+  const rec=recDe(b,{orientation:6,largeur:3000,hauteur:4000}),r=await L.charger(rec,loaderDeps(new Map([[rec.source.localRef,b]]),{W:3000,H:4000}));
+  assert.deepEqual([r.orientation,r.orientationAppliquee,r.orientationExif,r.largeurOriginale,r.hauteurOriginale],[1,false,6,3000,4000])});
 
 console.log('Corrections, validation, rejet');
 function avecImport(m){const st=m.P.store(),rec=m.P.creerImport({sourceType:'photo',format:'jpeg',sha256:SHA,localRef:'android:'+SHA+'.jpg',size:1234,originalFileName:'planning.jpg',importedAt:'2026-10-08T09:00:00Z'});
