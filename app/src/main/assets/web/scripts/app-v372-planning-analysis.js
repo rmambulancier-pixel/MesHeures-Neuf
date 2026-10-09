@@ -121,7 +121,7 @@
       let lus=await lireTables(img,vers),rot=false;
       if(opts.essai180!==false&&score(lus)===0){const r=tourner180(img),vers180=b=>vers({x:img.width-b.x-b.w,y:img.height-b.y-b.h,w:b.w,h:b.h});
         const l2=await lireTables(r,vers180);if(score(l2)>score(lus)){lus=l2;rot=true}}
-      lus.forEach(x=>{x.gi=tables.length;x.page=pg.page;x.rot180=rot;x.lecturePage=pg.source||null;tables.push(x)});
+      lus.forEach(x=>{x.gi=tables.length;x.page=pg.page;x.rot180=rot;x.lecturePage=pg.source||null;x.orientationExif=Number(pg.orientation)||1;tables.push(x)});
       if(rot)base.warnings.push({code:'PAGE_RETOURNEE',page:pg.page,texte:(pg.page!=null?'Page '+pg.page:'Image')+' à l’envers : lue tournée de 180° (l’original n’est pas modifié).'});
     }
     if(!tables.length){base.warnings.push({code:'TABLEAU_ABSENT',texte:'Aucun tableau de planning reconnu dans l’image (cadrage, netteté, éclairage).'});return base}
@@ -129,7 +129,7 @@
     tables.forEach(x=>{const {t,titre,periode,D,noms,gi}=x;
       const cand=P().candidats(noms,opts.nomRef||'');
       candidatsParTable.push({table:gi,candidats:cand.candidats,preselection:cand.preselection});
-      base.tableCandidates.push({index:gi,page:x.page,lecturePage:x.lecturePage,rotation180:x.rot180,bounds:t.bounds,boundsOriginal:x.vers(t.bounds),lignes:t.lignes,colonnes:t.colonnes,pasLigne:t.pasLigne,pasColonne:t.pasColonne,
+      base.tableCandidates.push({index:gi,page:x.page,lecturePage:x.lecturePage,rotation180:x.rot180,orientationExif:x.orientationExif,bounds:t.bounds,boundsOriginal:x.vers(t.bounds),lignes:t.lignes,colonnes:t.colonnes,pasLigne:t.pasLigne,pasColonne:t.pasColonne,
         inclinaison:t.inclinaison,titreLu:titre.text,periodeTitre:periode,premiereDate:D.premiere,datesFiables:D.colonnes.filter(c=>c.date).length});
       D.warnings.forEach(w=>base.warnings.push(Object.assign({table:gi},w)));
       if(!periode)base.warnings.push({code:'DATE_MANQUANTE',table:gi,texte:'Tableau '+(gi+1)+' : titre « Planning du … au … » non lu ; dates établies par les en-têtes seuls.'});
@@ -151,48 +151,74 @@
       const groupes=G().grouper(couleursTable.flat());
       const gid=(i,j)=>{const idx=i*t.colonnes+j,g=groupes.find(x=>x.membres.includes(idx));return g?g.id:null};
       for(let j=0;j<row.length;j++){const b=row[j].bounds,lec=await opts.ocr.lire(img,b,'cellule'),c=cellule(lec,D.colonnes[j],couleursTable[ch.ligne][j]);
-        c.table=ch.table;if(page!=null)c.page=page;c.bounds=b;c.boundsOriginal=vers(b);if(c.color)c.color.groupe=gid(ch.ligne,j);base.cells.push(c)}
+        c.table=ch.table;c.id='t'+ch.table+'-c'+j;if(page!=null)c.page=page;c.bounds=b;c.boundsOriginal=vers(b);if(c.color)c.color.groupe=gid(ch.ligne,j);base.cells.push(c)}
     }
     controles(base);
-    /* période et confiance globales */
-    const dates=base.cells.map(c=>c.date).filter(Boolean).sort();
-    base.period=dates.length?{debut:dates[0],fin:dates[dates.length-1],titres:base.tableCandidates.map(x=>x.periodeTitre).filter(Boolean)}:null;
-    const lisibles=base.cells.filter(c=>c.status!=='vide');
-    base.confidence=lisibles.length?Math.round(lisibles.reduce((s,c)=>s+c.confidence,0)/lisibles.length*100)/100:0;
-    base.status=base.selectedEmployee&&base.cells.length&&dates.length?'à_valider':'analyse_incomplète';
-    return base;
+    return recalculer(base);
+  }
+
+  /* ---------- unités de planning : 1 tableau distinct = 1 planning prévisionnel ----------
+   * Chaque tableau garde sa page, son orientation, sa période, son salarié, ses cellules, sa confiance, ses alertes et son statut ;
+   * deux tableaux ne sont jamais fusionnés, même issus du même fichier. État conservé d'un recalcul à l'autre : sélection,
+   * planning validé (planningId, validatedAt). */
+  const warningDe=(a,w)=>w.table!=null?w.table:w.tables?w.tables:w.celluleId?Number(String(w.celluleId).slice(1).split('-')[0]):w.cellule!=null&&a.cells[w.cellule]?a.cells[w.cellule].table:null;
+  function recalculer(a){
+    a.cells.forEach((c,i)=>{c.index=i});
+    const avant=Array.isArray(a.unites)?a.unites:[];
+    a.unites=a.tableCandidates.map(t=>{const u0=avant.find(u=>u.tableId===t.index)||{},cells=a.cells.filter(c=>c.table===t.index);
+      const dates=cells.map(c=>c.date).filter(Boolean).sort(),lis=cells.filter(c=>c.status!=='vide');
+      const se=a.selectedEmployee&&a.selectedEmployee.parTableau.find(x=>x.table===t.index);
+      const pageW=a.warnings.filter(w=>w.table==null&&w.cellule==null&&w.page!=null&&w.page===t.page);
+      const u={tableId:t.index,sourceSha256:a.sourceSha256,page:t.page==null?null:t.page,orientation:{exif:t.orientationExif||1,rotation180:!!t.rotation180},
+        periodeTitre:t.periodeTitre||null,period:dates.length?{debut:dates[0],fin:dates[dates.length-1]}:null,
+        selectedEmployee:se?{nom:a.selectedEmployee.nom,ligne:se.ligne,nomLu:se.nomLu,auto:se.auto,score:se.score}:null,
+        cellules:cells.map(c=>c.index),confidence:lis.length?Math.round(lis.reduce((s,c)=>s+c.confidence,0)/lis.length*100)/100:0,
+        warnings:a.warnings.filter(w=>{const x=warningDe(a,w);return Array.isArray(x)?x.includes(t.index):x===t.index}).concat(pageW),
+        selected:u0.selected!==false,planningId:u0.planningId||null,validatedAt:u0.validatedAt||null};
+      u.status=u.planningId?'validé':se&&cells.length&&dates.length?'à_valider':'analyse_incomplète';return u});
+    /* vue d'ensemble (compatibilité) */
+    const dates=a.cells.map(c=>c.date).filter(Boolean).sort();
+    a.period=dates.length?{debut:dates[0],fin:dates[dates.length-1],titres:a.tableCandidates.map(x=>x.periodeTitre).filter(Boolean)}:null;
+    const lisibles=a.cells.filter(c=>c.status!=='vide');
+    a.confidence=lisibles.length?Math.round(lisibles.reduce((s,c)=>s+c.confidence,0)/lisibles.length*100)/100:0;
+    const st=a.unites.map(u=>u.status);
+    a.status=st.length&&st.every(x=>x==='validé')?'validé':st.includes('à_valider')?'à_valider':'analyse_incomplète';
+    return a;
   }
 
   /* ---------- contrôles transverses (jamais de correction silencieuse) ---------- */
   function controles(a){
     const W=a.warnings,cells=a.cells;
     cells.forEach((c,i)=>{c.index=i;
-      if(c.status==='illisible')W.push({code:'CELLULE_ILLISIBLE',cellule:i,date:c.date,texte:'Cellule '+(c.date?'du '+fr(c.date):'colonne '+(c.colonne+1))+' illisible : aucune valeur déduite.'});
-      if(c.status==='non_interprété')W.push({code:'CODE_INCONNU',cellule:i,date:c.date,texte:'Code « '+c.rawText.replace(/\n/g,' ')+' » inconnu du dictionnaire.'});
+      if(c.status==='illisible')W.push({code:'CELLULE_ILLISIBLE',cellule:i,celluleId:c.id,date:c.date,texte:'Cellule '+(c.date?'du '+fr(c.date):'colonne '+(c.colonne+1))+' illisible : aucune valeur déduite.'});
+      if(c.status==='non_interprété')W.push({code:'CODE_INCONNU',cellule:i,celluleId:c.id,date:c.date,texte:'Code « '+c.rawText.replace(/\n/g,' ')+' » inconnu du dictionnaire.'});
       if(/^[LMJVSD]\s*\d{1,2}\s*\/\s*\d{1,2}$/i.test(c.rawText.trim())||/^(planning|employ)/i.test(c.normalizedText)){c.status='à vérifier';c.motif='texte d’en-tête lu dans une cellule';
-        W.push({code:'CONTRADICTION_STRUCTURE',cellule:i,date:c.date,texte:'Cellule '+fr(c.date)+' : « '+c.rawText+' » ressemble à un en-tête : grille probablement décalée.'})}});
+        W.push({code:'CONTRADICTION_STRUCTURE',cellule:i,celluleId:c.id,date:c.date,texte:'Cellule '+fr(c.date)+' : « '+c.rawText+' » ressemble à un en-tête : grille probablement décalée.'})}});
+    /* durée habituelle et couleurs : propres à chaque tableau (les groupes de couleurs sont numérotés par tableau) */
+    [...new Set(cells.map(c=>c.table))].forEach(tb=>{const cl=cells.filter(c=>c.table===tb);
     /* durée inhabituelle (règle du lot A, sur les journées « Jour Nh » de la ligne) */
-    const jours=cells.filter(c=>c.interpretation&&c.interpretation.type==='JOUR'&&c.interpretation.dureeMin!=null),freq={};
-    jours.forEach(c=>{freq[c.interpretation.dureeMin]=(freq[c.interpretation.dureeMin]||0)+1});
-    const mode=Object.keys(freq).sort((x,y)=>freq[y]-freq[x])[0];
-    if(jours.length>=3)jours.filter(c=>String(c.interpretation.dureeMin)!==mode).forEach(c=>{if(c.status==='interprété'){c.status='à vérifier';c.motif='durée inhabituelle sur la ligne'}
-      W.push({code:'DUREE_INHABITUELLE',cellule:c.index,date:c.date,texte:'« '+c.interpretation.libelle+' » le '+fr(c.date)+' alors que la ligne indique surtout '+P().hm(+mode)+'.'})});
-    /* couleur : indice appris dans la même image (groupes de couleurs des cellules interprétées avec certitude) */
-    const parGroupe={};cells.forEach(c=>{if(c.status==='interprété'&&c.confidence>=0.8&&c.color&&c.color.groupe!=null){const g=parGroupe[c.color.groupe]||(parGroupe[c.color.groupe]={});g[c.interpretation.type]=(g[c.interpretation.type]||0)+1}});
-    const dominant=g=>{const e=Object.entries(parGroupe[g]||{}).sort((x,y)=>y[1]-x[1]),n=e.reduce((s,x)=>s+x[1],0);return e.length&&e[0][1]>=3&&e[0][1]/n>=0.8?e[0][0]:null};
-    cells.forEach(c=>{if(!c.color||c.color.groupe==null)return;const d=dominant(c.color.groupe);
-      if(d&&c.interpretation&&c.interpretation.type!==d){c.status=c.status==='interprété'?'à vérifier':c.status;c.motif='couleur habituelle d’un autre code';
-        W.push({code:'CONTRADICTION_COULEUR',cellule:c.index,date:c.date,texte:'Cellule '+fr(c.date)+' : texte « '+c.interpretation.libelle+' », mais sa couleur est celle des cellules « '+d+' » de ta ligne. À vérifier.'})}
-      if(d&&!c.interpretation)c.indiceCouleur={type:d,note:'couleur proche des cellules « '+d+' » (indice seulement, aucune valeur retenue)'}});
+      const jours=cl.filter(c=>c.interpretation&&c.interpretation.type==='JOUR'&&c.interpretation.dureeMin!=null),freq={};
+      jours.forEach(c=>{freq[c.interpretation.dureeMin]=(freq[c.interpretation.dureeMin]||0)+1});
+      const mode=Object.keys(freq).sort((x,y)=>freq[y]-freq[x])[0];
+      if(jours.length>=3)jours.filter(c=>String(c.interpretation.dureeMin)!==mode).forEach(c=>{if(c.status==='interprété'){c.status='à vérifier';c.motif='durée inhabituelle sur la ligne'}
+        W.push({code:'DUREE_INHABITUELLE',cellule:c.index,celluleId:c.id,date:c.date,texte:'« '+c.interpretation.libelle+' » le '+fr(c.date)+' alors que la ligne indique surtout '+P().hm(+mode)+'.'})});
+      /* couleur : indice appris dans la même image (groupes de couleurs des cellules interprétées avec certitude) */
+      const parGroupe={};cl.forEach(c=>{if(c.status==='interprété'&&c.confidence>=0.8&&c.color&&c.color.groupe!=null){const g=parGroupe[c.color.groupe]||(parGroupe[c.color.groupe]={});g[c.interpretation.type]=(g[c.interpretation.type]||0)+1}});
+      const dominant=g=>{const e=Object.entries(parGroupe[g]||{}).sort((x,y)=>y[1]-x[1]),n=e.reduce((s,x)=>s+x[1],0);return e.length&&e[0][1]>=3&&e[0][1]/n>=0.8?e[0][0]:null};
+      cl.forEach(c=>{if(!c.color||c.color.groupe==null)return;const d=dominant(c.color.groupe);
+        if(d&&c.interpretation&&c.interpretation.type!==d){c.status=c.status==='interprété'?'à vérifier':c.status;c.motif='couleur habituelle d’un autre code';
+          W.push({code:'CONTRADICTION_COULEUR',cellule:c.index,celluleId:c.id,date:c.date,texte:'Cellule '+fr(c.date)+' : texte « '+c.interpretation.libelle+' », mais sa couleur est celle des cellules « '+d+' » de ta ligne. À vérifier.'})}
+        if(d&&!c.interpretation)c.indiceCouleur={type:d,note:'couleur proche des cellules « '+d+' » (indice seulement, aucune valeur retenue)'}});
+    });
     /* même date dans deux tableaux (plannings qui se chevauchent) */
     const parDate={};cells.forEach(c=>{if(c.date)(parDate[c.date]=parDate[c.date]||[]).push(c)});
     Object.entries(parDate).forEach(([d,l])=>{if(l.length<2)return;const types=new Set(l.map(c=>c.interpretation?c.interpretation.type:'?'));
       if(types.size>1)l.forEach(c=>{c.status=c.status==='interprété'?'à vérifier':c.status;c.motif='date présente dans deux plannings avec des lectures différentes'});
-      W.push({code:'DOUBLON',date:d,texte:'Le '+fr(d)+' figure dans '+l.length+' tableaux'+(types.size>1?' avec des lectures différentes : à vérifier.':' (lectures identiques).')})});
+      W.push({code:'DOUBLON',date:d,tables:[...new Set(l.map(c=>c.table))],texte:'Le '+fr(d)+' figure dans '+l.length+' tableaux'+(types.size>1?' avec des lectures différentes : à vérifier.':' (lectures identiques).')})});
   }
 
   /* Objet à conserver : sans la liste des noms lus (collègues) ni les données transitoires. */
   function serialiser(a){const o=JSON.parse(JSON.stringify(Object.assign({},a,{_candidats:undefined})));delete o._candidats;return o}
 
-  root.MHPlanningAnalysis={version:V,STATUTS,CHEMIN,analyser,tourner180,serialiser,datesColonnes,dateLibre,cellule,controles};
+  root.MHPlanningAnalysis={version:V,STATUTS,CHEMIN,analyser,recalculer,tourner180,serialiser,datesColonnes,dateLibre,cellule,controles};
 })(typeof window!=='undefined'?window:globalThis);

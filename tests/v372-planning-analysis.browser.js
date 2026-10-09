@@ -75,10 +75,20 @@ async function importerPng(pg,b64,nom){
 async function analyser(pg){const t0=Date.now();await pg.locator('#s-prevu [data-k="lancer"]').click();
   await pg.waitForFunction(()=>!document.querySelector('#s-prevu [data-k="progression"]')&&document.querySelector('#s-prevu [data-k="analyse-ecran"],#s-prevu [data-k="msg"]'),null,{timeout:420000});
   return Date.now()-t0}
+/* Revue des lignes « à vérifier » du planning ouvert : confirmer ce qui est juste, corriger le reste avec la vérité terrain. */
+async function revoirLignes(pg,V,typ){let n=0;
+  for(let k=0;k<80;k++){const row=pg.locator('#s-prevu tr[data-revoir="1"]').first();if(!(await row.count()))break;
+    const i=+await row.getAttribute('data-i'),A=Object.values(JSON.parse(await pg.evaluate(()=>localStorage.getItem('mh_planning_v372'))).analyses)[0],cell=A.cells[i];
+    const ver=V[cell.table],v=ver.find(x=>x.date===(cell.date||cell.dateProposee))||ver[cell.colonne];
+    const juste=cell.interpretation&&cell.interpretation.regle===typ[v.lab]&&(cell.date||cell.dateProposee)===v.date;pg.__answers.length=0;
+    if(juste){if(!cell.date&&!cell.dateProposee)pg.__answers.push(v.date.slice(8)+'/'+v.date.slice(5,7)+'/'+v.date.slice(0,4));await pg.locator('#s-prevu tr.mh372-act').first().locator('[data-k="confirmer"]').click()}
+    else{if(!cell.date)pg.__answers.push(v.date.slice(8)+'/'+v.date.slice(5,7)+'/'+v.date.slice(0,4));pg.__answers.push(v.lab);await pg.locator('#s-prevu tr.mh372-act').first().locator('[data-k="corriger"]').click()}
+    n++;await pg.waitForTimeout(60)}
+  pg.__answers.length=0;return n}
 const stockees=pg=>pg.evaluate(()=>JSON.parse(localStorage.getItem('mh_planning_v372')||'{}'));
 
 srv.listen(0,async()=>{
-  const b=await chromium.launch();let etat=null;
+  const b=await chromium.launch();let etat=null,etatPdf=null,etatPdf2=null;
   try{
     const debut='2026-11-02',n=31,add=(k,i)=>new Date(Date.parse(k+'T12:00:00Z')+i*864e5).toISOString().slice(0,10);
     const lignes=NOMS.map((_,i)=>Array.from({length:n},(_,j)=>CYCLE[(i+j)%CYCLE.length]));
@@ -160,6 +170,40 @@ srv.listen(0,async()=>{
       info('OCR réel PDF : '+justes+'/62 justes ; '+okN+' « OK »');
       ok(a&&a.cells.length===62&&okFaux===0,'62 cellules (ta ligne, 2 pages), aucune « OK » fausse ('+okFaux+')');
       ok(a&&a.cells.every(c=>c.page===1||c.page===2),'chaque cellule porte sa page');
+      console.log('C3 · deux plannings indépendants issus du même PDF');
+      const avant=await moteur(pg),t0=await txt(pg);etatPdf=await pg.evaluate(()=>localStorage.getItem('mh_planning_v372'));
+      ok(/2 plannings détectés dans ce PDF/.test(t0)&&await pg.locator('#s-prevu [data-k="unite"]').count()===2,'« 2 plannings détectés dans ce PDF » : une ligne par planning');
+      ok(/Planning 1 — page 1[\s\S]*02\/11\/2026 → 02\/12\/2026[\s\S]*ROTH Mickael[\s\S]*confiance \d+ %/.test(t0)&&/Planning 2 — page 2[\s\S]*05\/10\/2026 → 04\/11\/2026[\s\S]*ROTH Mickael/.test(t0),'chaque planning : page, période, salarié, confiance');
+      ok(a.unites&&a.unites.length===2&&a.unites[0].sourceSha256===a.unites[1].sourceSha256&&a.unites[0].page===1&&a.unites[1].page===2&&a.unites[0].orientation.rotation180===false&&a.unites[1].orientation.rotation180===true,'unités : même SHA, pages 1 et 2, orientations différentes');
+      ok(a.unites[0].cellules.every(i=>a.cells[i].table===0)&&a.unites[1].cellules.every(i=>a.cells[i].table===1)&&a.unites[0].cellules.length===31&&a.unites[1].cellules.length===31,'cellules propres à chaque planning (31 + 31, jamais mélangées)');
+      /* P2 désélectionné : la validation groupée ne vise que P1 */
+      await pg.locator('#s-prevu [data-k="unite"][data-table="1"] input[data-k="choisir"]').uncheck();await pg.waitForTimeout(100);
+      ok(/Valider les plannings sélectionnés \(1\)/.test(await txt(pg))||/Valider les plannings sélectionnés$/m.test(await txt(pg)),'désélection de P2 prise en compte');
+      await pg.locator('#s-prevu [data-k="unite"][data-table="0"] [data-k="detail"]').click();await pg.waitForTimeout(100);
+      ok(/Planning 1 — page 1/.test(await txt(pg))&&await pg.locator('#s-prevu table[data-k="cellules"] tbody tr[data-i]').count()===31,'détail de P1 : ses 31 jours seulement');
+      await revoirLignes(pg,V,typ);pg.__answers.push(true);await pg.locator('#s-prevu [data-k="valider"]').click();await pg.waitForTimeout(300);
+      let S=await stockees(pg),pls=Object.values(S.plannings);
+      ok(pls.length===1&&pls[0].origine.page===1&&pls[0].origine.tableId===0&&pls[0].periode.debut==='2026-11-02','P1 validé sans P2 : une fiche, liée à la page 1 / tableau 1');
+      let A=Object.values(S.analyses)[0];ok(A.unites[0].status==='validé'&&A.unites[1].status==='à_valider','P2 reste à valider, indépendant');
+      await pg.locator('#s-prevu [data-k="toutes"]').click();await pg.waitForTimeout(100);
+      await pg.locator('#s-prevu [data-k="unite"][data-table="1"] [data-k="detail"]').click();await pg.waitForTimeout(100);
+      await revoirLignes(pg,V,typ);pg.__answers.push(true);await pg.locator('#s-prevu [data-k="valider"]').click();await pg.waitForTimeout(300);
+      S=await stockees(pg);pls=Object.values(S.plannings).sort((x,y)=>x.origine.page-y.origine.page);
+      ok(pls.length===2&&pls[1].origine.page===2&&pls[1].origine.orientation.rotation180===true&&pls[1].periode.debut==='2026-10-05'&&pls[1].periode.fin==='2026-11-04'&&pls[0].periode.fin==='2026-12-02','P2 validé : deuxième fiche, page 2 retournée, période propre (jamais fusionnée)');
+      etatPdf2=await pg.evaluate(()=>localStorage.getItem('mh_planning_v372'));
+      ok(pls.every(p=>p.source.sha256===imp.source.sha256&&p.salarie.nom==='ROTH Mickael'&&p.interpretation.length===31),'deux fiches : même source SHA, même salarié, 31 jours chacune');
+      ok(pls.every(p=>p.interpretation.every(x=>{const v=(p.origine.page===1?verite:verO).find(y=>y.date===x.date);return v&&x.regle===typ[v.lab]})),'chaque fiche conforme à son planning dessiné');
+      await pg.evaluate(()=>MHPrevu.retour());await pg.waitForTimeout(100);
+      ok(await pg.locator('#s-prevu .mh372-row[data-planning]').count()===2&&await pg.locator('#s-prevu .mh372-row[data-id]').count()===0,'📋 Prévu : deux fiches issues du même PDF');
+      const ids=pls.map(p=>p.id);
+      pg.__answers.length=0;pg.__answers.push(true);await pg.evaluate(id=>MHPrevu.supprimerFiche(id),ids[0]);await pg.waitForTimeout(300);
+      S=await stockees(pg);ok(!S.plannings[ids[0]]&&S.plannings[ids[1]]&&S.imports[imp.id]&&await pg.evaluate(async n=>!!(await MHPlanningImport.sources.existe(n)),imp.source.localRef),'suppression de P1 : P2, l’import et l’original sont conservés');
+      ok(pg.__dialogs.filter(d=>/Plus aucune fiche/.test(d)).length===0,'aucune proposition de supprimer l’original tant qu’une fiche en dépend');
+      ok(await pg.evaluate(async id=>(await MHPlanningImport.supprimer(id,{avecSource:true})).bloque==='fiches',imp.id),'suppression directe du fichier refusée tant qu’une fiche en dépend');
+      pg.__answers.length=0;pg.__answers.push(true,true);await pg.evaluate(id=>MHPrevu.supprimerFiche(id),ids[1]);await pg.waitForTimeout(400);
+      S=await stockees(pg);ok(!Object.keys(S.plannings).length&&!S.imports[imp.id]&&!(await pg.evaluate(async n=>!!(await MHPlanningImport.sources.existe(n)),imp.source.localRef))&&pg.__dialogs.some(d=>/Plus aucune fiche/.test(d)),'dernière fiche supprimée : confirmation explicite, puis original supprimé');
+      ok(await moteur(pg)===avant,'journées réelles (DB.days) et calculs inchangés');
+      ok(!/DUPONT|MARTIN|LEROY|GARNIER|Alice|Inès|Hugo/.test(JSON.stringify(await stockees(pg)))&&!/DUPONT|MARTIN|LEROY|GARNIER/.test(JSON.stringify(pls)),'aucun collègue dans les fiches ni l’analyse');
       ok(!errs.length,'0 erreur JS'+(errs.length?' : '+errs.slice(0,2).join(' | '):''));
       await ctx.close()}
 
@@ -191,13 +235,23 @@ srv.listen(0,async()=>{
         const p=await c.newPage(),e=[];p.on('pageerror',x=>e.push(x.message));await p.clock.setFixedTime(NOW);
         await p.addInitScript(d=>{try{if(!sessionStorage.getItem('s')){localStorage.setItem('mesheures_v3',JSON.stringify(d.db));localStorage.setItem('mesheures_theme',d.t);localStorage.setItem('mh_planning_v372',d.pl);sessionStorage.setItem('s','1')}}catch(x){}},{db:seed(),t:theme,pl:etat});
         await p.goto(`http://127.0.0.1:${srv.address().port}/index.html`);await p.waitForTimeout(1800);return {ctx:c,pg:p,errs:e}})();
-      await tabPrevu(pg);const id=await pg.evaluate(()=>document.querySelector('#s-prevu .mh372-row[data-id]').dataset.id);
+      await tabPrevu(pg);const id=await pg.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('mh_planning_v372')).imports)[0]);
       await pg.evaluate(id=>{MHPrevu.ouvrir(id);MHPrevu.voirAnalyse()},id);await pg.waitForTimeout(200);
       const o=await overflow(pg,'#s-prevu');
       await pg.evaluate(()=>{});
       const vis=await pg.evaluate(()=>{const t=document.querySelector('#s-prevu table[data-k="cellules"]');return t&&t.getBoundingClientRect().width<=innerWidth});
       ok(!o.length&&vis&&!errs.length,W+' px · '+(theme==='dark'?'sombre':'clair')+' : écran d’analyse sans débordement, tableau lisible'+(o.length?' ('+o.join(', ')+')':''));
       if(W===360&&theme==='dark')await pg.screenshot({path:path.join(require('os').tmpdir(),'mh372-analyse-360.png'),fullPage:true});
+      /* vue d'ensemble « 2 plannings » et fiche d'un planning (PDF) */
+      await pg.evaluate(e=>{localStorage.setItem('mh_planning_v372',e)},etatPdf2);
+      const idp=await pg.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('mh_planning_v372')).imports)[0]);
+      await pg.evaluate(id=>{MHPrevu.retour();MHPrevu.ouvrir(id);MHPrevu.voirAnalyse()},idp);await pg.waitForTimeout(200);
+      const o2=await overflow(pg,'#s-prevu'),ens=/2 plannings détectés/.test(await txt(pg));
+      const pid=await pg.evaluate(()=>Object.keys(JSON.parse(localStorage.getItem('mh_planning_v372')).plannings)[0]);
+      await pg.evaluate(id=>MHPrevu.ouvrirFiche(id),pid);await pg.waitForTimeout(150);const o3=await overflow(pg,'#s-prevu'),fic=await pg.locator('#s-prevu [data-k="fiche-planning"]').count()===1;
+      await pg.evaluate(()=>MHPrevu.retour());await pg.waitForTimeout(100);const o4=await overflow(pg,'#s-prevu');
+      ok(ens&&fic&&!o2.length&&!o3.length&&!o4.length&&!errs.length,W+' px · '+(theme==='dark'?'sombre':'clair')+' : vue « 2 plannings », fiche et liste sans débordement'+([...o2,...o3,...o4].length?' ('+[...o2,...o3,...o4].join(', ')+')':''));
+      if(W===360&&theme==='dark'){await pg.evaluate(id=>{MHPrevu.ouvrir(id);MHPrevu.voirAnalyse()},idp);await pg.waitForTimeout(150);await pg.screenshot({path:path.join(require('os').tmpdir(),'mh372-ensemble-360.png'),fullPage:true})}
       await ctx.close()}
   }catch(e){fails++;console.log('FAIL  exception : '+(e&&e.stack||e))}
   finally{await b.close();srv.close()}

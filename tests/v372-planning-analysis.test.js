@@ -294,7 +294,7 @@ function avecImport(m){const st=m.P.store(),rec=m.P.creerImport({sourceType:'pho
 t('correction tracée : valeur OCR d’origine, avant, après, auteur utilisateur, horodatage, raison ; rawText jamais écrasé',async()=>{
   const a=await CAS({4:'Jour 8n'}),V=a._m.V;const b=V.corriger(a,{index:4,champ:'texte',valeur:'Jour 8h',raison:'lu sur le papier',le:'2026-10-08T10:05:00Z'});
   const c=b.cells[4];assert.equal(c.rawText,'Jour 8n');assert.equal(c.texteCorrige,'Jour 8h');assert.equal(c.interpretation.dureeMin,480);assert.equal(c.chemin,'manuel');
-  assert.deepEqual(b.corrections[0],{auteur:'utilisateur',le:'2026-10-08T10:05:00Z',raison:'lu sur le papier',cellule:4,champ:'texte',valeurOcr:'Jour 8n',avant:'Jour 8n',apres:'Jour 8h'});
+  assert.deepEqual(b.corrections[0],{auteur:'utilisateur',le:'2026-10-08T10:05:00Z',raison:'lu sur le papier',cellule:4,celluleId:'t0-c4',champ:'texte',valeurOcr:'Jour 8n',avant:'Jour 8n',apres:'Jour 8h'});
   assert.equal(a.cells[4].rawText,'Jour 8n');assert.equal(a.corrections.length,0,'analyse d’origine intacte')});
 t('validation refusée tant qu’il reste des cellules à vérifier ou sans date',async()=>{const m=load(),{st,rec}=avecImport(m);
   const a=await analyse(scenario({cellules:{4:'Jour 7n',5:{t:'Jour 7h',lu:''}}}),{mods:m});
@@ -305,9 +305,9 @@ t('validation : planning PRÉVISIONNEL créé (lot A), lié à l’import, analy
   const r=m.V.valider(a,{store:st,record:rec});assert.equal(r.analyse.status,'validé');assert.equal(r.plannings.length,1);
   const p=st.lire(r.plannings[0].id);assert.equal(p.nature||'prévisionnel','prévisionnel');assert.deepEqual(p.periode.debut,'2026-11-02');assert.equal(p.interpretation.length,31);
   assert.equal(p.interpretation.find(x=>x.date==='2026-11-07').type,'REPOS');assert.equal(p.salarie.nom,'ROTH Mickael');assert.equal(p.salarie.choix,'utilisateur');assert.equal(p.salarie.ligne,2);
-  const i=st.importLire(rec.id);assert.deepEqual(i.planningIds,[p.id]);assert.equal(i.historique.at(-1).action,'analyse validée');
+  const i=st.importLire(rec.id);assert.deepEqual(i.planningIds,[p.id]);assert.equal(i.historique.at(-1).action,'planning(s) validé(s)');
   const s=st.analyseLire(rec.id);assert.equal(s.status,'validé');assert.equal(s.corrections.length,2);assert.ok(!JSON.stringify(st.exporter()).match(/DUPONT|MARTIN|LEROY/));
-  assert.throws(()=>m.V.corriger(s,{index:1,champ:'texte',valeur:'Repos'}),/validée/)});
+  assert.throws(()=>m.V.corriger(s,{index:1,champ:'texte',valeur:'Repos'}),/déjà validé/)});
 t('validation : SHA de l’analyse différent de la source → refus',async()=>{const m=load(),{st,rec}=avecImport(m),a=await analyse(scenario(),{mods:m});
   assert.throws(()=>m.V.valider(Object.assign({},a,{sourceSha256:'0'.repeat(64)}),{store:st,record:rec}),/SHA-256/)});
 t('rejet : analyse retirée, import et source conservés, décision tracée',async()=>{const m=load(),{st,rec}=avecImport(m),a=await analyse(scenario(),{mods:m});
@@ -329,6 +329,77 @@ t('réglages : nom de référence enregistré dans la clé Planning seulement, r
   assert.deepEqual([...m.st.map.keys()],['mh_planning_v372']);const {st:st2}=avecImport(load());const e={version:1,plannings:{},imports:{},reglages:{nomRef:'ROTH Mickael'}};
   const d=load().P.store();d.importer(e);assert.equal(d.reglages().nomRef,'ROTH Mickael')});
 
+console.log('Multi-plannings / multi-pages (C3)');
+/* PDF de 2 pages : page 1 à l'endroit (novembre), page 2 à l'envers (octobre), même salarié, même fichier */
+async function pdf2(m,opts){opts=opts||{};
+  const s1=scenario(),c2=S.semaine('2026-10-05',31),s2=S.generer({W:1400,tables:[{titre:'Planning du 05/10/2026 au 04/11/2026',colonnes:c2,lignes:NOMS.slice(0,4).map((nom,i)=>({nom,cellules:c2.map((_,j)=>CYCLE[(i+j+2)%CYCLE.length])}))}]});
+  const ud=retourner(s2);s1.image.cle='p1';ud.image.cle='p2';const o1=S.ocrSimule(s1.zones),o2=ocrPhysique(ud);
+  const ocr={moteur:'sim',lire:(img,r,mo)=>String(img.cle||'').startsWith('p1')?o1.lire(img,r,mo):o2.lire(img,r,mo)};
+  let a=await m.A.analyser({pages:[{image:s1.image,page:1},{image:ud.image,page:2}],sourceSha256:SHA,ocr,nomRef:'ROTH Mickael',maintenant:NOW});
+  if(opts.revoir!==false)a.cells.forEach((c,i)=>{if(c.status!=='interprété'||!c.date)a=m.V.confirmer(a,i)});
+  return {a,s1,s2,c2}}
+function avecImportPdf(m){const st=m.P.store(),rec=m.P.creerImport({sourceType:'fichier',format:'pdf',sha256:SHA,localRef:'android:'+SHA+'.pdf',size:4321,originalFileName:'planning.pdf',importedAt:'2026-10-09T09:00:00Z'});
+  st.importEnregistrer(rec);return {st,rec}}
+const COLLEGUES=/DUPONT|MARTIN|LEROY|GARNIER|Alice|Paul|Inès|Hugo/;
+t('PDF 2 pages / 2 tableaux → 2 unités de planning indépendantes (sha, page, tableId, orientation, période, salarié, cellules, confiance, alertes)',async()=>{
+  const m=load(),{a}=await pdf2(m,{revoir:false}),U=a.unites;
+  assert.equal(U.length,2);assert.deepEqual(U.map(u=>[u.tableId,u.page,u.sourceSha256]),[[0,1,SHA],[1,2,SHA]]);
+  ['tableId','sourceSha256','page','orientation','period','selectedEmployee','cellules','confidence','warnings','status'].forEach(k=>U.forEach(u=>assert.ok(k in u,k)));
+  assert.ok(U[0].cellules.every(i=>a.cells[i].table===0&&a.cells[i].page===1)&&U[1].cellules.every(i=>a.cells[i].table===1&&a.cells[i].page===2));
+  assert.ok(U[1].warnings.some(w=>w.code==='PAGE_RETOURNEE')&&!U[0].warnings.some(w=>w.code==='PAGE_RETOURNEE'),'alertes propres à chaque planning')});
+t('périodes différentes, orientations différentes, même salarié, même source SHA',async()=>{const m=load(),{a}=await pdf2(m,{revoir:false}),U=a.unites;
+  assert.deepEqual(U.map(u=>u.period),[{debut:'2026-11-02',fin:'2026-12-02'},{debut:'2026-10-05',fin:'2026-11-04'}]);
+  assert.deepEqual(U.map(u=>u.orientation.rotation180),[false,true]);assert.deepEqual(U.map(u=>u.selectedEmployee.nom),['ROTH Mickael','ROTH Mickael']);
+  assert.deepEqual(U.map(u=>u.selectedEmployee.ligne),[2,2]);assert.equal(new Set(U.map(u=>u.sourceSha256)).size,1)});
+t('contrôles propres à chaque tableau : durée habituelle et couleurs jamais calculées sur deux plannings mélangés',async()=>{const m=load();
+  const c1=S.semaine('2026-11-02',14),c2=S.semaine('2026-12-01',14),mk=(cols,lab)=>S.generer({W:1000,tables:[{titre:'Planning du '+cols[0].slice(8)+'/'+cols[0].slice(5,7)+'/2026 au '+cols[13].slice(8)+'/'+cols[13].slice(5,7)+'/2026',colonnes:cols,lignes:NOMS.slice(0,4).map(nom=>({nom,cellules:cols.map(()=>lab)}))}]});
+  const s1=mk(c1,'Jour 7h'),s2=mk(c2,'Jour 10h'),o1=S.ocrSimule(s1.zones),o2=S.ocrSimule(s2.zones);
+  const a=await m.A.analyser({pages:[{image:s1.image,page:1},{image:s2.image,page:2}],sourceSha256:SHA,ocr:{lire:(i,r,mo)=>(i===s1.image?o1:o2).lire(i,r,mo)},nomRef:'ROTH Mickael',maintenant:NOW});
+  assert.equal(a.unites.length,2);assert.ok(!a.warnings.some(w=>w.code==='DUREE_INHABITUELLE'),'10 h n’est pas « inhabituel » au regard d’un autre planning');
+  assert.ok(!a.warnings.some(w=>w.code==='CONTRADICTION_COULEUR'))});
+t('validation de P1 sans P2 : une seule fiche, P2 reste à valider ; puis P2 : deuxième fiche indépendante',async()=>{const m=load(),{st,rec}=avecImportPdf(m);let {a}=await pdf2(m);
+  let r=m.V.valider(a,{store:st,record:rec,tables:[0]});assert.equal(r.plannings.length,1);assert.equal(st.liste().length,1);
+  assert.deepEqual(r.analyse.unites.map(u=>u.status),['validé','à_valider']);assert.equal(r.analyse.status,'à_valider');
+  const p1=st.lire(r.plannings[0].id);assert.deepEqual([p1.origine.importId,p1.origine.sourceSha256,p1.origine.page,p1.origine.tableId,p1.origine.orientation.rotation180],[rec.id,SHA,1,0,false]);
+  assert.deepEqual([p1.periode.debut,p1.periode.fin],['2026-11-02','2026-12-02']);
+  r=m.V.valider(r.analyse,{store:st,record:rec,tables:[1]});const p2=st.lire(r.plannings[0].id);
+  assert.equal(st.liste().length,2);assert.notEqual(p1.id,p2.id);assert.deepEqual([p2.origine.page,p2.origine.tableId,p2.origine.orientation.rotation180,p2.periode.debut,p2.periode.fin],[2,1,true,'2026-10-05','2026-11-04']);
+  assert.equal(r.analyse.status,'validé');assert.deepEqual(st.importLire(rec.id).planningIds.sort(),[p1.id,p2.id].sort());
+  assert.ok(p1.interpretation.every(x=>x.date>='2026-11-02')&&p2.interpretation.every(x=>x.date<='2026-11-04'),'périodes jamais fusionnées')});
+t('validation de P2 sans P1 ; P1 désélectionné n’est pas validé par la validation groupée',async()=>{const m=load(),{st,rec}=avecImportPdf(m);let {a}=await pdf2(m);
+  a=m.V.selectionner(a,0,false);const r=m.V.valider(a,{store:st,record:rec});assert.equal(r.plannings.length,1);assert.equal(r.plannings[0].origine.page,2);
+  assert.deepEqual(r.analyse.unites.map(u=>u.status),['à_valider','validé']);assert.throws(()=>m.V.valider(r.analyse,{store:st,record:rec}),/Aucun planning sélectionné/)});
+t('un planning sans ligne choisie bloque seulement lui-même ; corrections fermées sur le planning validé, ouvertes sur l’autre',async()=>{const m=load(),{st,rec}=avecImportPdf(m);let {a}=await pdf2(m);
+  const r=m.V.valider(a,{store:st,record:rec,tables:[0]}),i0=r.analyse.unites[0].cellules[3],i1=r.analyse.unites[1].cellules[3];
+  assert.throws(()=>m.V.corriger(r.analyse,{index:i0,champ:'texte',valeur:'Repos'}),/Planning 1 \(page 1\) déjà validé/);
+  const b=m.V.corriger(r.analyse,{index:i1,champ:'texte',valeur:'Repos'});assert.equal(b.cells[i1].texteCorrige,'Repos');assert.equal(b.unites[0].status,'validé')});
+t('suppression de P1 : P2, l’import, l’analyse et l’original restent ; P1 redevient « à valider »',async()=>{const m=load(),{st,rec}=avecImportPdf(m);let {a}=await pdf2(m);
+  const r=m.V.valider(a,{store:st,record:rec,tables:[0,1]}),[p1,p2]=r.plannings;
+  const d=st.ficheSupprimer(p1.id);assert.deepEqual(d,{importId:rec.id,restantes:[p2.id]});assert.equal(st.lire(p1.id),null);assert.ok(st.lire(p2.id));
+  assert.deepEqual(st.importLire(rec.id).planningIds,[p2.id]);const an=st.analyseLire(rec.id);assert.deepEqual(an.unites.map(u=>u.status),['à_valider','validé']);
+  assert.equal(st.importLire(rec.id).historique.at(-1).action,'fiche supprimée')});
+t('suppression de P2 : P1 reste',async()=>{const m=load(),{st,rec}=avecImportPdf(m);let {a}=await pdf2(m);
+  const [p1,p2]=m.V.valider(a,{store:st,record:rec,tables:[0,1]}).plannings;st.ficheSupprimer(p2.id);
+  assert.ok(st.lire(p1.id));assert.equal(st.lire(p2.id),null);assert.deepEqual(st.fichesDeSource(SHA).map(p=>p.id),[p1.id])});
+t('original et import non supprimables tant qu’une fiche en dépend ; supprimables une fois la dernière fiche retirée',async()=>{const m=load(),{st,rec}=avecImportPdf(m);let {a}=await pdf2(m);
+  const IMP=fs.readFileSync(path.join(SC,'app-v372-planning-import.js'),'utf8');vm.compileFunction(IMP,['window'],{filename:'app-v372-planning-import.js'})(m.win);
+  const supprimes=[];m.win.MesHeuresAndroid={planningSourceBegin(){return true},planningSourceAppend(){return true},planningSourceFinish(){return true},planningSourceExists(){return true},planningSourceDelete(n){supprimes.push(n);return true}};
+  const [p1,p2]=m.V.valider(a,{store:st,record:rec,tables:[0,1]}).plannings;
+  assert.throws(()=>st.importSupprimer(rec.id),/fiches de planning dépendent/);
+  let r=await m.win.MHPlanningImport.supprimer(rec.id,{avecSource:true});assert.equal(r.bloque,'fiches');assert.deepEqual(supprimes,[]);assert.ok(st.importLire(rec.id));
+  st.ficheSupprimer(p1.id);r=await m.win.MHPlanningImport.supprimer(rec.id,{avecSource:true});assert.equal(r.bloque,'fiches');assert.deepEqual(supprimes,[]);
+  st.ficheSupprimer(p2.id);r=await m.win.MHPlanningImport.supprimer(rec.id,{avecSource:true});assert.deepEqual([r.fiche,r.source],[true,true]);assert.deepEqual(supprimes,[SHA+'.pdf']);assert.equal(st.importLire(rec.id),null)});
+t('choix de la ligne dans un tableau après validation de l’autre : le planning validé garde cellules, corrections et fiche',async()=>{const m=load(),{st,rec}=avecImportPdf(m);let {a}=await pdf2(m);
+  const i0=a.unites[0].cellules[5];a=m.V.corriger(a,{index:i0,champ:'texte',valeur:'Repos',raison:'vu sur le papier'});
+  const r=m.V.valider(a,{store:st,record:rec,tables:[0]});
+  const {a:b}=await pdf2(load(),{revoir:false});const c=JSON.parse(JSON.stringify(b));c.unites=undefined;c.cells=c.cells.map(x=>x.table===0?Object.assign(x,{rawText:'NOUVELLE LECTURE'}):x);
+  const f=m.V.fusionner(r.analyse,c,1);
+  assert.equal(f.unites[0].status,'validé');assert.equal(f.unites[0].planningId,r.plannings[0].id);
+  const g=f.cells.find(x=>x.id===r.analyse.cells[i0].id);assert.equal(g.texteCorrige,'Repos');assert.ok(!f.cells.some(x=>x.table===0&&x.rawText==='NOUVELLE LECTURE'));
+  assert.equal(f.corrections.filter(x=>x.celluleId===g.id).length,1);assert.equal(f.cells[f.corrections.find(x=>x.celluleId===g.id).cellule].id,g.id,'index de correction remis à jour')});
+t('aucun collègue dans les fiches, l’analyse enregistrée ni la sauvegarde',async()=>{const m=load(),{st,rec}=avecImportPdf(m);let {a}=await pdf2(m);
+  m.V.valider(a,{store:st,record:rec,tables:[0,1]});assert.ok(!COLLEGUES.test(JSON.stringify(st.exporter())));assert.ok(!COLLEGUES.test(JSON.stringify(st.liste())))});
+
 console.log('Non-régression');
 const MODS=['app-v37-periode.js','app-legal.js','app-evidence.js','app-v371-nuit.js','app-v37-control.js','app-v37-romi-reconciliation.js','app-v37-compteur.js','app-v37-assistant-paie.js','app-v37-dossier.js'];
 async function snapshot(avec){
@@ -346,6 +417,13 @@ async function snapshot(avec){
     /* planning sur des dates déjà présentes dans DB.days (septembre 2026) */
     const sc=scenario({debut:'2026-08-24',n:28}),{st,rec}=avecImport(m);let a=await m.A.analyser({image:sc.image,sourceSha256:SHA,ocr:S.ocrSimule(sc.zones),nomRef:'ROTH Mickael',maintenant:NOW});
     assert.equal(a.status,'à_valider');a.cells.forEach((c,i)=>{if(m.V.bloquants(a).length&&c.status!=='interprété')a=m.V.confirmer(a,i)});m.V.valider(a,{store:st,record:rec});
+    /* PDF de 2 pages (août et septembre, jours réels) : 2 fiches validées l'une après l'autre, puis une supprimée */
+    const p1=scenario({debut:'2026-08-24',n:14}),p2=scenario({debut:'2026-09-07',n:14}),o1=S.ocrSimule(p1.zones),o2=S.ocrSimule(p2.zones),SHA2='6f'.repeat(32);
+    const rec2=m.P.creerImport({sourceType:'fichier',format:'pdf',sha256:SHA2,localRef:'android:'+SHA2+'.pdf',size:99,originalFileName:'p.pdf'});st.importEnregistrer(rec2);
+    let b=await m.A.analyser({pages:[{image:p1.image,page:1},{image:p2.image,page:2}],sourceSha256:SHA2,ocr:{lire:(i,r,mo)=>(i===p1.image?o1:o2).lire(i,r,mo)},nomRef:'ROTH Mickael',maintenant:NOW});
+    b.cells.forEach((c,i)=>{if(c.status!=='interprété')b=m.V.confirmer(b,i)});
+    b=m.V.valider(b,{store:st,record:rec2,tables:[1]}).analyse;b=m.V.valider(b,{store:st,record:rec2,tables:[0]}).analyse;
+    assert.equal(st.fichesDeSource(SHA2).length,2);st.ficheSupprimer(st.fichesDeSource(SHA2)[0].id);
     assert.equal(JSON.stringify(X.DB.days),avant,'DB.days inchangé')}
   const days=Object.keys(X.DB.days).sort();
   return {snap:JSON.stringify({cd:days.map(k=>{const r=X.cd(k);return [k,r.amp,r.tte,r.pz,r.nuit,r.idaj,r.ir,r.iru,r.al]}),

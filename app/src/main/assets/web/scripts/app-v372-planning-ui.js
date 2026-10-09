@@ -70,19 +70,44 @@
       '<label>'+'<b>📁</b>Fichier<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" data-src="fichier" aria-label="Choisir un fichier"></label>'+
       '</div><p class="mut" style="font-size:12px;margin:8px 0 0">JPG, PNG, WEBP ou PDF · 20 Mo au maximum · l’original est conservé intact sur le téléphone.</p>';
   }
+  /* Liste : une ligne par FICHE de planning (un fichier peut en donner plusieurs, C3), puis les imports encore à analyser,
+     à compléter ou à valider. */
+  function unitesDe(a){return a&&Array.isArray(a.unites)?a.unites:[]}
+  function aTraiter(r){const a=analyseDe(r),us=unitesDe(a);const fiches=st().fichesDeSource(r.source.sha256);
+    if(!a)return !fiches.length;return us.some(u=>u.status!=='validé')||!us.length}
+  function ficheLigneHtml(p){const o=p.origine||{},n=p.interpretation.length,r=o.importId&&st().importLire(o.importId);
+    return '<div class="mh372-row" data-planning="'+esc(p.id)+'"><h3>Planning du '+dFr(p.periode.debut)+' au '+dFr(p.periode.fin)+'</h3>'+
+      '<p>'+esc(p.salarie&&p.salarie.nom||'Salarié : à déterminer')+'</p>'+
+      '<p>Source : '+esc(p.source.nom||'fichier')+(o.page!=null?' · page '+o.page:'')+(o.tableId!=null?' · tableau '+(o.tableId+1):'')+(r?' '+dispo(r):'')+'</p>'+
+      '<p>État : <b data-k="etat">validé (prévisionnel)</b> · '+n+' journée'+(n>1?'s':'')+'</p>'+
+      '<div class="mh372-acts"><button onclick="MHPrevu.ouvrirFiche(\''+esc(p.id)+'\')">Ouvrir</button><button class="g" data-k="supprimer-fiche" onclick="MHPrevu.supprimerFiche(\''+esc(p.id)+'\')">Supprimer</button></div></div>'}
   function listeHtml(){
-    const l=st().importsListe();
-    if(!l.length)return '<div class="card" data-k="vide"><h2>Plannings enregistrés</h2><p class="mut">Aucun planning enregistré</p>'+
+    const l=st().importsListe().filter(aTraiter),f=st().liste();
+    if(!l.length&&!f.length)return '<div class="card" data-k="vide"><h2>Plannings enregistrés</h2><p class="mut">Aucun planning enregistré</p>'+
       '<button onclick="MHPrevu.ouvrirImport()">＋ Importer un planning</button></div>';
-    return '<div class="card"><h2>Plannings enregistrés <span class="mut" style="font-size:13px;font-weight:500">('+l.length+')</span></h2>'+l.map(r=>{
-      const n=journees(r);
-      return '<div class="mh372-row" data-id="'+esc(r.id)+'"><h3>'+esc(titre(r))+'</h3>'+
+    return '<div class="card"><h2>Plannings enregistrés <span class="mut" style="font-size:13px;font-weight:500">('+(l.length+f.length)+')</span></h2>'+f.map(ficheLigneHtml).join('')+l.map(r=>{
+      const a=analyseDe(r),us=unitesDe(a),val=us.filter(u=>u.status==='validé').length;
+      return '<div class="mh372-row" data-id="'+esc(r.id)+'"><h3>'+esc(us.length>1?us.length+' plannings dans '+(r.source.format==='pdf'?'ce PDF':'cette image'):titre(r))+'</h3>'+
         '<p>'+esc(salarieDe(r)||'Salarié : à déterminer')+'</p>'+
         '<p>Source : '+esc((I().LIBELLE_SOURCE[r.sourceType]||r.sourceType).toLowerCase())+' · '+esc(FORMAT[r.source.format]||'')+' · '+taille(r.source.size)+' '+dispo(r)+'</p>'+
-        '<p>État : <b data-k="etat">'+esc(etatDe(r))+'</b>'+(n!=null?' · '+n+' journée'+(n>1?'s':''):'')+(analyseDe(r)?'':' · '+esc(r.ocr.libelle))+'</p>'+
+        '<p>État : <b data-k="etat">'+esc(us.length>1&&val?val+' validé'+(val>1?'s':'')+', '+(us.length-val)+' à valider ou compléter':etatDe(r))+'</b>'+(a?'':' · '+esc(r.ocr.libelle))+'</p>'+
         '<p>Importé le '+dtFr(r.importedAt)+'</p>'+
         '<div class="mh372-acts"><button onclick="MHPrevu.ouvrir(\''+esc(r.id)+'\')">Ouvrir</button><button class="g" onclick="MHPrevu.supprimer(\''+esc(r.id)+'\')">Supprimer</button></div></div>'}).join('')+'</div>';
   }
+  /* Fiche d'un planning validé (une par tableau) */
+  function fichePlanningHtml(p){const o=p.origine||{},r=o.importId&&st().importLire(o.importId),kv=(k,v)=>'<dt>'+k+'</dt><dd>'+v+'</dd>';
+    const freres=st().fichesDeSource(p.source.sha256).filter(x=>x.id!==p.id);
+    return '<div class="card mh372" data-k="fiche-planning" data-planning="'+esc(p.id)+'"><button class="g" onclick="MHPrevu.retour()">‹ Plannings enregistrés</button>'+
+      '<h2 style="margin-top:10px">Planning du '+dFr(p.periode.debut)+' au '+dFr(p.periode.fin)+'</h2>'+
+      '<div class="al i">Planning prévisionnel : il ne prouve pas une heure réellement travaillée et ne modifie jamais tes journées.</div>'+
+      '<dl class="mh372-kv">'+kv('Salarié',esc(p.salarie&&p.salarie.nom||'—'))+kv('Source',esc(p.source.nom||'—')+(o.page!=null?' · page '+o.page:'')+(o.tableId!=null?' · tableau '+(o.tableId+1):'')+(o.orientation&&o.orientation.rotation180?' · page lue retournée':''))+
+        kv('SHA-256','<span class="mh372-hash">'+esc(p.source.sha256)+'</span>')+kv('Journées prévues',String(p.interpretation.length))+
+        kv('Autres fiches du même fichier',freres.length?freres.map(x=>'du '+dFr(x.periode.debut)+' au '+dFr(x.periode.fin)).join('<br>'):'aucune')+
+        kv('Corrections',p.corrections&&p.corrections.length?p.corrections.length+' correction(s)':'aucune')+'</dl>'+
+      '<table class="mh372-prevu" data-k="journees" style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px"><thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Prévu</th></tr></thead><tbody>'+
+        p.interpretation.map(x=>'<tr><td style="padding:3px 4px;border-bottom:1px solid var(--line)">'+dFr(x.date)+'</td><td style="padding:3px 4px;border-bottom:1px solid var(--line)">'+esc(x.libelle||'—')+'</td></tr>').join('')+'</tbody></table>'+
+      '<div class="mh372-row"><div class="mh372-acts" style="margin-top:0"><button class="g" data-k="supprimer-fiche" onclick="MHPrevu.supprimerFiche(\''+esc(p.id)+'\')">Supprimer cette fiche</button>'+
+      (r?'<button class="g" onclick="MHPrevu.ouvrir(\''+esc(r.id)+'\')">Fichier d’origine</button>':'')+'</div></div></div>'}
   function ficheHtml(r){
     const s=r.source,img=s.format!=='pdf',t=r.extraction&&r.extraction.texte;
     const kv=(k,v)=>'<dt>'+k+'</dt><dd>'+v+'</dd>';
@@ -125,17 +150,17 @@
       (a?'<button data-k="voir" onclick="MHPrevu.voirAnalyse()"'+(occupe?' disabled':'')+'>Voir l’analyse</button>'+(a.status!=='validé'?'<button class="g" data-k="lancer" onclick="MHPrevu.analyser()"'+dis+'>Relancer l’analyse</button>':'')
         :'<button data-k="lancer" onclick="MHPrevu.analyser()"'+dis+'>Analyser le planning</button>')+'</div></div>';
   }
-  function candidatsHtml(a){
-    const C=a._candidats;
+  function candidatsHtml(a,tableId){
+    const C=a._candidats&&a._candidats.filter(t=>tableId==null||t.table===tableId);
     if(!C)return '<div class="al i" data-k="candidats">Pour choisir une autre ligne, relance l’analyse : la liste des lignes n’est jamais enregistrée (données des collègues).'+
       '<br><button class="g" style="margin-top:6px" onclick="MHPrevu.analyser()"'+(occupe?' disabled':'')+'>Relancer l’analyse</button></div>';
     return '<div class="mh372-cand" data-k="candidats"><p class="mut" style="font-size:12.5px;margin:6px 0 0">Choisis TA ligne (les autres lignes ne sont ni lues ni enregistrées) :</p>'+C.map(t=>
-      (C.length>1?'<p style="margin:8px 0 0;font-size:12.5px"><b>Tableau '+(t.table+1)+'</b></p>':'')+t.candidats.slice().sort((x,y)=>x.ligne-y.ligne).map(c=>
+      t.candidats.slice().sort((x,y)=>x.ligne-y.ligne).map(c=>
         '<button class="g" data-ligne="'+c.ligne+'" onclick="MHPrevu.choisirLigne('+t.table+','+c.ligne+')"'+(occupe?' disabled':'')+'>Ligne '+(c.ligne+1)+' · '+esc(c.texte||'(nom illisible)')+(c.score!=null?' <span class="mut">('+Math.round(c.score*100)+' %)</span>':'')+'</button>').join('')).join('')+'</div>';
   }
-  function lignesHtml(a){
-    const ferme=a.status==='validé';
-    return a.cells.map((c,i)=>{
+  function lignesHtml(a,u){
+    const ferme=u.status==='validé';
+    return u.cellules.map(i=>{const c=a.cells[i];
       const revoir=(A_REVOIR.includes(c.status)||!c.date)&&!c.revue,u=STATUT_UI[c.status]||[c.status,'dim'];
       const statut=c.revue&&A_REVOIR.includes(c.status)?'<span class="mh372-pill" data-tone="ok">Confirmé</span>':'<span class="mh372-pill" data-tone="'+u[1]+'">'+esc(u[0])+'</span>';
       const lec=esc(String(c.rawText||'').replace(/\n/g,' '))||'<span class="mut">—</span>';
@@ -147,35 +172,64 @@
         (revoir?'<button class="g" data-k="confirmer" onclick="MHPrevu.confirmerCellule('+i+')">OK, c’est juste</button>':'')+'</td></tr>':'';
       return '<tr data-i="'+i+'" data-statut="'+esc(c.status)+'" data-revoir="'+(revoir?1:0)+'"><td>'+date+'</td><td>'+lec+cor+'</td><td>'+interp+motif+'</td><td>'+pct(c.confidence)+'</td><td>'+statut+'</td></tr>'+acts}).join('');
   }
-  function analyseHtml(r,a){
-    const se=a.selectedEmployee,ferme=a.status==='validé',kv=(k,v,dk)=>'<dt>'+k+'</dt><dd'+(dk?' data-k="'+dk+'"':'')+'>'+v+'</dd>';
-    const revoir=a.cells.filter(c=>(A_REVOIR.includes(c.status)||!c.date)&&!c.revue).length;
-    const ambigu=!se||a.warnings.some(w=>w.code==='LIGNE_AMBIGUE');
-    const nomTxt=se?esc(se.nom)+'<br><span class="mut">'+se.parTableau.map(x=>(se.parTableau.length>1?'tableau '+(x.table+1)+' : ':'')+'ligne '+(x.ligne+1)+' lue « '+esc(x.nomLu)+' »'+(x.auto?' (proposée)':' (choisie par toi)')).join(' · ')+'</span>':'<b>non déterminé</b>';
-    return '<div class="card mh372 mh372-an" data-k="analyse-ecran" data-id="'+esc(r.id)+'"><button class="g" onclick="MHPrevu.fermerAnalyse()">‹ Fiche du planning</button>'+
-      '<span class="mh31-eyebrow" style="display:block;margin-top:10px">ANALYSE DU PLANNING</span>'+
-      '<div class="al i">Planning prévisionnel : valider cette analyse enregistre un planning prévu ; aucune journée réelle n’est créée ni modifiée.</div>'+
-      (occupe?'<div class="al i" data-k="progression" role="status">⏳ <span id="mh372Prog">'+esc(progression||'Analyse en cours…')+'</span></div>':'')+
-      '<dl class="mh372-head">'+kv('Source','<div id="mh372AnSrc" data-k="source"><span class="mut">'+esc(r.source.originalFileName)+'</span></div>')+
+  const statutU=u=>u.status==='validé'?['Validé','ok']:u.status==='à_valider'?['À valider','warn']:['À compléter','warn'];
+  const nomPlanning=(r,u,n)=>'Planning '+(u.tableId+1)+(u.page!=null?' — page '+u.page:n>1?' — tableau '+(u.tableId+1):'');
+  const aRevoir=(a,u)=>u.cellules.filter(i=>{const c=a.cells[i];return (A_REVOIR.includes(c.status)||!c.date)&&!c.revue}).length;
+  function analyseHtml(r,a){const us=unitesDe(a);
+    if(us.length>1&&vue.unite==null)return ensembleHtml(r,a);
+    const u=us.find(x=>x.tableId===vue.unite)||us[0];
+    return u?detailHtml(r,a,u,us.length):videHtml(r,a)}
+  function enteteAnalyse(r){return '<span class="mh31-eyebrow" style="display:block;margin-top:10px">ANALYSE DU PLANNING</span>'+
+      '<div class="al i">Planning prévisionnel : valider enregistre un planning prévu ; aucune journée réelle n’est créée ni modifiée.</div>'+
+      (occupe?'<div class="al i" data-k="progression" role="status">⏳ <span id="mh372Prog">'+esc(progression||'Analyse en cours…')+'</span></div>':'')}
+  function videHtml(r,a){return '<div class="card mh372 mh372-an" data-k="analyse-ecran" data-id="'+esc(r.id)+'"><button class="g" onclick="MHPrevu.fermerAnalyse()">‹ Fiche du planning</button>'+enteteAnalyse(r)+
+      '<ul class="mh372-warn" data-k="alertes">'+a.warnings.map(w=>'<li data-code="'+esc(w.code)+'">'+esc(w.texte)+'</li>').join('')+'</ul>'+
+      '<div class="mh372-bar"><button class="g" data-k="rejeter" onclick="MHPrevu.rejeterAnalyse()">Rejeter l’analyse</button></div></div>'}
+  /* Vue d'ensemble : un planning par tableau détecté, chacun sélectionnable, ouvrable, validable seul (C3) */
+  function ensembleHtml(r,a){const us=unitesDe(a),src=r.source.format==='pdf'?'ce PDF':'cette image';
+    const nbSel=us.filter(u=>u.selected&&u.status==='à_valider').length;
+    return '<div class="card mh372 mh372-an" data-k="analyse-ecran" data-vue="ensemble" data-id="'+esc(r.id)+'"><button class="g" onclick="MHPrevu.fermerAnalyse()">‹ Fiche du fichier</button>'+enteteAnalyse(r)+
+      '<h2 style="margin:8px 0 2px" data-k="nb-plannings">'+us.length+' plannings détectés dans '+src+'</h2>'+
+      '<p class="mut" style="font-size:12.5px;margin:0">Chaque planning donne sa propre fiche : coche ceux à valider, ouvre-les pour vérifier.</p>'+
+      us.map(u=>{const se=u.selectedEmployee,st_=statutU(u),n=aRevoir(a,u),per=u.periodeTitre||u.period,val=u.status==='validé';
+        return '<div class="mh372-row" data-k="unite" data-table="'+u.tableId+'" data-statut="'+esc(u.status)+'"><label style="display:flex;gap:8px;align-items:flex-start;text-transform:none;letter-spacing:0;margin:0;font-size:14px;color:var(--txt)">'+
+          '<input type="checkbox" data-k="choisir" style="width:20px;height:20px;margin-top:2px"'+(u.selected||val?' checked':'')+(val||occupe?' disabled':'')+' onchange="MHPrevu.selectionnerUnite('+u.tableId+',this.checked)">'+
+          '<span><b>'+esc(nomPlanning(r,u,us.length))+'</b>'+(u.orientation&&u.orientation.rotation180?' <span class="mut">(page lue retournée)</span>':'')+'<br>'+
+          (per?dFr(per.debut)+' → '+dFr(per.fin):'période à déterminer')+'<br>'+esc(se?se.nom:'ta ligne : à choisir')+'<br>confiance '+pct(u.confidence)+
+          ' · <span class="mh372-pill" data-tone="'+st_[1]+'">'+st_[0]+'</span>'+(n&&!val?' · <span class="mh372-pill" data-tone="warn">'+n+' à vérifier</span>':'')+'</span></label>'+
+          '<div class="mh372-acts"><button class="g" data-k="detail" onclick="MHPrevu.ouvrirUnite('+u.tableId+')">'+(val?'Voir le détail':'Ouvrir et vérifier')+'</button>'+
+          (val&&u.planningId?'<button class="g" onclick="MHPrevu.ouvrirFiche(\''+esc(u.planningId)+'\')">Voir la fiche</button>':'')+'</div></div>'}).join('')+
+      '<div class="mh372-bar">'+(us.every(u=>u.status==='validé')?'<div class="al k" data-k="valide" style="flex:1 1 100%">✅ Tous les plannings de ce fichier sont validés ('+us.length+' fiches).</div>':
+        '<button data-k="valider-selection" onclick="MHPrevu.validerSelection()"'+(occupe||!nbSel?' disabled':'')+'>Valider les plannings sélectionnés'+(nbSel?' ('+nbSel+')':'')+'</button>')+
+      '<button class="g" data-k="rejeter" onclick="MHPrevu.rejeterAnalyse()">Rejeter l’analyse</button></div></div>'}
+  function detailHtml(r,a,u,nb){
+    const se=u.selectedEmployee,ferme=u.status==='validé',kv=(k,v,dk)=>'<dt>'+k+'</dt><dd'+(dk?' data-k="'+dk+'"':'')+'>'+v+'</dd>';
+    const revoir=aRevoir(a,u),ambigu=!se;
+    const nomTxt=se?esc(se.nom)+'<br><span class="mut">ligne '+(se.ligne+1)+' lue « '+esc(se.nomLu)+' »'+(se.auto?' (proposée)':' (choisie par toi)')+'</span>':'<b>non déterminé</b>';
+    const corr=(a.corrections||[]).filter(c=>{const x=c.celluleId?a.cells.find(y=>y.id===c.celluleId):a.cells[c.cellule];return x&&x.table===u.tableId}).length;
+    return '<div class="card mh372 mh372-an" data-k="analyse-ecran" data-vue="detail" data-table="'+u.tableId+'" data-id="'+esc(r.id)+'">'+
+      (nb>1?'<button class="g" data-k="toutes" onclick="MHPrevu.toutesUnites()">‹ Tous les plannings ('+nb+')</button>':'<button class="g" onclick="MHPrevu.fermerAnalyse()">‹ Fiche du planning</button>')+enteteAnalyse(r)+
+      (nb>1?'<h2 style="margin:8px 0 0">'+esc(nomPlanning(r,u,nb))+'</h2>':'')+
+      '<dl class="mh372-head">'+kv('Source','<div id="mh372AnSrc" data-k="source"><span class="mut">'+esc(r.source.originalFileName)+(u.page!=null?' · page '+u.page:'')+'</span></div>')+
         kv('Salarié détecté',nomTxt+(ferme?'':'<br><button class="g" data-k="modifier-salarie" style="margin-top:4px" onclick="MHPrevu.modifierSalarie()">Modifier</button>'),'salarie')+
-        kv('Période',a.period?dFr(a.period.debut)+' → '+dFr(a.period.fin):'à déterminer','periode')+
-        kv('Confiance','<span class="mh372-conf" data-k="confiance">'+pct(a.confidence)+'</span>')+
-        kv('Statut','<b data-k="statut">'+esc(ferme?'validé':a.status==='à_valider'?'à valider':'analyse incomplète')+'</b>'+(revoir?' · <span class="mh372-pill" data-tone="warn" data-k="nb-revoir">'+revoir+' à vérifier</span>':''))+
-        kv('Lecture',esc(a.moteur||'—')+(a.corrections&&a.corrections.length?'<br>'+a.corrections.length+' correction(s) tracée(s)':''))+'</dl>'+
-      (!ferme&&(choixOuvert||ambigu)?candidatsHtml(a):'')+
-      (a.warnings.length?'<details'+(a.warnings.length<=6?' open':'')+' data-k="alertes"><summary style="font-size:13px">Contrôles ('+a.warnings.length+')</summary><ul class="mh372-warn">'+a.warnings.map(w=>'<li data-code="'+esc(w.code)+'">'+esc(w.texte)+'</li>').join('')+'</ul></details>':'<p class="mut" style="font-size:12.5px" data-k="alertes">Aucune alerte de contrôle.</p>')+
-      (a.cells.length?'<table data-k="cellules" lang="fr"><colgroup><col class="c-d"><col class="c-l"><col class="c-i"><col class="c-c"><col class="c-s"></colgroup><thead><tr><th>Date</th><th>Lecture</th><th>Interpré&shy;tation</th><th>Confi&shy;ance</th><th>Statut</th></tr></thead><tbody>'+lignesHtml(a)+'</tbody></table>':'')+
-      (ferme?'<div class="al k" data-k="valide" style="margin-top:10px">✅ Analyse validée le '+dtFr(a.validatedAt)+' : planning prévisionnel enregistré'+(a.planningIds&&a.planningIds.length>1?' ('+a.planningIds.length+' tableaux)':'')+'.</div>':
-        '<div class="mh372-bar"><button data-k="valider" onclick="MHPrevu.validerAnalyse()"'+(occupe||a.status!=='à_valider'?' disabled':'')+'>Valider cette analyse</button>'+
+        kv('Période',u.period?dFr(u.period.debut)+' → '+dFr(u.period.fin):'à déterminer','periode')+
+        kv('Confiance','<span class="mh372-conf" data-k="confiance">'+pct(u.confidence)+'</span>')+
+        kv('Statut','<b data-k="statut">'+esc(ferme?'validé':u.status==='à_valider'?'à valider':'analyse incomplète')+'</b>'+(revoir&&!ferme?' · <span class="mh372-pill" data-tone="warn" data-k="nb-revoir">'+revoir+' à vérifier</span>':''))+
+        kv('Lecture',esc(a.moteur||'—')+(corr?'<br>'+corr+' correction(s) tracée(s)':''))+'</dl>'+
+      (!ferme&&(choixOuvert||ambigu)?candidatsHtml(a,u.tableId):'')+
+      (u.warnings.length?'<details'+(u.warnings.length<=6?' open':'')+' data-k="alertes"><summary style="font-size:13px">Contrôles ('+u.warnings.length+')</summary><ul class="mh372-warn">'+u.warnings.map(w=>'<li data-code="'+esc(w.code)+'">'+esc(w.texte)+'</li>').join('')+'</ul></details>':'<p class="mut" style="font-size:12.5px" data-k="alertes">Aucune alerte de contrôle.</p>')+
+      (u.cellules.length?'<table data-k="cellules" lang="fr"><colgroup><col class="c-d"><col class="c-l"><col class="c-i"><col class="c-c"><col class="c-s"></colgroup><thead><tr><th>Date</th><th>Lecture</th><th>Interpré&shy;tation</th><th>Confi&shy;ance</th><th>Statut</th></tr></thead><tbody>'+lignesHtml(a,u)+'</tbody></table>':'')+
+      (ferme?'<div class="al k" data-k="valide" style="margin-top:10px">✅ '+(nb>1?'Planning validé':'Analyse validée')+' le '+dtFr(u.validatedAt)+' : planning prévisionnel enregistré.'+(u.planningId?' <button class="g" onclick="MHPrevu.ouvrirFiche(\''+esc(u.planningId)+'\')">Voir la fiche</button>':'')+'</div>':
+        '<div class="mh372-bar"><button data-k="valider" onclick="MHPrevu.validerUnite('+u.tableId+')"'+(occupe||u.status!=='à_valider'?' disabled':'')+'>'+(nb>1?'Valider ce planning':'Valider cette analyse')+'</button>'+
         '<button class="g" data-k="modifier" aria-pressed="'+(edition?'true':'false')+'" onclick="MHPrevu.modifierAnalyse()">'+(edition?'Terminer les modifications':'Modifier')+'</button>'+
-        '<button class="g" data-k="rejeter" onclick="MHPrevu.rejeterAnalyse()">Rejeter l’analyse</button></div>')+'</div>';
+        (nb>1?'':'<button class="g" data-k="rejeter" onclick="MHPrevu.rejeterAnalyse()">Rejeter l’analyse</button>')+'</div>')+'</div>';
   }
   async function sourceVignette(r){const el=$('mh372AnSrc');if(!el||r.source.format==='pdf'||r.source.disponibilite!=='disponible')return;
     const u=await I().sources.url(r.source.localRef);if(!u||!$('mh372AnSrc'))return;if(u.startsWith('blob:'))urls.push(u);
     $('mh372AnSrc').innerHTML='<img class="mh372-prev" style="max-height:180px;margin:0" alt="Planning analysé (original)" src="'+esc(u)+'">'}
   let cacheOcr={sha:null,map:null};
   function enregistrer(r,a){try{return st().analyseEnregistrer(r.id,AN().serialiser(a))}catch(e){return null}}
-  async function lancerAnalyse(choix){
+  async function lancerAnalyse(choix,tableChoisi){
     const r=vue.fiche&&st().importLire(vue.fiche);if(!r||occupe)return;
     const inp=$('mh372Nom');if(inp)try{st().reglagesMaj({nomRef:inp.value})}catch(e){message={tone:'b',texte:'❌ '+e.message};render();return}
     const nomRef=st().reglages().nomRef;
@@ -185,11 +239,16 @@
     catch(e){a=null;message={tone:'b',texte:'❌ Analyse impossible : '+(e&&e.message||e)+'. Aucune donnée n’a été modifiée.'}}
     occupe=false;progression='';
     if(a){if(a.warnings.some(w=>w.code==='SOURCE_ABSENTE'))try{st().importMaj(r.id,{disponibilite:'a_verifier'})}catch(e){}
-      courante=a;edition=false;choixOuvert=false;enregistrer(r,a);vue={fiche:r.id,analyse:true};
-      message=a.status==='à_valider'?{tone:'i',texte:'Analyse terminée : vérifie les lignes signalées puis valide.'}:{tone:'w',texte:'⚠️ Analyse incomplète : '+(a.warnings[0]?a.warnings[0].texte:'aucune cellule datée.')}}
+      /* choix d'une ligne dans UN tableau : les autres plannings gardent cellules, corrections et validation */
+      const prec=tableChoisi!=null&&courante&&courante.sourceSha256===a.sourceSha256?courante:null;
+      if(prec)a=VA().fusionner(prec,a,tableChoisi);
+      courante=a;edition=false;choixOuvert=false;enregistrer(r,a);vue={fiche:r.id,analyse:true,unite:tableChoisi!=null?tableChoisi:null};
+      const us=unitesDe(a);
+      message=us.length>1?{tone:'i',texte:us.length+' plannings détectés : chacun donnera sa propre fiche. Ouvre-les pour vérifier.'}:
+        a.status==='à_valider'?{tone:'i',texte:'Analyse terminée : vérifie les lignes signalées puis valide.'}:{tone:'w',texte:'⚠️ Analyse incomplète : '+(a.warnings[0]?a.warnings[0].texte:'aucune cellule datée.')}}
     render();try{root.scrollTo(0,0)}catch(e){}
   }
-  function analyseCourante(r){if(!courante||courante.sourceSha256!==r.source.sha256){courante=st().analyseLire(r.id);edition=false;choixOuvert=false}return courante}
+  function analyseCourante(r){if(!courante||courante.sourceSha256!==r.source.sha256){courante=st().analyseLire(r.id);if(courante&&AN().recalculer)courante=AN().recalculer(courante);edition=false;choixOuvert=false}return courante}
   function appliquer(fn){const r=vue.fiche&&st().importLire(vue.fiche),a=r&&analyseCourante(r);if(!a)return;
     try{const b=fn(a,r);if(b){courante=b;enregistrer(r,b)}}catch(e){message={tone:'b',texte:'❌ '+(e&&e.message||e)}}render()}
   function demanderDate(c){const v=root.prompt('Date de cette cellule (JJ/MM/AAAA) :',c.dateProposee?dFr(c.dateProposee):'');if(v==null)return null;
@@ -202,12 +261,20 @@
   function confirmerCellule(i){appliquer(a=>{const c=a.cells[i];if(!c)return null;message=null;
     if(!c.date&&!c.dateProposee){const d=demanderDate(c);if(d==null)return null;return VA().confirmer(VA().corriger(a,{index:i,champ:'date',valeur:d,raison:'date saisie par l’utilisateur'}),i,'confirmé par l’utilisateur')}
     return VA().confirmer(a,i,'confirmé par l’utilisateur')})}
-  function validerAnalyse(){const r=vue.fiche&&st().importLire(vue.fiche),a=r&&analyseCourante(r);if(!a)return;
-    const b=VA().bloquants(a);if(b.length){message={tone:'w',texte:'⚠️ Validation impossible pour l’instant :\n'+b.slice(0,8).join('\n')+(b.length>8?'\n… et '+(b.length-8)+' autre(s).':'')};render();return}
-    if(!root.confirm('Valider cette analyse ?\n\nUn planning PRÉVISIONNEL sera enregistré pour '+(a.selectedEmployee&&a.selectedEmployee.nom||'toi')+' ('+dFr(a.period.debut)+' → '+dFr(a.period.fin)+').\nTes journées réelles ne sont ni créées ni modifiées.'))return;
-    try{const res=VA().valider(a,{record:r});courante=res.analyse;edition=false;choixOuvert=false;message={tone:'k',texte:'✅ Planning prévisionnel enregistré ('+res.plannings.reduce((n,p)=>n+p.interpretation.length,0)+' journées prévues). Tes journées réelles n’ont pas changé.'}}
+  function validerTables(tables){const r=vue.fiche&&st().importLire(vue.fiche),a=r&&analyseCourante(r);if(!a)return;
+    const b=VA().bloquants(a,tables);if(b.length){message={tone:'w',texte:'⚠️ Validation impossible pour l’instant :\n'+b.slice(0,8).join('\n')+(b.length>8?'\n… et '+(b.length-8)+' autre(s).':'')};render();return}
+    const us=unitesDe(a).filter(u=>tables.includes(u.tableId)),desc=us.map(u=>'· '+nomPlanning(r,u,unitesDe(a).length)+' : '+dFr(u.period.debut)+' → '+dFr(u.period.fin)).join('\n');
+    if(!root.confirm('Valider '+(us.length>1?'ces '+us.length+' plannings':'ce planning')+' ?\n\n'+desc+'\n\nUne fiche de planning PRÉVISIONNEL sera enregistrée pour chacun, pour '+(a.selectedEmployee&&a.selectedEmployee.nom||'toi')+'.\nTes journées réelles ne sont ni créées ni modifiées.'))return;
+    try{const res=VA().valider(a,{record:r,tables});courante=res.analyse;edition=false;choixOuvert=false;
+      message={tone:'k',texte:'✅ '+(res.plannings.length>1?res.plannings.length+' fiches de planning prévisionnel enregistrées':'Planning prévisionnel enregistré')+' ('+res.plannings.reduce((n,p)=>n+p.interpretation.length,0)+' journées prévues). Tes journées réelles n’ont pas changé.'}}
     catch(e){message={tone:'b',texte:'❌ '+(e&&e.message||e)}}
     render()}
+  function validerUnite(t){validerTables([t])}
+  function validerSelection(){const r=vue.fiche&&st().importLire(vue.fiche),a=r&&analyseCourante(r);if(!a)return;
+    validerTables(unitesDe(a).filter(u=>u.selected&&u.status==='à_valider').map(u=>u.tableId))}
+  function validerAnalyse(){const r=vue.fiche&&st().importLire(vue.fiche),a=r&&analyseCourante(r);if(!a)return;const us=unitesDe(a);
+    validerTables(us.length===1?[us[0].tableId]:us.filter(u=>u.selected&&u.status==='à_valider').map(u=>u.tableId))}
+  function selectionnerUnite(t,oui){appliquer(a=>VA().selectionner(a,t,oui))}
   function rejeterAnalyse(){const r=vue.fiche&&st().importLire(vue.fiche),a=r&&analyseCourante(r);if(!a)return;
     if(!root.confirm('Rejeter cette analyse ?\nL’analyse est supprimée ; le planning importé et son original sont conservés.'))return;
     const raison=root.prompt('Raison du rejet (facultatif) :','');
@@ -215,13 +282,29 @@
     catch(e){message={tone:'b',texte:'❌ '+(e&&e.message||e)}}
     render()}
   function choisirLigne(table,ligne){const a=courante,prev=a&&a.selectedEmployee?a.selectedEmployee.parTableau.filter(x=>x.table!==table).map(x=>({table:x.table,ligne:x.ligne})):[];
-    lancerAnalyse(prev.concat([{table,ligne}]))}
+    lancerAnalyse(prev.concat([{table,ligne}]),table)}
+  /* Suppression d'UNE fiche : les autres fiches du même fichier restent. L'original n'est proposé à la suppression que lorsque
+     plus aucune fiche n'en dépend, et seulement après une confirmation explicite. */
+  async function supprimerFiche(id){const p=st().lire(id);if(!p)return;
+    const freres=st().fichesDeSource(p.source.sha256).filter(x=>x.id!==id).length;
+    if(!root.confirm('Supprimer cette fiche (planning du '+dFr(p.periode.debut)+' au '+dFr(p.periode.fin)+') ?\n'+(freres?'Les '+freres+' autre(s) fiche(s) issue(s) du même fichier sont conservées.\n':'')+'Tes journées réelles ne changent pas.')){message={tone:'i',texte:'Suppression annulée.'};render();return}
+    const res=st().ficheSupprimer(id);let txt='Fiche supprimée'+(freres?' ; les autres fiches du même fichier sont conservées.':'.');
+    const imp=res&&res.importId&&st().importLire(res.importId);
+    if(res&&!res.restantes.length&&imp){
+      if(root.confirm('Plus aucune fiche ne dépend de « '+imp.source.originalFileName+' ».\nSupprimer aussi ce fichier importé et son original enregistré sur le téléphone ?\n\nOK : supprimer définitivement.\nAnnuler : conserver le fichier.')){
+        const d=await I().supprimer(imp.id,{avecSource:true});txt+=d.source?' Fichier original supprimé.':' Fichier importé retiré ; l’original n’a pas été retrouvé.'}
+      else txt+=' Fichier original conservé.'}
+    else if(res&&res.restantes.length)txt+=' Fichier original conservé ('+res.restantes.length+' fiche(s) en dépendent).';
+    if(courante&&courante.sourceSha256===p.source.sha256)courante=null;
+    vue={fiche:null};message={tone:'k',texte:txt};render()}
 
   function render(){
     const sec=$('s-prevu');if(!sec||!P()||!I())return;
     css();urls.forEach(u=>{try{URL.revokeObjectURL(u)}catch(e){}});urls=[];
     const r=vue.fiche&&st().importLire(vue.fiche);
     if(vue.fiche&&!r)vue.fiche=null;
+    const fp=vue.planning&&st().lire(vue.planning);if(vue.planning&&!fp)vue.planning=null;
+    if(fp){sec.innerHTML=msgHtml()+fichePlanningHtml(fp);return}
     if(r&&vue.analyse){const a=analyseCourante(r);if(a){sec.innerHTML=msgHtml()+analyseHtml(r,a);sourceVignette(r);return}vue={fiche:r.id}}
     if(r){sec.innerHTML=msgHtml()+ficheHtml(r);apercu(r);return}
     sec.innerHTML='<div class="card mh372"><span class="mh31-eyebrow">PLANNING PRÉVISIONNEL</span><h2 style="margin:4px 0 6px">📋 Prévu</h2>'+
@@ -263,6 +346,8 @@
   }
   async function supprimer(id){
     const r=st().importLire(id);if(!r)return;
+    const dep=st().fichesDeSource(r.source.sha256);
+    if(dep.length){message={tone:'w',texte:'⚠️ '+dep.length+' fiche(s) de planning dépendent de ce fichier : supprime-les d’abord. Le fichier et son original sont conservés.'};render();return}
     if(!root.confirm('Supprimer ce planning ('+titre(r)+') ?\nLe planning prévisionnel est retiré de la liste. Tes journées réelles ne changent pas.')){message={tone:'i',texte:'Suppression annulée.'};render();return}
     const avecSource=root.confirm('Supprimer aussi le fichier original enregistré sur le téléphone ?\n\nOK : supprimer le fichier.\nAnnuler : conserver le fichier.');
     const res=await I().supprimer(id,{avecSource});
@@ -280,6 +365,10 @@
     ouvrir(id){vue={fiche:id};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
     retour(){vue={fiche:null};message=null;render()},supprimer,texte,
     analyser(){return lancerAnalyse([])},choisirLigne,corrigerCellule,confirmerCellule,validerAnalyse,rejeterAnalyse,
+    validerUnite,validerSelection,selectionnerUnite,supprimerFiche,
+    ouvrirFiche(id){vue={planning:id};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
+    ouvrirUnite(t){if(!vue.fiche)return;vue={fiche:vue.fiche,analyse:true,unite:t};edition=false;choixOuvert=false;message=null;render();try{root.scrollTo(0,0)}catch(e){}},
+    toutesUnites(){if(!vue.fiche)return;vue={fiche:vue.fiche,analyse:true,unite:null};edition=false;choixOuvert=false;message=null;render()},
     voirAnalyse(){if(!vue.fiche)return;vue={fiche:vue.fiche,analyse:true};message=null;render();try{root.scrollTo(0,0)}catch(e){}},
     fermerAnalyse(){vue={fiche:vue.fiche};edition=false;choixOuvert=false;message=null;render()},
     modifierSalarie(){choixOuvert=!choixOuvert;render()},modifierAnalyse(){edition=!edition;render()}};

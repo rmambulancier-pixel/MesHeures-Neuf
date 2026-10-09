@@ -167,6 +167,8 @@
   /* Suppression d'un import ; l'original n'est effacé que si « avecSource » est demandé explicitement. */
   async function supprimer(id,opts){
     const P=root.MHPlanning,st=P.store(),r=st.importLire(id);if(!r)return {fiche:false,source:false};
+    /* fichier dont dépendent encore des fiches de planning (C3) : ni l'import ni l'original ne sont supprimés */
+    const dep=st.fichesDeSource?st.fichesDeSource(r.source.sha256):[];if(dep.length)return {fiche:false,source:false,bloque:'fiches',fiches:dep.map(p=>p.id)};
     const fiche=st.importSupprimer(id);let source=false;
     if(opts&&opts.avecSource===true){source=await sources.supprimer(r.source.localRef);const t=r.extraction&&r.extraction.texte&&r.extraction.texte.ref;if(t)await sources.supprimer(t)}
     return {fiche,source};

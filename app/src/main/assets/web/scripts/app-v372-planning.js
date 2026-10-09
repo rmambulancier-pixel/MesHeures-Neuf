@@ -192,7 +192,9 @@
       salarie:{nom:String(o.salarie.nom||ligne.nomLu||''),ligne:ligne.ligne,choix:'utilisateur',nomLu:ligne.nomLu,nomConf:ligne.nomConf},
       ocr:{moteur:String(o.ocr&&o.ocr.moteur||''),statut:String(o.ocr&&o.ocr.statut||'partiel'),titre:o.ocr&&o.ocr.titre?String(o.ocr.titre):null,cellules},
       interpretation:cellules.filter(c=>c.date).map(c=>interpretation(c.date,c,dict)),
-      corrections:[],dictionnaire:{id:dict.id,version:dict.version},anomalies:[]
+      corrections:[],dictionnaire:{id:dict.id,version:dict.version},anomalies:[],
+      /* lien vers l'origine (lot C3) : import, source, page et tableau ; un fichier peut donner plusieurs fiches */
+      origine:o.origine?clone(o.origine):null
     };
     p.anomalies=anomaliesDe(p);
     return p;
@@ -274,6 +276,19 @@
         o.plannings[q.id]=q;ecrire(o);return clone(q);
       },
       supprimer(id){const o=lire();if(!o.plannings[id])return false;delete o.plannings[id];ecrire(o);return true},
+      /* ----- fiches issues d'une même source (C3) ----- */
+      fichesDeSource(sha){return Object.values(lire().plannings).filter(p=>p.source&&p.source.sha256===sha).map(clone)},
+      /* Suppression d'UNE fiche : les autres fiches du même fichier restent ; l'import, son analyse et l'original restent.
+         L'unité d'analyse correspondante redevient « à valider ». */
+      ficheSupprimer(id){const o=lire(),p=o.plannings[id];if(!p)return null;delete o.plannings[id];
+        const sha=p.source&&p.source.sha256,impId=p.origine&&p.origine.importId&&o.imports[p.origine.importId]?p.origine.importId:(Object.values(o.imports).find(r=>r.source.sha256===sha)||{}).id;
+        const r=impId&&o.imports[impId],le=new Date().toISOString();
+        if(r){r.planningIds=(r.planningIds||[]).filter(x=>x!==id);if(r.planningId===id)r.planningId=r.planningIds[0]||null;
+          (r.historique=Array.isArray(r.historique)?r.historique:[]).push({le,action:'fiche supprimée',planning:id})}
+        const a=impId&&o.analyses&&o.analyses[impId];
+        if(a&&Array.isArray(a.unites))a.unites.forEach(u=>{if(u.planningId===id){u.planningId=null;u.validatedAt=null;u.status='à_valider'}});
+        if(a){a.planningIds=(a.planningIds||[]).filter(x=>x!==id);if(a.status==='validé')a.status='à_valider'}
+        ecrire(o);return {importId:impId||null,restantes:Object.values(o.plannings).filter(x=>x.source&&x.source.sha256===sha).map(x=>x.id)}},
       /* Journées en commun avec les plannings déjà enregistrés (dates prévues deux fois). Aucun arbitrage automatique. */
       chevauchements(p){
         const out=[];Object.values(lire().plannings).forEach(x=>{if(x.id===p.id)return;
@@ -316,7 +331,8 @@
       reglagesMaj(ch){const o=lire(),r=o.reglages&&typeof o.reglages==='object'?o.reglages:{};
         if(ch&&'nomRef' in ch){const v=String(ch.nomRef==null?'':ch.nomRef).replace(/\s+/g,' ').trim();if(v.length>80)throw new Error('Nom trop long.');r.nomRef=v}
         o.reglages=r;ecrire(o);return this.reglages()},
-      importSupprimer(id){const o=lire();if(!o.imports[id])return false;delete o.imports[id];if(o.analyses)delete o.analyses[id];ecrire(o);return true},
+      importSupprimer(id){const o=lire();if(!o.imports[id])return false;
+        if(Object.values(o.plannings).some(p=>p.source&&p.source.sha256===o.imports[id].source.sha256)){const e=new Error('Des fiches de planning dépendent encore de ce fichier : supprime-les d’abord.');e.code='FICHES';throw e}delete o.imports[id];if(o.analyses)delete o.analyses[id];ecrire(o);return true},
       exporter(){const o=lire();return Object.keys(o.plannings).length||Object.keys(o.imports).length?clone(o):null},
       valider(o){
         if(o==null)return null;
