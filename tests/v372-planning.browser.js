@@ -127,10 +127,14 @@ srv.listen(0,async()=>{
       const webpRef=await pg.evaluate(()=>MHPlanning.store().importsListe().find(x=>x.source.format==='webp').source.localRef);
       await pg.evaluate(r=>MHPlanningImport.sources.supprimer(r),webpRef);
       await pg.evaluate(()=>{localStorage.removeItem('mh_planning_v372')});
-      pg.__answers=[true];const restored=await pg.evaluate(k=>window.mhV30Restore(k),k);await pg.waitForTimeout(1200);
+      /* V37.4.1 : confirmation et message de restauration dans la fenêtre intégrée (MHDialogue) */
+      await pg.evaluate(k=>{window.__rr=window.mhV30Restore(k)},k);await pg.waitForSelector('[data-k="mh-dialogue-ok"]',{timeout:5000});await pg.locator('[data-k="mh-dialogue-ok"]').click();
+      await pg.waitForTimeout(1200);const restored=await pg.evaluate(()=>Promise.race([window.__rr,new Promise(r=>setTimeout(()=>r('EN ATTENTE'),3000))]))===true;
+      await pg.waitForSelector('[data-k="mh-dialogue"]',{timeout:5000}).catch(()=>{});const msgRest=await pg.locator('[data-k="mh-dialogue"]').innerText().catch(()=>'');
+      await pg.locator('[data-k="mh-dialogue-ok"]').click().catch(()=>{});
       const disp=await pg.evaluate(()=>MHPlanning.store().importsListe().map(r=>r.source.format+':'+r.source.disponibilite).sort());
       ok(restored&&disp.length===4&&JSON.stringify(disp)===JSON.stringify(['jpeg:disponible','pdf:disponible','pdf:disponible','webp:a_verifier']),'restauration : plannings revenus ; fichier retrouvé → disponible, fichier effacé → à vérifier');
-      ok(pg.__dialogs.some(d=>/planning\(s\) prévisionnel\(s\) restauré\(s\)/.test(d)),'message de restauration : plannings restaurés, sources à vérifier');
+      ok(/planning\(s\) prévisionnel\(s\) restauré\(s\)/.test(msgRest),'message de restauration : plannings restaurés, sources à vérifier (fenêtre intégrée)');
       await tabPrevu(pg);await pg.evaluate(()=>MHPrevu.retour());
       ok(/source à vérifier/.test(await txt(pg))&&!/source absente/i.test(await txt(pg)),'liste : « source à vérifier », jamais « source absente »');
 

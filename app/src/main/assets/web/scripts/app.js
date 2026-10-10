@@ -416,7 +416,7 @@ document.addEventListener('touchend',e=>{
   else if(curTab==='mois'){dx<0?goMonth(1):goMonth(-1)}
 });
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=37.4.0',{scope:'./'}).then(reg=>{
+  navigator.serviceWorker.register('./sw.js?v=37.4.1',{scope:'./'}).then(reg=>{
     try{
       window.mhServiceWorkerReady=!!reg;
       if(typeof reg.update==='function') reg.update().catch(()=>{});
@@ -428,7 +428,7 @@ if('serviceWorker' in navigator){
    V15 — INTELLIGENCE / SÉCURITÉ / MODE PRO
    Couche additive : ne modifie pas les règles de calcul historiques.
 ═══════════════════════════════════════════════ */
-const MH_V='37.4.0';
+const MH_V='37.4.1';
 
 function mhMonthStatsRaw(ym){
   const [y,m]=ym.split('-').map(Number), last=isoOf(new Date(y,m+1,0));
@@ -666,7 +666,7 @@ function mhDecoratePages(){
   });
 }
 
-if($('mhVersion'))$('mhVersion').textContent='V37.4.0';
+if($('mhVersion'))$('mhVersion').textContent='V37.4.1';
 mhDecoratePages();
 mhAutoBackup();
 setTimeout(()=>{try{if(typeof mhRefresh==='function')mhRefresh('boot-legacy');else window.__mh30PendingRefresh='boot-legacy'}catch(e){console.error('V15 render',e)}},0);

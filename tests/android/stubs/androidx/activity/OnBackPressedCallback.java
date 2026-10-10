@@ -1,0 +1,1 @@
+package androidx.activity; public abstract class OnBackPressedCallback{ private boolean actif; public OnBackPressedCallback(boolean a){actif=a;} public boolean isEnabled(){return actif;} public void setEnabled(boolean a){actif=a;} public abstract void handleOnBackPressed(); }

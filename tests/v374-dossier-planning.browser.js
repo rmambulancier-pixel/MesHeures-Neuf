@@ -57,6 +57,8 @@ srv.listen(0,async()=>{
       S.clear=function(){window.__ecritures.push(['clear']);return cl.call(this)}});
 
     console.log('PDF probatoire signé (pont natif)');
+    /* V37.4.1 : messages et objet dans la fenêtre intégrée (MHDialogue) */
+    const fermer=async(texte)=>{await pg.waitForSelector('[data-k="mh-dialogue-ok"]',{timeout:15000}).catch(()=>{});if(texte!=null)await pg.locator('[data-k="mh-dialogue"] input').fill(texte).catch(()=>{});await pg.locator('[data-k="mh-dialogue-ok"]').click().catch(()=>{});await pg.waitForTimeout(100)};
     await pg.locator('#mhV30Dossier button',{hasText:'PDF probatoire signé'}).click();
     await pg.waitForFunction(()=>window.__exports.length>=2,null,{timeout:20000}).catch(()=>{});
     const ex=await pg.evaluate(()=>window.__exports);const pdfX=ex.find(x=>/\.pdf$/.test(x.name)),sigX=ex.find(x=>/\.sig\.json$/.test(x.name));
@@ -79,7 +81,8 @@ srv.listen(0,async()=>{
       fs.writeFileSync(path.join(os.tmpdir(),'mesheures-v374-dossier.pdf'),bytes)}
 
     console.log('Imprimable et JSON');
-    await pg.locator('#mhV30Dossier button',{hasText:'Dossier imprimable'}).click();await pg.waitForFunction(()=>window.__prints.length>=1,null,{timeout:10000}).catch(()=>{});
+    await fermer();
+    await pg.locator('#mhV30Dossier button',{hasText:'Dossier imprimable'}).click();await fermer('Contrôle');await pg.waitForFunction(()=>window.__prints.length>=1,null,{timeout:10000}).catch(()=>{});
     const html=await pg.evaluate(()=>window.__prints[0]||'');
     const vp=await ctx.newPage();await vp.setContent(html);
     const v=await vp.evaluate(()=>{const h=[...document.querySelectorAll('h2')],i=h.findIndex(x=>/^12\. /.test(x.textContent)),cw=document.documentElement.clientWidth;
@@ -93,6 +96,7 @@ srv.listen(0,async()=>{
     await vp.screenshot({path:path.join(os.tmpdir(),'mesheures-v374-imprimable.png'),fullPage:true});await vp.close();
     await pg.locator('#mhV30Dossier button',{hasText:'Export dossier JSON'}).click();
     await pg.waitForFunction(()=>window.__exports.some(x=>/dossier-complet.*\.json$/.test(x.name)),null,{timeout:10000}).catch(()=>{});
+    await fermer();
     const js=await pg.evaluate(()=>{const x=window.__exports.find(x=>/dossier-complet.*\.json$/.test(x.name));return x?x.text:''});
     let o=null;try{o=JSON.parse(js)}catch(e){}
     const {integrity,...rest}=o||{};

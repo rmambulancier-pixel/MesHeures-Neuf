@@ -1,1 +1,1 @@
-package android.webkit; public class WebViewClient{ public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){return null;} public void onPageFinished(WebView v,String u){} }
+package android.webkit; public class WebViewClient{ public WebResourceResponse shouldInterceptRequest(WebView v,WebResourceRequest r){return null;} public void onPageFinished(WebView v,String u){} public void onPageStarted(WebView v,String u,android.graphics.Bitmap f){} }

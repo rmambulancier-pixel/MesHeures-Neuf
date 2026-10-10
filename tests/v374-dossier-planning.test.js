@@ -143,8 +143,10 @@ t('stockage Planning illisible (JSON corrompu) : état vide, aucune écriture, a
   assert.equal(Z.d.plannings.fiches.length,0);assert.deepEqual(Z.ls.writes,[])});
 
 console.log('E — Non-régression');
-t('fichiers hors périmètre identiques au tag v37.3.0 : app-core.js, modules Planning, Comparaison V37.3, app-backup.js',()=>{
-  const fichiers=['app-core.js','app-backup.js'].concat(fs.readdirSync(SC).filter(f=>/^app-v37[23]-/.test(f))).map(f=>'app/src/main/assets/web/scripts/'+f);
+/* V37.4.1 : app-backup.js modifié (fenêtres d'import et de restauration, accord du 10/10/2026) ; BACKUP_VERSION inchangé (décision du lot V37.4.0) */
+t('fichiers hors périmètre identiques au tag v37.3.0 : app-core.js, modules Planning, Comparaison V37.3 ; BACKUP_VERSION toujours 37.3.0',()=>{
+  assert.ok(/const BACKUP_VERSION='37\.3\.0';/.test(fs.readFileSync(path.join(SC,'app-backup.js'),'utf8')),'BACKUP_VERSION');
+  const fichiers=['app-core.js'].concat(fs.readdirSync(SC).filter(f=>/^app-v37[23]-/.test(f))).map(f=>'app/src/main/assets/web/scripts/'+f);
   let base;try{base=cp.execSync('git rev-parse --verify -q v37.3.0^{commit} || git ls-remote origin "refs/tags/v37.3.0^{}" | cut -f1',{cwd:REPO,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim().split('\n')[0]}catch(e){base=''}
   if(!base)base='bad6ce635c0f521c07da0038c2eea9c760c238b4';
   const diff=cp.execSync('git diff --name-only '+base+' -- '+fichiers.join(' '),{cwd:REPO,encoding:'utf8'}).trim();assert.equal(diff,'')});

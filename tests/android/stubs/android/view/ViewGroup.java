@@ -1,1 +1,1 @@
-package android.view; public class ViewGroup extends View{ public void addView(View v,LayoutParams p){} public static class LayoutParams{} }
+package android.view; public class ViewGroup extends View{ public java.util.List<View> enfants=new java.util.ArrayList<>(); public void addView(View v,LayoutParams p){enfants.add(v);} public void addView(View v){enfants.add(v);} public static class LayoutParams{} }

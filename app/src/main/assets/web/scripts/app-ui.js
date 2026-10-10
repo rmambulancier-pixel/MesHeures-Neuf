@@ -51,18 +51,25 @@ function openDayMenu(k){
   $('dayDupTarget').value=addD(k,1);
   $('dayMenuModal').classList.add('on');
 }
+/* V37.4.1 — confirmations et messages des journées : fenêtres intégrées (MHDialogue) ; sans le module, confirm() /
+   alert() d'origine, synchrones. L'action confirmée est inchangée ; la date visée est figée au moment de la demande. */
+function mhDemanderPuis(o,natif,suite){const d=window.MHDialogue;if(!d)return confirm(natif)?suite():undefined;return d.confirmer(o).then(ok=>ok?suite():undefined)}
+function mhInformer(titre,message){const d=window.MHDialogue;if(d)return d.info({titre,message});alert(message)}
 function dayMenuAction(action){
   const k=mhDayMenuKey; if(!k)return;
   if(action==='edit'){closeModal('dayMenuModal');mhOpenDay(k);return;}
   if(action==='detail'){closeModal('dayMenuModal');curDate=k;tab('jour');return;}
   if(action==='clear'){closeModal('dayMenuModal');curDate=k;clearDay();return;}
   if(action==='duplicate'){
-    const target=$('dayDupTarget').value; if(!target)return alert('Choisis une date de destination.');
-    if(target===k)return alert('La destination doit être différente.');
-    const src=DB.days[k]; if(!src)return alert('Cette journée est vide.');
-    if(DB.days[target] && DB.days[target].t!=='REPOS' && !confirm('La journée de destination contient déjà des données. Écraser ?'))return;
-    pushUndo('Duplication '+short(k)+' → '+short(target));
-    DB.days[target]=JSON.parse(JSON.stringify(src)); save(); closeModal('dayMenuModal'); curDate=target;curMonth=target.slice(0,7);tab('jour');
+    const target=$('dayDupTarget').value; if(!target)return mhInformer('Dupliquer la journée','Choisis une date de destination.');
+    if(target===k)return mhInformer('Dupliquer la journée','La destination doit être différente.');
+    const src=DB.days[k]; if(!src)return mhInformer('Dupliquer la journée','Cette journée est vide.');
+    const faire=()=>{pushUndo('Duplication '+short(k)+' → '+short(target));
+      DB.days[target]=JSON.parse(JSON.stringify(src)); save(); closeModal('dayMenuModal'); curDate=target;curMonth=target.slice(0,7);tab('jour')};
+    if(DB.days[target] && DB.days[target].t!=='REPOS')return mhDemanderPuis({titre:'Écraser la journée du '+short(target)+' ?',
+      message:'La journée de destination contient déjà des données. Elles seront remplacées par celles du '+short(k)+'.',action:'Écraser',danger:true},
+      'La journée de destination contient déjà des données. Écraser ?',faire);
+    faire();
   }
 }
 function bindMonthLongPress(){
@@ -86,24 +93,26 @@ function addP(){gd(curDate).p.push({d:'',f:''});save();mhRefresh('day-pause');}
 function clearDay(){
   const d=DB.days[curDate];
   if(!d || (d.t==='REPOS'&&!d.deb&&!d.fin&&!d.note&&!d.p?.length)) return;
-  if(!confirm('Effacer les données de cette journée ?')) return;
-  pushUndo('Effacement du '+short(curDate));
-  DB.days[curDate]={t:'REPOS',p:[]};
-  save();mhRefresh('day-pause');;
+  const k=curDate;
+  return mhDemanderPuis({titre:'Effacer la journée du '+short(k)+' ?',message:'Les horaires, pauses et note de cette journée seront effacés.',action:'Effacer',danger:true},
+    'Effacer les données de cette journée ?',()=>{
+      pushUndo('Effacement du '+short(k));
+      DB.days[k]={t:'REPOS',p:[]};
+      save();mhRefresh('day-pause');});
 }
 
 function delP(i){gd(curDate).p.splice(i,1);save();mhRefresh('day-pause');}
 
 function dupliConfirm(){
-  const prev=DB.days[addD(curDate,-1)];
-  if(!prev)return alert('Rien la veille à copier.');
-  const d=gd(curDate);
-  if(d.t!=='REPOS'||d.deb){
-    if(!confirm('Le jour courant a déjà des données. Écraser avec la veille ?'))return;
-  }
-  pushUndo('Copie veille → '+short(curDate));
-  DB.days[curDate]=JSON.parse(JSON.stringify(prev));
-  save(); mhRefresh('day-copy');
+  const k=curDate,prev=DB.days[addD(k,-1)];
+  if(!prev)return mhInformer('Copier la veille','Rien la veille à copier.');
+  const d=gd(k);
+  const faire=()=>{pushUndo('Copie veille → '+short(k));
+    DB.days[k]=JSON.parse(JSON.stringify(prev));
+    save(); mhRefresh('day-copy')};
+  if(d.t!=='REPOS'||d.deb)return mhDemanderPuis({titre:'Écraser le '+short(k)+' avec la veille ?',message:'Le jour courant a déjà des données. Elles seront remplacées par celles de la veille.',action:'Écraser',danger:true},
+    'Le jour courant a déjà des données. Écraser avec la veille ?',faire);
+  faire();
 }
 
 function renderDay(){
@@ -653,12 +662,13 @@ function renderAll(){
 }
 
 function wipe(){
-  if(!confirm('⚠️ Effacer toutes les données locales MesHeures ?\n\nCette action supprime les journées, bulletins, relevés, constats et réglages enregistrés sur cet appareil.'))return;
-  try{localStorage.removeItem(LS)}catch(e){}
-  DB={s:{...DEF},days:{},cmp:{},periods:[],bul:{},bulletins:[],romi:{},per:{start:DEF.anchor,nb:1},exp:null};
-  curDate=today();curMonth=curDate.slice(0,7);curTab='home';_undo=null;
-  save();tab('home');
-  alert('✅ Données locales effacées.');
+  return mhDemanderPuis({titre:'Effacer toutes les données locales ?',message:'Cette action supprime les journées, bulletins, relevés, constats et réglages enregistrés sur cet appareil.',action:'Effacer tout',danger:true},
+    '⚠️ Effacer toutes les données locales MesHeures ?\n\nCette action supprime les journées, bulletins, relevés, constats et réglages enregistrés sur cet appareil.',()=>{
+      try{localStorage.removeItem(LS)}catch(e){}
+      DB={s:{...DEF},days:{},cmp:{},periods:[],bul:{},bulletins:[],romi:{},per:{start:DEF.anchor,nb:1},exp:null};
+      curDate=today();curMonth=curDate.slice(0,7);curTab='home';_undo=null;
+      save();tab('home');
+      mhInformer('Données effacées','✅ Données locales effacées.');});
 }
 
 function copySum(){

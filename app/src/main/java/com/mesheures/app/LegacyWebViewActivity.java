@@ -30,6 +30,21 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import android.widget.FrameLayout;
+/* V37.4.1 — fenêtres de dialogue : bouton Retour et fenêtres natives aux couleurs de MesHeures */
+import android.app.AlertDialog;
+import android.content.DialogInterface;
+import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.drawable.GradientDrawable;
+import android.text.InputType;
+import android.view.View;
+import android.webkit.JsPromptResult;
+import android.webkit.JsResult;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.TextView;
+import androidx.activity.OnBackPressedCallback;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.mesheures.app.core.HybridCore;
 
@@ -47,6 +62,12 @@ public final class LegacyWebViewActivity extends ComponentActivity {
 
     private WebView web;
     private HybridCore core;
+
+    /* V37.4.1 — fenêtres de dialogue intégrées (MHDialogue) : le bouton Retour les ferme comme « Annuler » (garde-fous
+     * dans DialogueRetour : le Retour n'est jamais bloqué). Thème transmis par le web pour les fenêtres natives. */
+    private final DialogueRetour dialogueRetour = new DialogueRetour();
+    private OnBackPressedCallback retourDialogue;
+    private volatile String dialogueThemeJson;
 
 
     private static final int REQUEST_EXPORT_FILE = 7401;
@@ -266,6 +287,21 @@ public final class LegacyWebViewActivity extends ComponentActivity {
     }
 
     private final class MesHeuresAndroidBridge {
+
+        /* V37.4.1 — le web signale l'ouverture / la fermeture d'une fenêtre MHDialogue. */
+        @JavascriptInterface
+        public void dialogueEtat(boolean ouvert) {
+            runOnUiThread(() -> {
+                dialogueRetour.etat(ouvert);
+                if (retourDialogue != null) retourDialogue.setEnabled(ouvert);
+            });
+        }
+
+        /* V37.4.1 — couleurs du thème courant (clair / sombre) pour les fenêtres natives restantes. */
+        @JavascriptInterface
+        public void dialogueTheme(String json) {
+            dialogueThemeJson = json;
+        }
 
         @JavascriptInterface
         public boolean beginFileExport(
@@ -497,10 +533,34 @@ public final class LegacyWebViewActivity extends ComponentActivity {
                 WebResourceResponse response = core.intercept(request);
                 return response != null ? response : super.shouldInterceptRequest(view, request);
             }
+
+            /* V37.4.1 — garde-fou : une nouvelle page n'a aucune fenêtre ouverte. */
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                dialogueRetour.pageChargee();
+                if (retourDialogue != null) retourDialogue.setEnabled(false);
+            }
         });
 
         /* MH JSON IMPORT FILECHOOSER V2 */
         web.setWebChromeClient(new WebChromeClient() {
+            /* V37.4.1 — alert / confirm / prompt restants (module Planning) : fenêtre native aux couleurs de MesHeures.
+             * Mêmes boutons (« OK », « Annuler »), même résultat qu'avant ; Retour ou appui hors de la fenêtre = Annuler. */
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+                return dialogueNatif(message, result, null, false, null);
+            }
+
+            @Override
+            public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+                return dialogueNatif(message, result, null, true, null);
+            }
+
+            @Override
+            public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
+                return dialogueNatif(message, result, result, true, defaultValue == null ? "" : defaultValue);
+            }
+
             @Override
             public boolean onShowFileChooser(
                     WebView view,
@@ -610,7 +670,97 @@ public final class LegacyWebViewActivity extends ComponentActivity {
         setContentView(root);
         ViewCompat.requestApplyInsets(root);
 
+        /* V37.4.1 — Retour pendant une fenêtre MHDialogue : actif seulement quand le web en déclare une ouverte. */
+        retourDialogue = new OnBackPressedCallback(false) {
+            @Override
+            public void handleOnBackPressed() {
+                gererRetourDialogue();
+            }
+        };
+        getOnBackPressedDispatcher().addCallback(retourDialogue);
+
         web.loadUrl(HybridCore.ENTRY_URL);
+    }
+
+    /* ---------- V37.4.1 : bouton Retour pendant une fenêtre MHDialogue ---------- */
+    private void gererRetourDialogue() {
+        if (dialogueRetour.surRetour() == DialogueRetour.Decision.SYSTEME) { rendreRetour(); return; }
+        final Runnable delai = () -> { if (dialogueRetour.delaiDepasse()) rendreRetour(); };
+        web.postDelayed(delai, DialogueRetour.DELAI_MS);
+        web.evaluateJavascript(
+                "(function(){try{return !!(window.MHDialogue&&window.MHDialogue.retour())}catch(e){return false}})()",
+                reponse -> {
+                    web.removeCallbacks(delai);
+                    if (dialogueRetour.reponseWeb(reponse)) rendreRetour();
+                    else if (retourDialogue != null) retourDialogue.setEnabled(dialogueRetour.ouvert());
+                });
+    }
+
+    /* Retour rendu au système (comportement habituel de l'application). */
+    private void rendreRetour() {
+        if (retourDialogue != null) retourDialogue.setEnabled(false);
+        getOnBackPressedDispatcher().onBackPressed();
+    }
+
+    /* ---------- V37.4.1 : fenêtres natives (alert / confirm / prompt) aux couleurs de MesHeures ---------- */
+    private boolean dialogueNatif(String message, JsResult result, JsPromptResult saisie, boolean avecAnnuler, String valeur) {
+        if (isFinishing()) return false;
+        boolean sombreSysteme = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        final DialogueTheme th = DialogueTheme.depuis(dialogueThemeJson, sombreSysteme);
+        final boolean danger = avecAnnuler && saisie == null && DialogueTheme.destructif(message);
+        final AtomicBoolean fait = new AtomicBoolean(false);
+        final float dp = getResources().getDisplayMetrics().density;
+        AlertDialog.Builder b = new AlertDialog.Builder(this, th.sombre
+                ? android.R.style.Theme_DeviceDefault_Dialog_Alert
+                : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert);
+        b.setTitle("MesHeures");
+        b.setMessage(message == null ? "" : message);
+        final EditText champ = saisie != null ? new EditText(this) : null;
+        if (champ != null) {
+            champ.setText(valeur);
+            champ.setSingleLine(true);
+            champ.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+            champ.setSelectAllOnFocus(true);
+            champ.setTextColor(th.texte);
+            FrameLayout cadre = new FrameLayout(this);
+            int m = Math.round(20 * dp);
+            cadre.setPadding(m, Math.round(4 * dp), m, 0);
+            cadre.addView(champ);
+            b.setView(cadre);
+        }
+        b.setPositiveButton("OK", (d, w) -> {
+            if (!fait.compareAndSet(false, true)) return;
+            if (saisie != null) saisie.confirm(champ.getText().toString()); else result.confirm();
+        });
+        if (avecAnnuler) b.setNegativeButton("Annuler", (d, w) -> { if (fait.compareAndSet(false, true)) result.cancel(); });
+        /* Retour ou appui hors de la fenêtre : alert = « OK » (simple information), confirm / prompt = « Annuler » */
+        b.setOnCancelListener(d -> {
+            if (!fait.compareAndSet(false, true)) return;
+            if (avecAnnuler) result.cancel(); else result.confirm();
+        });
+        /* garde-fou : le résultat JavaScript est toujours rendu, une seule fois, même si la fenêtre disparaît autrement */
+        b.setOnDismissListener(d -> { if (fait.compareAndSet(false, true)) result.cancel(); });
+        final AlertDialog dlg = b.create();
+        dlg.setCanceledOnTouchOutside(saisie == null);
+        dlg.setOnShowListener(d -> {
+            try {
+                GradientDrawable fondArrondi = new GradientDrawable();
+                fondArrondi.setColor(th.fond);
+                fondArrondi.setCornerRadius(18 * dp);
+                fondArrondi.setStroke(Math.max(1, Math.round(dp)), th.bord);
+                if (dlg.getWindow() != null) dlg.getWindow().setBackgroundDrawable(fondArrondi);
+                View msg = dlg.findViewById(android.R.id.message);
+                if (msg instanceof TextView) ((TextView) msg).setTextColor(th.texte);
+                Button ok = dlg.getButton(DialogInterface.BUTTON_POSITIVE);
+                if (ok != null) ok.setTextColor(danger ? th.danger : th.action);
+                Button non = dlg.getButton(DialogInterface.BUTTON_NEGATIVE);
+                if (non != null) non.setTextColor(th.secondaire);
+            } catch (RuntimeException e) {
+                android.util.Log.w("MesHeuresDialogue", "thème de la fenêtre non appliqué", e);
+            }
+        });
+        dlg.show();
+        return true;
     }
 
     @Override

@@ -14,6 +14,8 @@ fs.cpSync(path.join(__dirname,'android/stubs'),src,{recursive:true});
 fs.mkdirSync(path.join(src,'com/mesheures/app/core'),{recursive:true});
 fs.copyFileSync(path.join(J,'LegacyWebViewActivity.java'),path.join(src,'com/mesheures/app/LegacyWebViewActivity.java'));
 fs.copyFileSync(path.join(J,'core/HybridCore.java'),path.join(src,'com/mesheures/app/core/HybridCore.java'));
+/* V37.4.1 : classes utilisées par LegacyWebViewActivity (dialogues, bouton Retour) */
+['DialogueRetour.java','DialogueTheme.java'].forEach(f=>fs.copyFileSync(path.join(J,f),path.join(src,'com/mesheures/app',f)));
 fs.copyFileSync(path.join(__dirname,'android/PlanningAndroidTest.java'),path.join(src,'PlanningAndroidTest.java'));
 const list=[];(function walk(d){fs.readdirSync(d,{withFileTypes:true}).forEach(e=>{const p=path.join(d,e.name);e.isDirectory()?walk(p):p.endsWith('.java')&&list.push(p)})})(src);
 fs.mkdirSync(out);

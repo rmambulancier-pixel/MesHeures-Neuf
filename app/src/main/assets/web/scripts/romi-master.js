@@ -435,7 +435,10 @@ function render(){
   document.getElementById('mhRomiDbg').onchange=e=>{localStorage.setItem(DEBUG_KEY,e.target.checked?'1':'0');render()};
   const cj=document.getElementById('mhRomiCopyJson'),cg=document.getElementById('mhRomiCopyGeo');
   if(cj)cj.onclick=()=>copy(debugJson());if(cg)cg.onclick=()=>copy(geometryJson());
-  rootEl.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(confirm('Supprimer ce relevé ?')){store.del(b.getAttribute('data-del'));render()}});
+  /* V37.4.1 : confirmation explicite dans une fenêtre intégrée (MHDialogue) ; sans le module, confirm() d'origine */
+  rootEl.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{const id=b.getAttribute('data-del'),D=window.MHDialogue,suppr=()=>{store.del(id);render()};
+    if(!D){if(confirm('Supprimer ce relevé ?'))suppr();return}
+    return D.confirmer({titre:'Supprimer ce relevé ROMI1 ?',message:'Le relevé enregistré dans MesHeures sera supprimé.',action:'Supprimer',danger:true}).then(ok=>{if(ok)suppr()})});
 }
 
 /* ============ API publique ============ */

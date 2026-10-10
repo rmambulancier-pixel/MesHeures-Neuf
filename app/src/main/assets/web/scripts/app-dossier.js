@@ -66,26 +66,41 @@
   /* V37.0-D : JSON et imprimable reprennent le même dossier que le PDF signé (MHDossier : lecture seule, moteur existant).
      L'ancien snapshot() reste disponible en repli si le module n'est pas chargé. */
   function dossierData(){return window.MHDossier?window.MHDossier.data():snapshot()}
+  /* V37.4.1 : fenêtres intégrées (MHDialogue). Objet demandé pour l'imprimable seulement (le JSON ne l'utilise pas) ;
+     « Annuler » abandonne l'export ; un objet vide garde le comportement d'avant (aucune ligne « Objet »). Un deuxième
+     appui pendant l'export est ignoré. */
+  const DLG=()=>window.MHDialogue;
+  async function demanderObjet(){
+    const D=DLG();
+    if(!D)return prompt('Objet / destinataire du dossier (facultatif) :','');
+    return D.saisir({titre:'Dossier imprimable',message:'Objet ou destinataire du dossier (facultatif). Laisse vide pour ne rien indiquer.',
+      libelle:'Objet ou destinataire',placeholder:'Ex. : Inspection du travail',facultatif:true,inputmode:'text',autocapitalize:'sentences',enterkeyhint:'done',action:'Continuer'});
+  }
+  const informer=(titre,message,details)=>{const D=DLG();if(D)return D.info({titre,message,details});alert([message,details].filter(Boolean).join('\n'))};
   async function makeDossier(print){
+    const run=async()=>{
+    let recipient='';
+    if(print){const r=await demanderObjet();if(r==null)return null;recipient=String(r).trim()}
     const d=dossierData(); const canonical=compact(d); const hash=await digestText(canonical);
-    const recipient=prompt('Objet / destinataire du dossier (facultatif) :','');
     if(print){
-      const html=window.MHDossier?window.MHDossier.html(d,{dataHash:hash,objet:recipient||''}):reportHtml(d,hash,'MesHeures — Dossier complet',recipient);
+      const html=window.MHDossier?window.MHDossier.html(d,{dataHash:hash,objet:recipient}):reportHtml(d,hash,'MesHeures — Dossier complet',recipient);
       try{
         if(window.MesHeuresAndroid && typeof window.MesHeuresAndroid.printHtml==='function'){
           window.MesHeuresAndroid.printHtml(html);
           return 'android';
         }
       }catch(e){console.warn('Impression dossier Android',e)}
-      const w=window.open('','_blank');if(!w){alert('Autorise les fenêtres contextuelles pour générer le dossier.');return null}w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);return 'browser'
+      const w=window.open('','_blank');if(!w){informer('Dossier imprimable','Autorise les fenêtres contextuelles pour générer le dossier.');return null}w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);return 'browser'
     }
     const out={...d,integrity:{algorithm:'SHA-256',hash,canonicalization:'JSON.stringify(dossier sans ce bloc integrity)'}};
     const mode=download('MesHeures-dossier-complet-'+today()+'.json',JSON.stringify(out,null,2),'application/json');
-    alert((mode==='android'?'📁 Choisis où enregistrer le dossier JSON.':'✅ Dossier JSON exporté.')+'\nEmpreinte SHA-256 : '+hash);return mode;
+    informer('Dossier JSON',mode==='android'?'📁 Choisis où enregistrer le dossier JSON.':'✅ Dossier JSON exporté.','Empreinte SHA-256 : '+hash);return mode;
+    };
+    const D=DLG();return D?D.exclusif('dossier-'+(print?'imprimable':'json'),run):run();
   }
   function render(){
     const target=document.getElementById('s-audit')||document.body;if(document.getElementById('mhV30Dossier'))return;
-    const sec=document.createElement('section');sec.id='mhV30Dossier';sec.innerHTML=`<div class="card mh-v30-card"><h2>📁 Dossier complet</h2><p class="mut">Périodes de paie, journées, Smart Control, anomalies, ROMI1, bulletins, rapprochement, constats et chronologie : mêmes valeurs que l’application, aucun recalcul.</p><div class="row"><button onclick="mhV30ExportDossier()">⬇️ Export dossier JSON</button><button class="g" onclick="mhV30PrintDossier()">🖨️ Dossier imprimable / PDF</button><button class="g" onclick="mhV30ExportSignedPDF()">🔏 PDF probatoire signé</button></div><div id="mhV30DossierHash" class="mut" style="margin-top:8px"></div></div>`;target.appendChild(sec);if('IntersectionObserver' in window)new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting))refreshHash()}).observe(sec);else refreshHash();
+    const sec=document.createElement('section');sec.id='mhV30Dossier';sec.innerHTML=`<div class="card mh-v30-card"><h2>📁 Dossier complet</h2><p class="mut">Périodes de paie, journées, Smart Control, anomalies, ROMI1, bulletins, rapprochement, constats, chronologie et plannings prévisionnels (référence, pas une preuve) : mêmes valeurs que l’application, aucun recalcul.</p><div class="row"><button onclick="mhV30ExportDossier()">⬇️ Export dossier JSON</button><button class="g" onclick="mhV30PrintDossier()">🖨️ Dossier imprimable / PDF</button><button class="g" onclick="mhV30ExportSignedPDF()">🔏 PDF probatoire signé</button></div><div id="mhV30DossierHash" class="mut" style="margin-top:8px"></div></div>`;target.appendChild(sec);if('IntersectionObserver' in window)new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting))refreshHash()}).observe(sec);else refreshHash();
   }
   async function refreshHash(){try{const sec=document.getElementById('mhV30Dossier');if(!sec||!sec.offsetParent)return;const h=await digestText(compact(dossierData()));const el=document.getElementById('mhV30DossierHash');if(el)el.textContent='Empreinte actuelle SHA-256 : '+h}catch(e){}}
   window.mhV30ExportDossier=()=>makeDossier(false);

@@ -155,30 +155,45 @@
         }catch(_e){}
       }
       return !!mode;
-    }catch(e){alert('❌ Export impossible : '+e.message);return false;}
+    }catch(e){informer('Export JSON','❌ Export impossible : '+e.message);return false;}
   };
+
+  /* V37.4.1 — fenêtres intégrées (MHDialogue) pour l'import et la restauration. Les données, la copie de sécurité et la
+     restauration elles-mêmes sont inchangées. Sans le module : confirm() / alert() d'origine, synchrones (comportement
+     d'avant à l'identique). */
+  const DLG=()=>window.MHDialogue;
+  function informer(titre,message){const d=DLG();if(d)d.info({titre,message});else alert(message)}
+  /* confirmation puis suite(ok) : synchrone sans le module (résultat de suite renvoyé), sinon Promise */
+  function demanderPuis(o,natif,suite){const d=DLG();if(!d)return suite(confirm(natif));return d.confirmer(o).then(suite)}
 
   window.mhV30Import=function(input){
     const f=input?.files?.[0];if(!f){return false;}
     const r=new FileReader();
     r.onload=e=>{
+      let attente=false;
       try{
         const raw=JSON.parse(e.target.result),data=isValidPayload(raw);
         const keys=Object.keys(data);
         const romi=raw&&raw.format==='MesHeures Backup'?raw.romiMaster:undefined;
         const romiN=romiValidate(romi);
         const plans=raw&&raw.format==='MesHeures Backup'?raw.plannings:undefined,plansN=planValidate(plans);
-        if(!confirm('Importer cette sauvegarde ? Les données actuelles seront remplacées par celles du fichier'+(romiN!=null?' (dont '+romiN+' relevé(s) ROMI1)':'')+(plansN!=null?' (et '+plansN+' planning(s) prévisionnel(s))':'')+'. Une copie de sécurité sera créée avant import.'))return;
-        const safety=window.mhV30Backup('before-import');
-        if(!safety.ok)throw new Error('Impossible de créer la sauvegarde de sécurité avant import.');
-        DB={s:{...DEF,...(data.s||{})},days:{...(data.days||{})},cmp:{...(data.cmp||{})},periods:Array.isArray(data.periods)?data.periods:[],bul:{...(data.bul||{})},bulletins:Array.isArray(data.bulletins)?data.bulletins:[],romi:{...(data.romi||{})},per:{start:DEF.anchor,nb:1,...(data.per||{})},exp:data.exp??null,constats:Array.isArray(data.constats)?data.constats:[],events:Array.isArray(data.events)?data.events:[],reconciliation:Array.isArray(data.reconciliation)?data.reconciliation:[]};
-        if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();save();mhRefresh();
-        const romiDone=romiImport(romi),plansDone=planImport(plans);
-        alert('✅ Import réussi. '+keys.length+' bloc(s) de données restauré(s).\n'+romiLabel(romiDone)+'\n'+planLabel(plansDone));
-      }catch(err){alert('❌ Import impossible : '+err.message)}
-      finally{input.value=''}
+        const detail=(romiN!=null?' (dont '+romiN+' relevé(s) ROMI1)':'')+(plansN!=null?' (et '+plansN+' planning(s) prévisionnel(s))':'');
+        const appliquer=ok=>{try{
+          if(!ok)return;
+          const safety=window.mhV30Backup('before-import');
+          if(!safety.ok)throw new Error('Impossible de créer la sauvegarde de sécurité avant import.');
+          DB={s:{...DEF,...(data.s||{})},days:{...(data.days||{})},cmp:{...(data.cmp||{})},periods:Array.isArray(data.periods)?data.periods:[],bul:{...(data.bul||{})},bulletins:Array.isArray(data.bulletins)?data.bulletins:[],romi:{...(data.romi||{})},per:{start:DEF.anchor,nb:1,...(data.per||{})},exp:data.exp??null,constats:Array.isArray(data.constats)?data.constats:[],events:Array.isArray(data.events)?data.events:[],reconciliation:Array.isArray(data.reconciliation)?data.reconciliation:[]};
+          if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();save();mhRefresh();
+          const romiDone=romiImport(romi),plansDone=planImport(plans);
+          informer('Import réussi','✅ Import réussi. '+keys.length+' bloc(s) de données restauré(s).\n'+romiLabel(romiDone)+'\n'+planLabel(plansDone));
+        }catch(err){informer('Import impossible','❌ Import impossible : '+err.message)}finally{input.value=''}};
+        const res=demanderPuis({titre:'Importer cette sauvegarde ?',message:'Les données actuelles seront remplacées par celles du fichier'+detail+'.\nUne copie de sécurité sera créée avant import.',action:'Remplacer les données',danger:true},
+          'Importer cette sauvegarde ? Les données actuelles seront remplacées par celles du fichier'+detail+'. Une copie de sécurité sera créée avant import.',appliquer);
+        attente=!!(res&&typeof res.then==='function');
+      }catch(err){informer('Import impossible','❌ Import impossible : '+err.message)}
+      finally{if(!attente)input.value=''}
     };
-    r.onerror=()=>{input.value='';alert('❌ Lecture du fichier impossible.')};
+    r.onerror=()=>{input.value='';informer('Import impossible','❌ Lecture du fichier impossible.')};
     r.readAsText(f);
   };
 
@@ -194,12 +209,16 @@
       const s=JSON.parse(localStorage.getItem(key));
       const data=isValidPayload(s);
       const romiN=romiValidate(s&&s.romiMaster);planValidate(s&&s.plannings);
-      if(!confirm('Restaurer ce point de sauvegarde ? Une copie de l’état actuel sera créée avant restauration.'))return false;
-      const safety=window.mhV30Backup('before-restore');
-      if(!safety.ok)throw new Error('Impossible de créer la sauvegarde de sécurité avant restauration.');
-      DB={s:{...DEF,...(data.s||{})},days:{...(data.days||{})},cmp:{...(data.cmp||{})},periods:Array.isArray(data.periods)?data.periods:[],bul:{...(data.bul||{})},bulletins:Array.isArray(data.bulletins)?data.bulletins:[],romi:{...(data.romi||{})},per:{start:DEF.anchor,nb:1,...(data.per||{})},exp:data.exp??null,constats:Array.isArray(data.constats)?data.constats:[],events:Array.isArray(data.events)?data.events:[],reconciliation:Array.isArray(data.reconciliation)?data.reconciliation:[]};
-      if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();save();const romiDone=romiImport(s&&s.romiMaster),plansDone=planImport(s&&s.plannings);mhRefresh();alert('✅ Restauration terminée.\n'+romiLabel(romiDone)+'\n'+planLabel(plansDone));return true;
-    }catch(e){alert('❌ Restauration impossible : '+e.message);return false;}
+      const appliquer=ok=>{try{
+        if(!ok)return false;
+        const safety=window.mhV30Backup('before-restore');
+        if(!safety.ok)throw new Error('Impossible de créer la sauvegarde de sécurité avant restauration.');
+        DB={s:{...DEF,...(data.s||{})},days:{...(data.days||{})},cmp:{...(data.cmp||{})},periods:Array.isArray(data.periods)?data.periods:[],bul:{...(data.bul||{})},bulletins:Array.isArray(data.bulletins)?data.bulletins:[],romi:{...(data.romi||{})},per:{start:DEF.anchor,nb:1,...(data.per||{})},exp:data.exp??null,constats:Array.isArray(data.constats)?data.constats:[],events:Array.isArray(data.events)?data.events:[],reconciliation:Array.isArray(data.reconciliation)?data.reconciliation:[]};
+        if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();if(typeof mhMigrateLegacyMealChoices==='function')mhMigrateLegacyMealChoices();save();const romiDone=romiImport(s&&s.romiMaster),plansDone=planImport(s&&s.plannings);mhRefresh();informer('Restauration terminée','✅ Restauration terminée.\n'+romiLabel(romiDone)+'\n'+planLabel(plansDone));return true;
+      }catch(e){informer('Restauration impossible','❌ Restauration impossible : '+e.message);return false;}};
+      return demanderPuis({titre:'Restaurer ce point de sauvegarde ?',message:'Les données actuelles seront remplacées par celles de ce point.\nUne copie de l’état actuel sera créée avant restauration.',action:'Restaurer',danger:true},
+        'Restaurer ce point de sauvegarde ? Une copie de l’état actuel sera créée avant restauration.',appliquer);
+    }catch(e){informer('Restauration impossible','❌ Restauration impossible : '+e.message);return false;}
   };
 
 })();

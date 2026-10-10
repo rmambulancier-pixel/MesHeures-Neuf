@@ -1,0 +1,1 @@
+package android.widget; public class TextView extends android.view.View{ public int couleur; public CharSequence texte=""; public TextView(android.content.Context c){} public void setTextColor(int c){couleur=c;} public void setText(CharSequence t){texte=t==null?"":t;} public CharSequence getText(){return texte;} }
