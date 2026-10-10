@@ -85,7 +85,8 @@ srv.listen(0,async()=>{
       ok(await reel(pg)===avant,'Réel strictement inchangé : mesheures_v3 octet pour octet, DB.days, cd(), TTE, HS, Smart Control');
       await pg.locator('#mhV30Nav [data-nav-tab="mois"]').click();await pg.waitForTimeout(150);
       ok(await pg.evaluate(()=>document.getElementById('mModePlan').innerText.trim())==='☰ Journées','page réelle : « Journées » inchangé');
-      ok(await pg.evaluate(()=>document.getElementById('mhVersion').textContent)==='V37.3.0','version affichée V37.3.0');
+      const VER=fs.readFileSync(path.join(REPO,'version.properties'),'utf8').match(/^VERSION=(.+)$/m)[1].trim();
+      ok(await pg.evaluate(()=>document.getElementById('mhVersion').textContent)==='V'+VER,'version affichée V'+VER+' (version courante de l’application)');
       ok(!errs.length,'0 erreur JS'+(errs.length?' : '+errs.slice(0,2).join(' | '):''));await ctx.close()}
 
     console.log('Cas Pixel (37.3.0-A) : horloge au 09/10, jours futurs ouverts dans Journées (« Repos » vide créé par gd())');

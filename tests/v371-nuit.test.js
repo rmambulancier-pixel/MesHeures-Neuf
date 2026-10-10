@@ -182,7 +182,7 @@ t('Assistant Paie SYNTHÉTIQUE établi : repos 10 % « à confirmer », plancher
 t('Dossier : section « 10. Travail de nuit (art. 9) » (années 2026, mensuel octobre 2h00), sections suivantes renumérotées',()=>{
   const M=L.win.MHDossier,d=M.data({today:NOW,generatedAt:'2026-10-08T10:00:00'}),h=M.html(d,{dataHash:'x'});
   assert.deepEqual(d.nuit.map(y=>[y.annee,F(y.cumul),y.statut]),[['2026','2h00','non_determinable']]);assert.deepEqual(d.nuit[0].mois.map(m=>[m.mois,F(m.amplitude)]),[['2026-10','2h00']]);
-  const t10=h.indexOf('10. Travail de nuit (art. 9)'),t11=h.indexOf('11. Événements et chronologie'),t12=h.indexOf('12. Intégrité');assert.ok(t10>0&&t11>t10&&t12>t11);
+  const t10=h.indexOf('10. Travail de nuit (art. 9)'),t11=h.indexOf('11. Événements et chronologie'),t12=h.indexOf('12. Plannings prévisionnels'),t13=h.indexOf('13. Intégrité');assert.ok(t10>0&&t11>t10&&t12>t11&&t13>t12);   /* V37.4 : 12. Plannings, 13. Intégrité */
   const sec=text(h.slice(t10,t11));assert.ok(sec.includes('octobre 2026 2h00 2h00 2 0'));assert.ok(sec.includes('non contrôlée, statut de travailleur de nuit non établi'));assert.ok(!/€/.test(sec))});
 t('Dossier SYNTHÉTIQUE établi (51 nuits, 306h00) : repos 30h36 (à confirmer), tableau des pauses de nuit non conformes',()=>{
   const M=load({...nuits('2025-01-06',50),'2025-12-01':day('20:00','04:00',[])}).win.MHDossier,d=M.data({today:NOW,generatedAt:'2026-10-08T10:00:00'}),h=text(M.html(d,{}));

@@ -6,12 +6,14 @@
  *  - périodes de paie : mhQuatorzaine (ancre 19/05/2025) + calcPer() + brutOf() ;
  *  - Smart Control : MHControl.analyze() ; anomalies : mhLegalAudit() ;
  *  - rapprochement : journal de preuves (mhV30MonthEvidence) ; ROMI1 : MH_ROMI.list() ;
- *  - constats et événements : tels qu'enregistrés (aucune régénération des C18).
+ *  - constats et événements : tels qu'enregistrés (aucune régénération des C18) ;
+ *  - V37.4 : plannings prévisionnels validés (MHPlanning.store(), MHPrevuCalendrier), en lecture seule et par une liste fermée
+ *    de champs : référence de ce qui était prévu, jamais une preuve de travail, jamais dans un calcul.
  * Aucune écriture dans DB ni dans le stockage. Une donnée absente est écrite « non renseigné ».
  */
 (function(){
   'use strict';
-  const V='37.3.0';   // version de l'application inscrite dans le dossier
+  const V='37.4.0';   // version de l'application inscrite dans le dossier
   const NR='non renseigné';
   const NC='non comparable';
   const MONTHS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
@@ -31,6 +33,77 @@
     return (v<0?'−':'')+s[0].replace(/\B(?=(\d{3})+(?!\d))/g,' ')+','+s[1]+' €'};
   const dtFr=iso=>{const d=new Date(iso);return isNaN(d.getTime())?NR:p2(d.getDate())+'/'+p2(d.getMonth()+1)+'/'+d.getFullYear()+' à '+p2(d.getHours())+'h'+p2(d.getMinutes())};
   const txt=v=>v===null||v===undefined||v===''||(typeof v==='number'&&!Number.isFinite(v))?NR:String(v);
+
+  /* ---------- V37.4 : plannings prévisionnels (lecture seule) ----------
+   * Lectures autorisées : liste(), importsListe(), analyseLire() du stockage Planning (copies, aucune écriture) et
+   * MHPrevuCalendrier.index() (lecture seule). La disponibilité de la source n'est PAS vérifiée ici (la vérification existante
+   * réécrit le stockage) : on restitue le dernier état enregistré, présenté comme tel.
+   * Liste fermée de champs : ni titre lu par l'OCR, ni nom lu, ni coordonnées, ni couleurs, ni référence locale, ni candidats.
+   * Aucune donnée de collègue n'est stockée par le module Planning ; aucune n'est donc lisible ici. Aucun arbitrage des conflits. */
+  const AVERT_PLANNING='Planning prévisionnel de l’employeur, importé puis validé par le salarié (sa ligne seulement). Il indique ce qui était prévu : il ne prouve pas le travail effectué et n’entre dans aucun calcul (heures, heures supplémentaires, paie, comparaison).';
+  function planningsData(){
+    const P=window.MHPlanning,C=window.MHPrevuCalendrier;
+    const out={avertissement:AVERT_PLANNING,disponible:false,fiches:[],journees:[],corrections:[],historique:[],importsSansPlanning:0};
+    if(!P||typeof P.store!=='function')return out;
+    let st;try{st=P.store()}catch(e){return out}
+    let fiches,imports;
+    try{fiches=st.liste().filter(p=>p&&p.statut==='enregistre'&&p.periode&&isoDay(p.periode.debut)&&isoDay(p.periode.fin)&&Array.isArray(p.interpretation));
+      imports=typeof st.importsListe==='function'?st.importsListe():[]}catch(e){return out}
+    out.disponible=true;
+    const impParId={},impParSha={};imports.forEach(r=>{if(!r||!r.source)return;impParId[r.id]=r;if(!impParSha[r.source.sha256])impParSha[r.source.sha256]=r});
+    const s=v=>v==null?null:String(v);
+    const sha=v=>/^[0-9a-f]{64}$/.test(String(v||''))?String(v):null;
+    fiches.sort((a,b)=>String(a.periode.debut).localeCompare(String(b.periode.debut))||String(a.id).localeCompare(String(b.id)));
+    fiches.forEach(p=>{
+      const o=p.origine||{},src=p.source||{},imp=(o.importId&&impParId[o.importId])||impParSha[src.sha256]||null;
+      /* état de la source : dernier état enregistré (jamais vérifié en direct par le dossier) */
+      const etat=imp&&imp.source?(imp.source.disponibilite==='disponible'?'disponible':imp.source.disponibilite==='a_verifier'?'a_verifier':null)
+        :src.original==='a_verifier'?'a_verifier':null;
+      /* journal de lecture : celui de l'analyse (lecture OCR d'origine) ; à défaut, celui reporté sur la fiche à la validation */
+      /* fiches antérieures à C3 (sans « origine ») : import retrouvé par l'empreinte, un seul tableau par fichier */
+      const impId=o.importId||(imp&&imp.id)||null,tab=num(o.tableId)?Number(o.tableId):null;
+      let an=null;if(impId&&typeof st.analyseLire==='function'){try{an=st.analyseLire(impId)}catch(e){an=null}}
+      const journal=an&&Array.isArray(an.corrections)?'analyse':impId?'analyse_retiree':'aucune_analyse';
+      /* Corrections de la fiche : « après validation » si datées après la validation (étiquette seulement). Une correction
+         de la fiche n'est retirée QUE si elle reprend à l'identique (date, champ, valeur) une entrée du journal de l'analyse
+         (report fait par la validation) : rien n'est masqué sur la seule foi de l'horloge. */
+      const valideLe=s(p.enregistreLe),apres=c=>!!(valideLe&&c&&c.le&&String(c.le)>valideLe);
+      const corr=[],cle=(date,champ,v)=>[date,champ,v==null?'':String(v)].join('|'),dejaAnalyse=new Set();
+      if(journal==='analyse'){
+        const cel={};(an.cells||[]).forEach(c=>{if(c&&c.id!=null)cel[c.id]=c});
+        const tableDe=c=>c.celluleId!=null?Number(String(c.celluleId).slice(1).split('-')[0]):c.cellule!=null&&an.cells&&an.cells[c.cellule]?an.cells[c.cellule].table:null;
+        an.corrections.filter(c=>c&&(tab==null||tableDe(c)===tab)).forEach(c=>{const x=(c.celluleId!=null&&cel[c.celluleId])||(an.cells||[])[c.cellule]||{};
+          const date=s(x.date)||(c.champ==='date'?s(c.apres):null);dejaAnalyse.add(cle(date,s(c.champ),c.apres));
+          corr.push({planningId:p.id,date,champ:s(c.champ),lectureOcr:c.valeurOcr==null?null:String(c.valeurOcr),lectureOcrDisponible:true,
+            avant:c.avant==null?null:c.avant,apres:c.apres==null?null:c.apres,le:s(c.le),raison:s(c.raison),origine:'analyse'})});
+      }
+      (p.corrections||[]).forEach(c=>{if(!c)return;const ap=apres(c);
+        if(!ap&&dejaAnalyse.has(cle(s(c.date),s(c.champ),c.apres)))return;
+        corr.push({planningId:p.id,date:s(c.date),champ:s(c.champ),lectureOcr:null,lectureOcrDisponible:false,
+          avant:c.avant==null?null:c.avant,apres:c.apres==null?null:c.apres,le:s(c.le),raison:null,origine:ap?'apres_validation':'validation'})});
+      out.corrections.push(...corr);
+      out.fiches.push({id:s(p.id),fichier:{nom:s(src.nom),type:s(src.mime),taille:num(src.taille)?Number(src.taille):null,sha256:sha(src.sha256)},
+        periode:{debut:p.periode.debut,fin:p.periode.fin},salarie:s(p.salarie&&p.salarie.nom),ligneChoisiePar:p.salarie&&p.salarie.choix==='utilisateur'?'utilisateur':null,
+        page:num(o.page)?Number(o.page):null,tableau:num(o.tableId)?Number(o.tableId)+1:null,pageRetournee:!!(o.orientation&&o.orientation.rotation180),
+        importeLe:s(p.importeLe),valideLe,ocr:{moteur:s(p.ocr&&p.ocr.moteur),statut:s(p.ocr&&p.ocr.statut)},
+        dictionnaire:p.dictionnaire?{id:s(p.dictionnaire.id),version:s(p.dictionnaire.version)}:null,
+        source:{etat,importId:imp?s(imp.id):null},jours:p.interpretation.filter(i=>i&&isoDay(i.date)).length,
+        anomalies:(p.anomalies||[]).map(a=>({code:s(a.code),date:s(a.date),texte:s(a.texte)})),
+        journalLecture:journal,corrections:{analyse:corr.filter(c=>c.origine==='analyse').length,validation:corr.filter(c=>c.origine==='validation').length,apresValidation:corr.filter(c=>c.origine==='apres_validation').length}});
+    });
+    /* journées prévues : calendrier V37.2 (prévu / identique / conflit) ; toutes les valeurs restituées, aucune retenue en cas de conflit */
+    if(C&&typeof C.index==='function'){let idx=null;try{idx=C.index(st)}catch(e){idx=null}
+      if(idx)Array.from(idx.values()).sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>out.journees.push({date:e.date,etat:e.etat,
+        valeurs:e.valeurs.map(v=>({libelle:s(v.libelle),planningId:s(v.provenance&&v.provenance.planningId)}))}))}
+    /* historique des imports (validation, suppression d'une fiche, rejet d'une analyse) */
+    imports.forEach(r=>(Array.isArray(r.historique)?r.historique:[]).forEach(h=>{if(!h)return;
+      out.historique.push({le:s(h.le),importId:s(r.id),fichier:s(r.source&&r.source.originalFileName),action:s(h.action),
+        plannings:h.planning!=null?[String(h.planning)]:Array.isArray(h.plannings)?h.plannings.map(String):[],raison:s(h.raison)})}));
+    out.historique.sort((a,b)=>String(a.le).localeCompare(String(b.le)));
+    const shaFiches=new Set(fiches.map(p=>p.source&&p.source.sha256));
+    out.importsSansPlanning=imports.filter(r=>r&&r.source&&!shaFiches.has(r.source.sha256)).length;
+    return out;
+  }
 
   /* ---------- 1. Données (lecture seule) ---------- */
   function data(opts){
@@ -137,7 +210,8 @@
         dureeCpMin:num(S.cp)?Number(S.cp):null,habillageMinJour:num(S.hab)?Number(S.hab):null,coefNet:num(S.net)?Number(S.net):null,
         anciennete:anc?{annees:anc.y,mois:anc.m,pct:anc.pct,forcee:num(S.anc)&&Number(S.anc)>0?Number(S.anc):null}:null},
       totaux:{journees:journees.length,travaillees:journees.filter(j=>j.work).length,tte:journees.reduce((s,j)=>s+j.tte,0),amp:journees.reduce((s,j)=>s+j.amp,0)},
-      periodes,journees,smartControl:smart,anomalies,romi,rapprochement,bulletins,constats,nuit,evenements,chronologie
+      periodes,journees,smartControl:smart,anomalies,romi,rapprochement,bulletins,constats,nuit,evenements,chronologie,
+      plannings:planningsData()
     };
   }
   /* JSON canonique : base de l'empreinte SHA-256 des données */
@@ -233,7 +307,45 @@
     H2('11. Événements et chronologie');
     T([{t:'Date',w:80},{t:'Élément',w:435}],d.chronologie.map(c=>[isoDay(c.date)?dFr(c.date):/^\d{4}-\d{2}$/.test(String(c.date))?mFr(c.date):txt(c.date),c.quoi]),'Aucun élément chronologique.');
 
-    H2('12. Intégrité');
+    H2('12. Plannings prévisionnels (référence, pas une preuve)');
+    const pl=d.plannings||{disponible:false,fiches:[],journees:[],corrections:[],historique:[],importsSansPlanning:0,avertissement:AVERT_PLANNING};
+    /* état vide sur une ligne ; l'avertissement accompagne les plannings restitués */
+    if(!pl.disponible)P('Module de planning prévisionnel indisponible : aucun planning restitué.',true);
+    else if(!pl.fiches.length&&!pl.historique.length&&!pl.importsSansPlanning)P('Aucun planning prévisionnel enregistré.',true);
+    else{
+      P(pl.avertissement||AVERT_PLANNING,true);
+      const ref={};pl.fiches.forEach((f,i)=>{ref[f.id]='P'+(i+1)});const R=id=>ref[id]||txt(id);
+      const ETAT_SRC={disponible:'disponible lors de la dernière vérification enregistrée',a_verifier:'à vérifier (non retrouvée lors de la dernière vérification)'};
+      const JOURNAL={analyse:'journal de lecture conservé (lecture OCR d’origine disponible)',analyse_retiree:'lecture OCR d’origine indisponible (analyse retirée)',aucune_analyse:'lecture OCR d’origine indisponible (aucune analyse liée)'};
+      const CHAMP={texte:'Libellé',libelle:'Libellé',date:'Date',type:'Type',dureeMin:'Durée',confirmation:'Lecture confirmée',salarie:'Salarié'};
+      const MOMENT={analyse:'avant validation',validation:'reportée à la validation',apres_validation:'après validation'};
+      const val=(champ,v)=>v===null||v===undefined||v===''?'—':champ==='dureeMin'&&num(v)?hm(v):champ==='date'&&isoDay(v)?dFr(v):String(v).replace(/\s+/g,' ');
+      T([{t:'Réf.',w:24},{t:'Fichier',w:110},{t:'Période',w:80},{t:'Page / tableau',w:50},{t:'Importé le',w:60},{t:'Validé le',w:60},{t:'OCR',w:45},{t:'Source originale',w:86}],
+        pl.fiches.map(f=>[R(f.id),txt(f.fichier.nom),dFr(f.periode.debut)+' → '+dFr(f.periode.fin),(f.page!=null?'page '+f.page:'—')+' / '+(f.tableau!=null?'tableau '+f.tableau:'—')+(f.pageRetournee?' (page lue retournée)':''),
+          f.importeLe?dtFr(f.importeLe):NR,f.valideLe?dtFr(f.valideLe):NR,txt(f.ocr.statut),f.source.etat?ETAT_SRC[f.source.etat]:NR]),
+        'Aucun planning prévisionnel enregistré.');
+      pl.fiches.forEach(f=>KV([[R(f.id)+' · empreinte SHA-256 de l’original',f.fichier.sha256||NR],
+        [R(f.id)+' · salarié',txt(f.salarie)+(f.ligneChoisiePar==='utilisateur'?' (ligne choisie et confirmée par l’utilisateur ; seule cette ligne est conservée)':'')],
+        [R(f.id)+' · lecture',txt(f.ocr.moteur)+' · '+f.jours+' jour'+(f.jours>1?'s':'')+' prévu'+(f.jours>1?'s':'')+' · '+JOURNAL[f.journalLecture]],
+        [R(f.id)+' · points signalés à la validation',f.anomalies.length?f.anomalies.map(a=>(isoDay(a.date)?dShort(a.date)+' : ':'')+txt(a.texte)).join(' · '):'aucun']]));
+      if(pl.journees.length){
+        P('Journées prévues : une ligne par date. Deux plannings différents pour une même date restent affichés tous les deux, sans qu’aucun soit retenu.',true);
+        T([{t:'Date',w:60},{t:'Prévu',w:170},{t:'Planning(s)',w:85},{t:'État',w:200}],
+          pl.journees.map(j=>[dFr(j.date),j.etat==='conflit'?j.valeurs.map(v=>R(v.planningId)+' : '+txt(v.libelle)).join(' / '):txt(j.valeurs[0]&&j.valeurs[0].libelle),
+            j.valeurs.map(v=>R(v.planningId)).join(', '),j.etat==='conflit'?'conflit entre plannings : aucune valeur retenue':j.etat==='identique'?'identique dans '+j.valeurs.length+' plannings':'prévu (1 planning)']),'Aucune journée prévue.');
+      }
+      if(pl.fiches.length){
+        P('Corrections : le journal de lecture (avant validation) garde la lecture OCR d’origine ; les corrections faites sur une fiche après sa validation sont distinguées. Si l’analyse a été retirée, la lecture d’origine est indiquée « indisponible ».',true);
+        T([{t:'Date',w:48},{t:'Réf.',w:24},{t:'Champ',w:60},{t:'Lecture OCR',w:80},{t:'Avant',w:70},{t:'Après',w:70},{t:'Le',w:70},{t:'Moment · raison',w:93}],
+          pl.corrections.map(c=>[isoDay(c.date)?dFr(c.date):'—',R(c.planningId),CHAMP[c.champ]||txt(c.champ),c.lectureOcrDisponible?val('texte',c.lectureOcr):'indisponible',
+            val(c.champ,c.avant),val(c.champ,c.apres),c.le?dtFr(c.le):NR,MOMENT[c.origine]+(c.raison?' · '+c.raison:'')]),'Aucune correction enregistrée.');
+      }
+      if(pl.historique.length)T([{t:'Date',w:80},{t:'Fichier',w:150},{t:'Action',w:285}],
+        pl.historique.map(h=>[h.le?dtFr(h.le):NR,txt(h.fichier),txt(h.action)+(h.plannings.length?' ('+h.plannings.map(R).join(', ')+')':'')+(h.raison?' · '+h.raison:'')]),'');
+      if(pl.importsSansPlanning)P(pl.importsSansPlanning+' fichier'+(pl.importsSansPlanning>1?'s':'')+' importé'+(pl.importsSansPlanning>1?'s':'')+' sans planning validé : non repris (une analyse non validée n’est pas une prévision).',true);
+    }
+
+    H2('13. Intégrité');
     KV([['Empreinte SHA-256 des données',o.dataHash||NR],['Contenu haché','JSON canonique du dossier (données ci-dessus, même génération)']]);
     P('Ce document est un export des données locales de MesHeures. Les estimations et contrôles doivent être confrontés aux documents originaux (bulletins, relevés ROMI1, planning, contrat) et aux règles applicables.',true);
     return B;

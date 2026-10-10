@@ -15,7 +15,7 @@ const REPO=path.join(__dirname,'..'),NEW=path.join(REPO,'app/src/main/assets/web
 const R1=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-08-24.json'),'utf8'));
 const R2=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-09-21.json'),'utf8'));
 const NOW=new Date('2026-10-08T10:00:00');
-const REL='37.3.0';   // version affichée
+const REL='37.4.0';   // version affichée
 const REV=(require('fs').readFileSync(require('path').join(__dirname,'..','app/src/main/assets/web/sw.js'),'utf8').match(/const CACHE='mesheures-shell-v([^']+)'/)||[])[1];   // révision du cache (37.2.0-B…)
 const types={'.js':'text/javascript','.html':'text/html','.css':'text/css','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.wasm':'application/wasm','.gz':'application/gzip'};
 let fails=0;const ok=(c,m)=>{console.log((c?'  ok  ':'FAIL  ')+m);if(!c)fails++};
@@ -65,7 +65,7 @@ srv.listen(0,async()=>{
       const ov=await overflow(pg,'#mh37Assistant details[data-open="nuit"]');ok(!ov.length,'volet nuit sans débordement'+(ov.length?' → '+ov.join(', '):''));
       const dz=await pg.evaluate(()=>{const d=MHDossier.data(),h=MHDossier.html(d,{}),pdf=MHDossier.pdf(d,{});const div=document.createElement('div');div.innerHTML=h.replace(/^[\s\S]*<body>|<\/body>[\s\S]*$/g,'');
         const h2=[...div.querySelectorAll('h2')].map(x=>x.textContent);const i=h2.indexOf('10. Travail de nuit (art. 9)');return {h2,sec:i<0?'':h.slice(h.indexOf('10. Travail de nuit'),h.indexOf('11. Événements')),pages:pdf.pageCount}});
-      ok(dz.h2.length===12&&dz.h2[9]==='10. Travail de nuit (art. 9)'&&dz.h2[10]==='11. Événements et chronologie'&&dz.h2[11]==='12. Intégrité','Dossier : 12 sections, « 10. Travail de nuit (art. 9) » avant chronologie et intégrité');
+      ok(dz.h2.length===13&&dz.h2[9]==='10. Travail de nuit (art. 9)'&&dz.h2[10]==='11. Événements et chronologie'&&dz.h2[11]==='12. Plannings prévisionnels (référence, pas une preuve)'&&dz.h2[12]==='13. Intégrité','Dossier : 13 sections (V37.4 : 12. Plannings), « 10. Travail de nuit (art. 9) » avant chronologie, plannings et intégrité');
       ok(/octobre 2026/.test(dz.sec)&&/2h00/.test(dz.sec)&&!/€/.test(dz.sec)&&dz.pages>=1,'Dossier : information mensuelle (octobre 2026 · 2h00), PDF généré ('+dz.pages+' pages)');
       ok(before===await snap(pg),'lecture seule : stockage strictement identique après Compteur, Smart Control, Assistant, Dossier');
       ok(await pg.evaluate(()=>window.DB===undefined),'window.DB non exposé');
