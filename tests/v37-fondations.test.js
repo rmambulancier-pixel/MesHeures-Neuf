@@ -140,6 +140,66 @@ t('aller-retour export → import : DB identique, ROMI1 identique',()=>{
 t('sauvegarde chiffrée : ROMI1 inclus à l\'export, validé et restauré',()=>{
   const s=fs.readFileSync(path.join(WEB,'app-evidence.js'),'utf8');
   assert.ok(/data:DB,romiMaster:window\.mhRomiStore\?\.export\?\.\(\)/.test(s));
-  assert.ok(/mhRomiStore\?\.validate\?\.\(payload\.romiMaster\)/.test(s));assert.ok(/mhRomiStore\?\.import\?\.\(payload\.romiMaster\)/.test(s))});
+  /* V37.5.0 : validation et application par le chemin commun d'app-backup.js (mhV30RestoreCore), ROMI1 et plannings compris */
+  assert.ok(/S\.preparer\(\{format:S\.FORMAT,formatVersion:payload\.formatVersion,data:payload\.data,romiMaster:payload\.romiMaster,plannings:payload\.plannings\}\)/.test(s));
+  assert.ok(/S\.appliquer\(prep,'before-encrypted-restore'\)/.test(s));assert.ok(/plannings:window\.mhPlanningBackup\?\.export\?\.\(\)/.test(s))});
+t('V37.5.0 sauvegarde chiffrée : plus d’accès à « d » avant sa déclaration (cause de l’échec systématique en V37.4.1)',()=>{
+  const s=fs.readFileSync(path.join(WEB,'app-evidence.js'),'utf8'),i=s.indexOf('window.mhV30EncryptedRestore='),j=s.indexOf('window.mhV30EncryptedBackup=');
+  const f=s.slice(i,j);assert.ok(i>0&&j>i);assert.ok(!/const d=payload\.data/.test(f));assert.equal((f.match(/const d=/g)||[]).length,1)});
+
+console.log('V37.5.0 : format, validation et retour arrière des sauvegardes');
+/* Stockage qui refuse les n prochaines écritures des clés visées (simule un stockage plein), une fois armé. */
+function makeStorageEchec(init,vise){
+  const ls={};let reste=0;
+  Object.defineProperties(ls,{
+    getItem:{value:k=>Object.prototype.hasOwnProperty.call(ls,k)?ls[k]:null},
+    setItem:{value:(k,v)=>{if(reste>0&&vise(k)){reste--;throw new Error('QuotaExceededError')}ls[k]=String(v)}},
+    removeItem:{value:k=>{delete ls[k]}},
+    armer:{value:(n)=>{reste=n||1}}});
+  Object.entries(init||{}).forEach(([k,v])=>ls.setItem(k,v));
+  return ls;
+}
+function ctxEchec(vise){const ls=makeStorageEchec({mh_romi_master_v35:JSON.stringify(ROMI)},vise);const c=ctxOf({ls});const X=loadCore(c);run(c,'app-backup.js');
+  vm.runInContext('save()',c.ctx);return {c,X,ls}}
+const FICHIER={format:'MesHeures Backup',data:{s:fx.s,days:{'2026-09-01':{t:'T',deb:'08:00',fin:'16:00',p:[]}}},romiMaster:ROMI2};
+t('export : format, formatVersion 3 et version de l’application (information)',()=>{
+  const {c}=backupCtx(ROMI);c.win.mhV30Export();const f=JSON.parse(c.out.files.pop().text);
+  assert.equal(f.format,'MesHeures Backup');assert.equal(f.formatVersion,3);assert.equal(typeof f.version,'string')});
+t('import : échec d’écriture ROMI1 après remplacement de DB → DB, stockage et ROMI1 rétablis',()=>{
+  const {c,X,ls}=ctxEchec(k=>k==='mh_romi_master_v35');const avantDB=X.DB,avantLS=ls.getItem(X.LS);ls.armer(1);
+  importFile(c,FICHIER);
+  assert.strictEqual(X.DB,avantDB);assert.equal(ls.getItem(X.LS),avantLS);assert.deepEqual(JSON.parse(ls.getItem('mh_romi_master_v35')),ROMI);
+  const m=c.out.alerts.pop();assert.ok(/Import impossible/.test(m)&&/Données précédentes rétablies/.test(m),m)});
+t('import : save() en échec (stockage plein) → retour arrière, jamais « Import réussi »',()=>{
+  let cle=null;const {c,X,ls}=ctxEchec(k=>k===cle);cle=X.LS;const avantDB=X.DB,avantLS=ls.getItem(X.LS);ls.armer(1);
+  importFile(c,FICHIER);
+  assert.strictEqual(X.DB,avantDB);assert.equal(ls.getItem(X.LS),avantLS);assert.deepEqual(JSON.parse(ls.getItem('mh_romi_master_v35')),ROMI);
+  const m=c.out.alerts.pop();assert.ok(/Import impossible/.test(m)&&/Données précédentes rétablies/.test(m)&&!/Import réussi/.test(m),m)});
+t('import : save() qui n’écrit rien (erreur avalée) → détecté par relecture, retour arrière',()=>{
+  const {c,X,ls}=ctxEchec(()=>false);const avantDB=X.DB,avantLS=ls.getItem(X.LS);vm.runInContext('save=function(){}',c.ctx);
+  importFile(c,FICHIER);
+  assert.strictEqual(X.DB,avantDB);assert.equal(ls.getItem(X.LS),avantLS);assert.deepEqual(JSON.parse(ls.getItem('mh_romi_master_v35')),ROMI);
+  const m=c.out.alerts.pop();assert.ok(/n’ont pas pu être enregistrées/.test(m)&&!/Import réussi/.test(m),m)});
+t('import : copie de sécurité impossible → refus, aucune donnée modifiée',()=>{
+  const {c,X,ls}=ctxEchec(k=>k.includes('_v30_backup_'));const avantDB=X.DB,avantLS=ls.getItem(X.LS);ls.armer(1);
+  importFile(c,FICHIER);
+  assert.strictEqual(X.DB,avantDB);assert.equal(ls.getItem(X.LS),avantLS);assert.ok(/copie de sécurité/.test(c.out.alerts.pop()))});
+t('import : format plus récent (formatVersion 4) refusé avant toute confirmation',()=>{
+  const {c,X}=backupCtx(ROMI);const n=Object.keys(X.DB.days).length;importFile(c,{...FICHIER,formatVersion:4});
+  assert.equal(Object.keys(X.DB.days).length,n);assert.equal(c.out.confirms.length,0);assert.ok(/version plus récente/.test(c.out.alerts.pop()))});
+t('import : fichiers historiques acceptés (sans formatVersion, version libre, DB brute)',()=>{
+  [{format:'MesHeures Backup',version:'36.2.0',data:{s:fx.s,days:fx.days}},{format:'MesHeures Backup',version:'37.3.0',formatVersion:3,data:{s:fx.s,days:fx.days}},{s:fx.s,days:fx.days}].forEach(f=>{
+    const {c,X}=backupCtx(ROMI);importFile(c,f);assert.ok(/Import réussi/.test(c.out.alerts.pop()));assert.equal(Object.keys(X.DB.days).length,Object.keys(fx.days).length)})});
+t('import : export de l’Assistant (MesHeures V33 Export) accepté, ROMI1 actuels conservés',()=>{
+  const {c,X}=backupCtx(ROMI);importFile(c,{format:'MesHeures V33 Export',version:'37.4.1',data:{s:fx.s,days:{'2026-09-01':{t:'T',deb:'08:00',fin:'16:00',p:[]}}}});
+  assert.ok(X.DB.days['2026-09-01']);assert.deepEqual(JSON.parse(c.ls.getItem('mh_romi_master_v35')),ROMI);assert.ok(/relevés actuels conservés/.test(c.out.alerts.pop()))});
+t('import : format inconnu, sauvegarde chiffrée, bloc de type faux → refus sans confirmation',()=>{
+  [[{format:'MesHeures Dossier probatoire',days:{}},/non pris en charge/],[{format:'MesHeures Encrypted Backup'},/sauvegarde chiffrée/],
+   [{format:'MesHeures Backup',data:{s:fx.s,days:fx.days,periods:{}}},/« periods » invalide/],[{format:'MesHeures Backup',data:{days:{'2026-09-01':null}}},/Journée invalide/],[[1,2],/objet JSON/]].forEach(([f,re])=>{
+    const {c,X}=backupCtx(ROMI);const n=Object.keys(X.DB.days).length;importFile(c,f);
+    assert.equal(Object.keys(X.DB.days).length,n);assert.equal(c.out.confirms.length,0);const m=c.out.alerts.pop();assert.ok(re.test(m),m)})});
+t('import : champs facultatifs absents ou null → valeurs par défaut historiques, pas de refus',()=>{
+  const {c,X}=backupCtx(ROMI);importFile(c,{format:'MesHeures Backup',data:{days:{},periods:null,bul:null}});
+  assert.ok(/Import réussi/.test(c.out.alerts.pop()));assert.deepEqual(X.DB.periods,[]);assert.deepEqual(X.DB.bul,{});assert.deepEqual(X.DB.constats,[])});
 
 console.log(fails?`\n${fails} ÉCHEC(S)`:'\nTous les tests passent.');process.exit(fails?1:0);

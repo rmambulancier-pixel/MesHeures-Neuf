@@ -11,15 +11,15 @@ const read=p=>fs.readFileSync(path.join(REPO,p),'utf8');
 const clone=o=>JSON.parse(JSON.stringify(o));
 let fails=0;
 function t(name,fn){try{fn();console.log('  ok  '+name)}catch(e){fails++;console.log('FAIL  '+name+'\n      '+(e&&e.message))}}
-const REL='37.4.1';   // version courante (V37.4.0 / 3740 → V37.4.1 / 3741)
+const REL='37.5.0';   // version courante (V37.4.1 / 3741 → V37.5.0 / 3750)
 /* V37.2 : la version reste 37.2.0 pendant les sous-lots ; la révision du cache change à chaque lot (37.2.0-B, -C…),
    sinon le service worker continuerait de servir les scripts du lot précédent sur le téléphone. */
 const REV=(fs.readFileSync(path.join(REPO,'app/src/main/assets/web/sw.js'),'utf8').match(/const CACHE='mesheures-shell-v([^']+)'/)||[])[1];
 
 console.log('Version Android');
-t('version.properties : VERSION=37.4.1, VERSION_CODE=3741 (37.4.0 / 3740 → 37.4.1 / 3741, même schéma)',()=>{
-  const p=Object.fromEntries(read('version.properties').trim().split(/\n/).map(l=>l.split('=')));assert.equal(p.VERSION,REL);assert.equal(p.VERSION_CODE,'3741');
-  const [a,b,c]=p.VERSION.split('.').map(Number);assert.equal(Number(p.VERSION_CODE),a*100+b*10+c);assert.ok(Number(p.VERSION_CODE)>3740,'versionCode croissant (installation par-dessus V37.2.0)')});
+t('version.properties : VERSION=37.5.0, VERSION_CODE=3750 (37.4.1 / 3741 → 37.5.0 / 3750, même schéma)',()=>{
+  const p=Object.fromEntries(read('version.properties').trim().split(/\n/).map(l=>l.split('=')));assert.equal(p.VERSION,REL);assert.equal(p.VERSION_CODE,'3750');
+  const [a,b,c]=p.VERSION.split('.').map(Number);assert.equal(Number(p.VERSION_CODE),a*100+b*10+c);assert.ok(Number(p.VERSION_CODE)>3741,'versionCode croissant (installation par-dessus V37.2.0)')});
 t('build.gradle lit version.properties (versionName / versionCode non codés en dur)',()=>{
   const g=read('app/build.gradle');assert.ok(/versionCode releaseCode/.test(g)&&/versionName releaseVersion/.test(g)&&/version\.properties/.test(g))});
 t('HybridCore : VERSION '+REL+', ENTRY_URL ?v=<révision du cache>',()=>{const j=read('app/src/main/java/com/mesheures/app/core/HybridCore.java');

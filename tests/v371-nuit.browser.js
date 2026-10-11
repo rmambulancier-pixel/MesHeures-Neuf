@@ -15,7 +15,7 @@ const REPO=path.join(__dirname,'..'),NEW=path.join(REPO,'app/src/main/assets/web
 const R1=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-08-24.json'),'utf8'));
 const R2=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/ref-2026-09-21.json'),'utf8'));
 const NOW=new Date('2026-10-08T10:00:00');
-const REL='37.4.1';   // version affichée
+const REL='37.5.0';   // version affichée
 const REV=(require('fs').readFileSync(require('path').join(__dirname,'..','app/src/main/assets/web/sw.js'),'utf8').match(/const CACHE='mesheures-shell-v([^']+)'/)||[])[1];   // révision du cache (37.2.0-B…)
 const types={'.js':'text/javascript','.html':'text/html','.css':'text/css','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.wasm':'application/wasm','.gz':'application/gzip'};
 let fails=0;const ok=(c,m)=>{console.log((c?'  ok  ':'FAIL  ')+m);if(!c)fails++};

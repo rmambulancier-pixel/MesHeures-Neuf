@@ -17,10 +17,12 @@ t('app-core.js, modules Planning (app-v372-*) et Comparaison (app-v373-*) identi
   if(!base){console.log('      (commit '+BASE+' absent : contrôle par le tag v37.3.0 fait dans v374-dossier-planning.test.js)');return}
   const f=['app-core.js'].concat(fs.readdirSync(SC).filter(x=>/^app-v37[23]-/.test(x))).map(x=>'app/src/main/assets/web/scripts/'+x);
   assert.equal(git('diff --name-only '+base+' -- '+f.join(' ')),'')});
-t('BACKUP_VERSION inchangé (37.3.0, décision du lot V37.4.0 : traité séparément)',()=>{assert.ok(/const BACKUP_VERSION='37\.3\.0';/.test(read('app/src/main/assets/web/scripts/app-backup.js')))});
+t('version des sauvegardes : convention formatVersion du lot V37.5.0 (remplace BACKUP_VERSION figé à 37.3.0)',()=>{const b=read('app/src/main/assets/web/scripts/app-backup.js');assert.ok(/BACKUP_FORMAT_VERSION=3;/.test(b)&&!/BACKUP_VERSION=/.test(b))});
 t('module chargé avant les écrans (juste après app-core.js) et mis en cache par le service worker',()=>{
   const h=read('app/src/main/assets/web/index.html'),i=h.indexOf('app-v3741-dialogue.js'),c=h.indexOf('app-core.js'),u=h.indexOf('app-ui.js');
-  assert.ok(i>c&&i<u);assert.ok(read('app/src/main/assets/web/sw.js').includes("'./scripts/app-v3741-dialogue.js?v=37.4.1'"))});
+  /* V37.5.0 : révision du cache lue dans sw.js (elle change à chaque livraison) */
+  const sw=read('app/src/main/assets/web/sw.js'),rev=(sw.match(/const CACHE='mesheures-shell-v([^']+)'/)||[])[1];
+  assert.ok(i>c&&i<u);assert.ok(rev&&sw.includes("'./scripts/app-v3741-dialogue.js?v="+rev+"'"),rev)});
 t('le module de dialogue n’accède à aucune donnée (ni DB, ni stockage)',()=>{
   const s=read('app/src/main/assets/web/scripts/app-v3741-dialogue.js').replace(/\/\*[\s\S]*?\*\//g,'');
   ['localStorage','sessionStorage','indexedDB','DB.','DB[','save('].forEach(w=>assert.ok(!s.includes(w),w))});
