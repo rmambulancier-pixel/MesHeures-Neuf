@@ -22,7 +22,11 @@ const srv=http.createServer((q,r)=>{const p=decodeURIComponent(q.url.split('?')[
    rowsPresent:(()=>{try{MHRoadmap.generate('2026-08-24');return true}catch(e){return false}})(),
    scriptsVersion:[...document.scripts].map(s=>s.getAttribute('src')||'').filter(s=>s.includes('app-core'))[0],
    swControle:!!navigator.serviceWorker.controller,
-   caches:await caches.keys()}));
+   caches:await caches.keys(),
+   /* V37.5.0-B : contenu réellement servi (par le service worker) pour chaque script de l'application */
+   servis:await Promise.all([...document.scripts].map(s=>s.getAttribute('src')||'').filter(s=>/scripts\/[^/]+\.js/.test(s)).map(async s=>[s,await (await fetch(s)).text()]))}));
+   const disque=s.servis.filter(([u,t])=>{try{return t!==fs.readFileSync(path.join(ROOT,u.replace(/^\.?\//,'').split('?')[0]),'utf8')}catch(e){return true}}).map(([u])=>u);
+   s.scriptsDifferents=disque.length;s.exemples=disque.slice(0,3);delete s.servis;
    const net=served.filter(u=>/app-core|app-roadmap|sw\.js/.test(u));served.length=0;
    results[label]=s;console.log(label.padEnd(36),JSON.stringify(s),'| réseau:',net.join(' '));};
  await pg.goto(url);await probe('1. ancienne version, 1er lancement');
@@ -34,5 +38,7 @@ const srv=http.createServer((q,r)=>{const p=decodeURIComponent(q.url.split('?')[
  await b.close();srv.close();
  const fin=results['4. nouvel APK, 2e lancement'];
  const newIndex=fs.readFileSync(NEW+'/index.html','utf8'),newRev=(newIndex.match(/app-core\.js\?v=([\w.-]+)/)||[])[1];
- const ok=fin&&fin.rowsPresent&&fin.caches.length===1&&fin.caches[0]===NEW_CACHE&&fin.scriptsVersion==='./scripts/app-core.js?v='+newRev;
- console.log(ok?'OK : à partir du 2e lancement, seul le cache '+NEW_CACHE+' existe et les scripts ?v='+newRev+' sont servis.':'ÉCHEC : ancien code ou ancien cache encore présent (attendu '+NEW_CACHE+').');process.exit(ok?0:1);});
+ /* V37.5.0-B : un script modifié sans changement de révision du cache reste servi dans sa version précédente : chaque script
+    servi doit être identique au fichier de la nouvelle version. */
+ const ok=fin&&fin.rowsPresent&&fin.caches.length===1&&fin.caches[0]===NEW_CACHE&&fin.scriptsVersion==='./scripts/app-core.js?v='+newRev&&fin.scriptsDifferents===0;
+ console.log(ok?'OK : à partir du 2e lancement, seul le cache '+NEW_CACHE+' existe et les scripts ?v='+newRev+' sont servis.':'ÉCHEC : ancien code ou ancien cache encore présent (attendu '+NEW_CACHE+(fin&&fin.scriptsDifferents?' ; '+fin.scriptsDifferents+' script(s) servi(s) dans leur ancienne version, ex. '+fin.exemples.join(', ')+' : changer la révision du cache':'')+').');process.exit(ok?0:1);});
