@@ -28,7 +28,8 @@ const srv=http.createServer((q,r)=>{const p=decodeURIComponent(q.url.split('?')[
 async function openApp(b,bridge){
   const ctx=await b.newContext({...PIXEL,serviceWorkers:'block',acceptDownloads:true}),pg=await ctx.newPage();
   const errs=[];pg.on('pageerror',e=>errs.push(e.message));pg.on('console',m=>{if(m.type()==='error')errs.push(m.text())});
-  pg.on('dialog',d=>{pg.__dialogs=(pg.__dialogs||[]).concat(d.message());d.type()==='prompt'?d.accept('Inspection du travail'):d.accept()});
+  /* V37.4.1 : plus aucune fenêtre native dans ces parcours (fenêtres intégrées MHDialogue) ; toute fenêtre native est comptée */
+  pg.on('dialog',d=>{pg.__natifs=(pg.__natifs||[]).concat(d.type()+' : '+d.message().slice(0,60));d.type()==='prompt'?d.accept('Inspection du travail'):d.accept()});
   await pg.addInitScript(([d,romi,bridge])=>{
     try{if(!sessionStorage.getItem('seed')){localStorage.setItem('mesheures_v3',JSON.stringify(d));localStorage.setItem('mh_romi_master_v35',JSON.stringify(romi));sessionStorage.setItem('seed','1')}}catch(e){}
     if(bridge){const out=[];let cur=null;window.__exports=out;window.__prints=[];
@@ -41,6 +42,9 @@ async function openApp(b,bridge){
   await pg.evaluate(()=>tab('audit'));await pg.waitForTimeout(400);
   return {ctx,pg,errs};
 }
+/* fenêtre intégrée : texte affiché, puis « OK » / « Continuer » (après saisie éventuelle) */
+async function fenetre(pg){await pg.waitForSelector('[data-k="mh-dialogue"]',{timeout:15000}).catch(()=>{});return pg.locator('[data-k="mh-dialogue"]').count()?pg.locator('[data-k="mh-dialogue"]').innerText():''}
+async function valider(pg,texte){if(texte!=null)await pg.locator('[data-k="mh-dialogue"] input').fill(texte);await pg.locator('[data-k="mh-dialogue-ok"]').click();await pg.waitForTimeout(100)}
 async function button(pg,label){
   const btn=pg.locator('#mhV30Dossier button',{hasText:label});await btn.scrollIntoViewIfNeeded();
   const box=await btn.boundingBox(),vis=await btn.isVisible();
@@ -87,19 +91,21 @@ srv.listen(0,async()=>{
       ok(sig&&sig.pages===N,'nombre de pages déclaré dans la signature = PDF');
       fs.writeFileSync(path.join(require('os').tmpdir(),'mesheures-v37d-pixel.pdf'),bytes);
     }
-    ok((pg.__dialogs||[]).some(m=>/Choisis où enregistrer le PDF/.test(m)),'message Android « Choisis où enregistrer » affiché');
+    const msgPdf=await fenetre(pg);ok(/Choisis où enregistrer le PDF/.test(msgPdf),'message Android « Choisis où enregistrer » affiché (fenêtre intégrée)');await valider(pg);
 
     const I=await button(pg,'Dossier imprimable');ok(I.ok,'bouton « Dossier imprimable / PDF » visible et accessible');
-    await I.btn.click();await pg.waitForFunction(()=>window.__prints.length>=1,null,{timeout:10000}).catch(()=>{});
+    await I.btn.click();ok(/Objet ou destinataire/.test(await fenetre(pg)),'objet demandé dans la fenêtre intégrée');await valider(pg,'Inspection du travail');
+    await pg.waitForFunction(()=>window.__prints.length>=1,null,{timeout:10000}).catch(()=>{});
     const html=await pg.evaluate(()=>window.__prints[0]||'');
     ok(html.length>5000&&html.includes('167h55')&&html.includes('Objet : Inspection du travail')&&!BAD.test(html.replace(/<[^>]+>/g,' ')),'imprimable transmis à printHtml : complet, objet repris, aucune valeur invalide');
     const vp=await A.ctx.newPage();await vp.setContent(html);
     const v=await vp.evaluate(()=>({len:document.body.innerText.length,h2:document.querySelectorAll('h2').length,ow:document.documentElement.scrollWidth}));
-    ok(v.len>3000&&v.h2===11,'imprimable rendu : 11 sections, '+v.len+' caractères (pas de page blanche)');
+    ok(v.len>3000&&v.h2===13,'imprimable rendu : 13 sections (V37.1 : travail de nuit ; V37.4 : plannings prévisionnels), '+v.len+' caractères (pas de page blanche)');
     await vp.screenshot({path:path.join(require('os').tmpdir(),'mesheures-v37d-imprimable.png')});await vp.close();
 
     const J=await button(pg,'Export dossier JSON');ok(J.ok,'bouton « Export dossier JSON » visible et accessible');
     await J.btn.click();await pg.waitForFunction(()=>window.__exports.some(x=>/\.json$/.test(x.name)&&!/sig/.test(x.name)),null,{timeout:10000}).catch(()=>{});
+    ok(/Empreinte SHA-256 : [0-9a-f]{64}/.test(await fenetre(pg)),'JSON : aucune question d’objet, empreinte affichée dans la fenêtre intégrée');await valider(pg);
     const js=await pg.evaluate(()=>{const x=window.__exports.find(x=>/dossier-complet.*\.json$/.test(x.name));return x?x.text:''});
     let jsOk=false;try{const o=JSON.parse(js),{integrity,...rest}=o;jsOk=integrity.hash===crypto.createHash('sha256').update(JSON.stringify(rest)).digest('hex')&&rest.periodes.length>0&&rest.romi.length===1}catch(e){}
     ok(jsOk,'JSON : même dossier que le PDF, empreinte SHA-256 vérifiable, ROMI1 inclus');
@@ -107,18 +113,19 @@ srv.listen(0,async()=>{
     const after=await pg.evaluate(()=>localStorage.getItem('mesheures_v3'));
     ok(before===after,'aucune écriture dans les données (localStorage identique avant / après les 3 exports)');
     ok(await pg.evaluate(()=>window.DB===undefined),'window.DB toujours non exposé');
+    ok(!(pg.__natifs||[]).length,'aucune fenêtre native dans les trois exports'+((pg.__natifs||[]).length?' : '+pg.__natifs.join(' | '):''));
     ok(A.errs.length===0,'0 erreur JavaScript'+(A.errs.length?' : '+A.errs.slice(0,3).join(' | '):''));
     await A.ctx.close();
 
     console.log('Navigateur sans pont natif (repli)');
     const B=await openApp(b,false),pb=B.pg;
     const dl=pb.waitForEvent('download',{timeout:15000}).catch(()=>null);
-    await (await button(pb,'PDF probatoire signé')).btn.click();const d=await dl;
+    await (await button(pb,'PDF probatoire signé')).btn.click();const d=await dl;await fenetre(pb);await valider(pb);
     let bb=null;if(d){const f=await d.path();bb=f?fs.readFileSync(f):null}
     let RB=null;try{RB=bb&&readPdf(bb)}catch(e){}
     ok(d&&/\.pdf$/.test(d.suggestedFilename())&&RB&&RB.pages.length>=2&&RB.text.includes('167h55'),'téléchargement du PDF : fichier récupéré, valide, '+(RB?RB.pages.length:0)+' pages');
     const pop=pb.waitForEvent('popup',{timeout:10000}).catch(()=>null);
-    await (await button(pb,'Dossier imprimable')).btn.click();const w=await pop;
+    await (await button(pb,'Dossier imprimable')).btn.click();await fenetre(pb);await valider(pb,'');const w=await pop;
     let wl=0;if(w){await w.waitForLoadState().catch(()=>{});wl=await w.evaluate(()=>document.body.innerText.length).catch(()=>0)}
     ok(wl>3000,'fenêtre imprimable non vide ('+wl+' caractères)');
     ok(B.errs.length===0,'0 erreur JavaScript (repli)'+(B.errs.length?' : '+B.errs.slice(0,3).join(' | '):''));

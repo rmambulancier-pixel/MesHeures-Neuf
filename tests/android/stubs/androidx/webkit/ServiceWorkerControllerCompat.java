@@ -1,0 +1,1 @@
+package androidx.webkit; public class ServiceWorkerControllerCompat{ private static final ServiceWorkerControllerCompat I=new ServiceWorkerControllerCompat(); public static ServiceWorkerControllerCompat getInstance(){return I;} public void setServiceWorkerClient(ServiceWorkerClientCompat c){} }

@@ -1,0 +1,1 @@
+package android.provider; public final class MediaStore{ public static final String ACTION_IMAGE_CAPTURE="android.media.action.IMAGE_CAPTURE",EXTRA_OUTPUT="output",ACTION_PICK_IMAGES="android.provider.action.PICK_IMAGES"; }

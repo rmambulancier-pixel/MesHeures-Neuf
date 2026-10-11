@@ -77,7 +77,10 @@ srv.listen(0,async()=>{
       ok(before===await store(pg),'aucune donnée réelle modifiée (journées, paie, ROMI1)');
       if(W===412)await pg.locator('#mh37Assistant').screenshot({path:path.join(os.tmpdir(),`mh37g-${W}-${theme}.png`)});
       if(W===412&&theme==='dark'){
-        const nav=async(sel,check,label)=>{await pg.evaluate(()=>tab('paie'));await pg.waitForTimeout(250);await pg.locator('#mh37Assistant '+sel).first().click();await pg.waitForTimeout(450);ok(await pg.evaluate(check),label)};
+        const nav=async(sel,check,label)=>{await pg.evaluate(()=>tab('paie'));await pg.waitForTimeout(250);await pg.locator('#mh37Assistant '+sel).first().click();await pg.waitForTimeout(450);
+          /* V37.1 : le défilement doux peut durer plus de 450 ms sur une longue distance : on attend qu'il soit stabilisé (2 s max). */
+          for(let i=0,y0=-1;i<20;i++){const y=await pg.evaluate(()=>scrollY);if(y===y0)break;y0=y;await pg.waitForTimeout(100)}
+          ok(await pg.evaluate(check),label)};
         await nav('.mh37p-tools button:has-text("Détail paie")',()=>document.getElementById('s-paie').classList.contains('on')&&Math.abs(document.getElementById('pSimCard').getBoundingClientRect().top)<200,'navigation → Détail paie (fiche estimative)');
         await nav('.mh37p-tools button:has-text("Compteur")',()=>document.getElementById('s-home').classList.contains('on')&&Math.abs(document.getElementById('mh37Compteur').getBoundingClientRect().top)<200,'navigation → Compteur heures');
         await nav('.mh37p-tools button:has-text("Audit")',()=>document.getElementById('s-audit').classList.contains('on'),'navigation → Audit');

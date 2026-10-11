@@ -18,7 +18,7 @@ function load(days,opts={}){
   const writes=[],win={};
   const ls={getItem:()=>null,setItem:k=>writes.push(k),removeItem:k=>writes.push(k)};
   const ctx={window:win,document:{getElementById:()=>null,dispatchEvent(){},addEventListener(){}},localStorage:ls,CustomEvent:function(){},
-    console:{...console,info(){},warn(){}},setTimeout:()=>0,Date,Math,JSON,Object,Array,Map,Number,String,Promise,Intl,RegExp,Set,Error};
+    console:{...console,info(){},warn(){}},setTimeout:()=>0,Date:opts.clockDate ? class extends Date { constructor(...a){super(...(a.length?a:[opts.clockDate+'T10:00:00']))} static now(){return Date.parse(opts.clockDate+'T10:00:00')} } : Date,Math,JSON,Object,Array,Map,Number,String,Promise,Intl,RegExp,Set,Error};
   ctx.globalThis=ctx;vm.createContext(ctx);
   const extra=opts.db?Object.entries(opts.db).map(([k,v])=>'DB.'+k+'='+JSON.stringify(v)+';').join(''):'';
   vm.runInContext(fs.readFileSync(path.join(WEB,'app-core.js'),'utf8')+
@@ -153,7 +153,7 @@ t('DB identique avant / après, aucun constat créé, ROMI1 intact',()=>{
   assert.equal(JSON.stringify(A.X.DB),before);assert.equal(A.X.DB.constats,undefined);assert.deepEqual(A.win.MH_ROMI.list(),romi);
   const d0=A.X.DB.days['2026-08-24'];assert.deepEqual(d0.p,fx.days['2026-08-24'].p);assert.equal(d0.panier,fx.days['2026-08-24'].panier)});
 t('navigation ‹ › : change de relevé sans écrire, appelle le rendu de l’Accueil',()=>{
-  const A=load(fx.days,{freeze:true});let n=0;A.win.MH31={renderHome:()=>n++};const before=JSON.stringify(A.X.DB);
+  const A=load(fx.days,{freeze:true,clockDate:'2026-10-07'});let n=0;A.win.MH31={renderHome:()=>n++};const before=JSON.stringify(A.X.DB);
   A.C.go(-1);const p1=A.C.data({today:'2026-10-07'}).periode.debut;A.C.go(1);const p2=A.C.data({today:'2026-10-07'}).periode.debut;A.C.go(0);const p3=A.C.data({today:'2026-10-07'}).periode.debut;
   assert.deepEqual([p1,p2,p3],['2026-07-27','2026-08-24','2026-09-21']);assert.equal(n,3);assert.equal(JSON.stringify(A.X.DB),before);assert.deepEqual(A.writes,[])});
 t('window.DB non exposé',()=>{assert.equal(L.win.DB,undefined)});

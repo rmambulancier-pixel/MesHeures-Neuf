@@ -3,7 +3,9 @@
 */
 (function(){
   'use strict';
-  const V='24.2.0';
+  /* V37.5.0 : version de l'application (balise application-version) inscrite dans la sauvegarde chiffrée ; avant : '24.2.0'
+     figé. Lecture protégée : le module se charge même sans DOM complet (tests Node). Même convention qu'app-backup.js. */
+  const V=(()=>{try{return document.querySelector('meta[name="application-version"]')?.content||'inconnue'}catch(e){return 'inconnue'}})();
   const NS='mhV30';
   let dataVersion=0;
   let cacheVersion=-1;
@@ -236,22 +238,206 @@
     host.innerHTML=`<div class="card mh-v30-card"><h2>🛡️ Dossier & preuves</h2><div class="mh-v30-kpis"><div><b>${c.constats.length}</b><span>constat(s)</span></div><div><b>${EUR(c.total)}</b><span>estimation chiffrée</span></div><div><b>${c.events.length}</b><span>événement(s)</span></div></div><div class="row"><button onclick="mhV30ConstatsPDF()">📄 Export constats</button><button class="g" onclick="mhV30AddEvent()">＋ Événement</button><button class="g" onclick="mhV30EncryptedBackup()">🔐 Backup chiffré</button><button class="g" onclick="document.getElementById('mhV30Restore').click()">🔓 Restaurer chiffré</button><input id="mhV30Restore" type="file" accept=".json,.mhbackup" style="display:none" onchange="mhV30EncryptedRestore(this)"></div><details open><summary>📚 Journal de preuves cumulatif</summary>${journalHtml(c.rows)}</details><details><summary>🛡️ Constats persistants</summary><div>${c.constats.length?c.constats.map(x=>`<div class="mh-v30-proof"><b>${esc(x.id)}</b> · ${esc(x.jour_concerne)} · ${esc(x.regle_violie)}<small>Créé le ${new Date(x.date_constat).toLocaleString('fr-FR')} · ${esc(x.article_source)}${x.calcul_montant_du?` · ${EUR(x.calcul_montant_du)} estimés`:''}</small></div>`).join(''):'<div class="mut">Aucun constat.</div>'}</div></details><details><summary>🕰️ Frise chronologique</summary><div class="mh-v30-timeline">${[...c.constats.map(x=>({date:x.jour_concerne,type:'Constat',text:x.regle_violie})),...(DB.bulletins||[]).map(b=>({date:b.mois+'-01',type:'Bulletin',text:'Bulletin importé'})),...c.events.map(e=>({date:e.date,type:e.type,text:e.text}))].sort((a,b)=>b.date.localeCompare(a.date)).map(e=>`<div><time>${esc(e.date)}</time><b>${esc(e.type)}</b><span>${esc(e.text)}</span></div>`).join('')||'<div class="mut">Aucun événement.</div>'}</div></details></div>`;
   }
 
-  window.mhV30AddEvent=function(){const date=prompt('Date (AAAA-MM-JJ) :',today());if(!date)return;const type=prompt('Type :','Courrier');if(!type)return;const text=prompt('Description :','');if(!text)return;if(addEvent(date,type,text)){renderEvidence();alert('✅ Événement ajouté.')}};
+  /* V37.4.1 — fenêtres intégrées (MHDialogue) ; sans le module : prompt() / confirm() / alert() d'origine. Les données
+     enregistrées, le chiffrement et la restauration sont inchangés. */
+  const DLG=()=>window.MHDialogue;
+  const informer=(titre,message)=>{const d=DLG();if(d)return d.info({titre,message});alert(message)};
+  window.mhV30AddEvent=function(){
+    const d=DLG();
+    if(!d){const date=prompt('Date (AAAA-MM-JJ) :',today());if(!date)return;const type=prompt('Type :','Courrier');if(!type)return;const text=prompt('Description :','');if(!text)return;if(addEvent(date,type,text)){renderEvidence();alert('✅ Événement ajouté.')}return}
+    return d.exclusif('evenement',async()=>{
+      const v=await d.formulaire({titre:'Nouvel événement',message:'Ajouté au journal de preuves du dossier.',action:'Ajouter',champs:[
+        {nom:'date',libelle:'Date',type:'date',valeur:today(),requis:true},
+        {nom:'type',libelle:'Type',valeur:'Courrier',requis:true,autocapitalize:'sentences'},
+        {nom:'texte',libelle:'Description',multiligne:true,requis:true,autocapitalize:'sentences'}],
+        valider:x=>/^\d{4}-\d{2}-\d{2}$/.test(String(x.date))?null:'Date attendue au format AAAA-MM-JJ.'});
+      if(!v)return;
+      if(addEvent(v.date,v.type,v.texte)){renderEvidence();informer('Événement ajouté','✅ Événement ajouté.')}
+    });
+  };
+  /* V37.5.0 — Export PDF des constats : PDF construit directement (plus de fenêtre d'impression window.open + print).
+     Pagination : chaque constat est un bloc indivisible, jamais coupé entre deux pages (avant : la date de création
+     pouvait passer seule sur la page suivante). Seule exception : un constat plus long qu'une page entière (texte très
+     long) continue sur la page suivante sous « CONSTAT n - … (suite) », sans perte de texte.
+     constatsPdfBytes est une fonction pure (liste, date) : tests/v375-constats-pdf.test.js. */
+  const PDF_CP={
+    8364:128,8218:130,402:131,8222:132,8230:133,8224:134,
+    8225:135,710:136,8240:137,352:138,8249:139,338:140,
+    381:142,8216:145,8217:146,8220:147,8221:148,8226:149,
+    8211:150,8212:151,732:152,8482:153,353:154,8250:155,
+    339:156,382:158,376:159
+  };
+  const PDF_LIGNES_PAGE=50,PDF_CAR_LIGNE=88;
+  function constatsPdfBytes(constats,opts){
+    const o=opts||{};
+    const list=(constats||[]).slice().sort((a,b)=>
+      String(a.date_constat||'').localeCompare(String(b.date_constat||''))
+    );
+    const generated=o.generated instanceof Date?o.generated:new Date();
+    const lines=[
+      'MESHEURES - DOSSIER DE CONSTATS',
+      'Genere le '+generated.toLocaleString('fr-FR'),
+      'Nombre de constats : '+list.length,
+      '',
+      'Les montants sont des estimations a verifier sur les documents originaux.',
+      ''
+    ];
+
+    if(!list.length) lines.push('Aucun constat enregistre.');
+
+    list.forEach((x,i)=>{
+      lines.push('CONSTAT '+(i+1)+' - '+String(x.id||'Sans identifiant'));
+      lines.push('Jour concerne : '+String(x.jour_concerne||'non renseigne'));
+      lines.push('Regle : '+String(x.regle_violie||'non renseignee'));
+      lines.push('Source : '+String(x.article_source||'non renseignee'));
+      lines.push('Minutes calculees : '+String(x.calcul_brut??'non renseigne'));
+      lines.push('Montant estime : '+(typeof EUR==='function'?EUR(x.calcul_montant_du):String(x.calcul_montant_du??'non renseigne')));
+      lines.push('Date de creation : '+String(x.date_constat||'non renseignee'));
+      lines.push('');
+    });
+
+    lines.push('Document genere par MesHeures.');
+    lines.push('Les estimations doivent etre verifiees avant toute utilisation.');
+
+    const pdfText=v=>{
+      let out='';
+      for(const ch of String(v)){
+        let n=ch.codePointAt(0);
+        if(PDF_CP[n]!==undefined)n=PDF_CP[n];
+        else if(n>255)n=63;
+        if(n===40||n===41||n===92)out+='\\'+String.fromCharCode(n);
+        else if(n<32||n>126)out+='\\'+n.toString(8).padStart(3,'0');
+        else out+=String.fromCharCode(n);
+      }
+      return '('+out+')';
+    };
+    /* Un mot plus long qu'une ligne (référence, URL) est découpé au lieu de sortir de la page. */
+    const wrapLine=(v,max=PDF_CAR_LIGNE)=>{
+      const words=String(v).split(/\s+/);
+      const out=[];
+      let cur='';
+      for(const word of words){
+        if(!word){if(!cur)out.push('');continue;}
+        const parts=word.length>max?word.match(new RegExp('[\\s\\S]{1,'+max+'}','g')):[word];
+        for(const w of parts){
+          if(!cur){cur=w;continue;}
+          if((cur+' '+w).length<=max)cur+=' '+w;
+          else {out.push(cur);cur=w;}
+        }
+      }
+      if(cur)out.push(cur);
+      return out.length?out:[''];
+    };
+
+    const blocks=[];
+    let block=[];
+    lines.forEach(line=>{
+      if(/^CONSTAT\s+\d+\s+-\s+/.test(line) && block.length){
+        blocks.push(block);
+        block=[];
+      }
+      block.push(...wrapLine(line));
+    });
+    if(block.length)blocks.push(block);
+
+    const perPage=PDF_LIGNES_PAGE;
+    const pages=[];
+    let page=[];
+    blocks.forEach(part=>{
+      if(page.length && page.length+part.length>perPage){
+        pages.push(page);
+        page=[];
+      }
+      if(part.length<=perPage-page.length){page.push(...part);return;}
+      /* bloc plus long qu'une page entière : seul cas de découpage, chaque suite est annoncée */
+      const suite=(/^CONSTAT /.test(part[0])?part[0]:'MESHEURES - DOSSIER DE CONSTATS')+' (suite)';
+      const rest=part.slice();
+      while(rest.length){
+        page.push(...rest.splice(0,perPage-page.length));
+        if(rest.length){pages.push(page);page=[suite];}
+      }
+    });
+    if(page.length)pages.push(page);
+    if(!pages.length)pages.push(['Aucun contenu.']);
+
+    const objs=[];
+    const add=v=>(objs.push(v),objs.length);
+    const f1=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
+    const f2=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+    const pagesId=add(null);
+    const kids=[];
+
+    pages.forEach((page,pi)=>{
+      let stream='';
+      page.forEach((line,i)=>{
+        const y=790-i*14;
+        const bold=(pi===0&&i===0)||(line.startsWith('CONSTAT '));
+        stream+='BT /'+(bold?'F2':'F1')+' '+(bold?12:9)+' Tf 48 '+y+' Td '+pdfText(line)+' Tj ET\n';
+      });
+      stream+='BT /F1 8 Tf 48 28 Td '+pdfText('MesHeures - Page '+(pi+1)+' / '+pages.length)+' Tj ET\n';
+      /* fin de ligne avant endstream, hors /Length (ISO 32000-1, 7.3.8.1) */
+      const cid=add('<< /Length '+stream.length+' >>\nstream\n'+stream+'\nendstream');
+      kids.push(add('<< /Type /Page /Parent '+pagesId+' 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 '+f1+' 0 R /F2 '+f2+' 0 R >> >> /Contents '+cid+' 0 R >>'));
+    });
+
+    objs[pagesId-1]='<< /Type /Pages /Kids ['+kids.map(k=>k+' 0 R').join(' ')+'] /Count '+kids.length+' >>';
+    const info=add('<< /Title '+pdfText('MesHeures - Constats')+' /Producer '+pdfText('MesHeures')+' >>');
+    const catalog=add('<< /Type /Catalog /Pages '+pagesId+' 0 R >>');
+    let out='%PDF-1.4\n';
+    const offsets=[];
+    objs.forEach((obj,i)=>{
+      offsets.push(out.length);
+      out+=(i+1)+' 0 obj\n'+obj+'\nendobj\n';
+    });
+    const xref=out.length;
+    out+='xref\n0 '+(objs.length+1)+'\n0000000000 65535 f \n';
+    offsets.forEach(n=>out+=String(n).padStart(10,'0')+' 00000 n \n');
+    out+='trailer\n<< /Size '+(objs.length+1)+' /Root '+catalog+' 0 R /Info '+info+' 0 R >>\nstartxref\n'+xref+'\n%%EOF\n';
+
+    const bytes=new Uint8Array(out.length);
+    for(let i=0;i<out.length;i++)bytes[i]=out.charCodeAt(i)&255;
+    bytes.pageCount=pages.length;bytes.constatCount=list.length;
+    return bytes;
+  }
+  window.mhConstatsPdfBytes=constatsPdfBytes;
   window.mhV30ConstatsPDF=function(){
-    const c=buildCache();
-    const list=c.constats.slice().sort((a,b)=>a.date_constat.localeCompare(b.date_constat));
-    const w=window.open('','_blank');if(!w)return alert('Autorise les fenêtres contextuelles pour exporter le PDF.');
-    const generated=new Date().toISOString();w.document.write(`<html><head><title>MesHeures — Constats</title><style>body{font-family:Arial,sans-serif;margin:28px;color:#111}h1{font-size:22px}.c{border:1px solid #bbb;padding:12px;margin:12px 0;break-inside:avoid}.m{color:#555;font-size:12px}footer{margin-top:20px;font-size:11px;color:#555}</style></head><body><h1>MesHeures — Dossier de constats</h1><p>Généré le ${generated}</p>${list.map(x=>`<div class="c"><b>${esc(x.id)}</b><p>${esc(x.regle_violie)}</p><p>Journée concernée : ${esc(x.jour_concerne)}</p><p>Source : ${esc(x.article_source)}</p><p>Minutes calculées : ${esc(x.calcul_brut)} · Montant estimé : ${EUR(x.calcul_montant_du)}</p><p class="m">Constat créé le : ${esc(x.date_constat)}</p></div>`).join('')}<footer>MesHeures · document généré à la demande de l’utilisateur · les montants sont des estimations calculées par l’application et doivent être vérifiés.</footer></body></html>`);w.document.close();setTimeout(()=>w.print(),400);
+    try {
+      const c=buildCache();
+      const generated=new Date();
+      const bytes=constatsPdfBytes(c.constats,{generated});
+      const mode=window.mhDownloadBinary(
+        'MesHeures-constats-'+generated.toISOString().slice(0,10)+'.pdf',bytes,'application/pdf'
+      );
+      informer('Export des constats',
+        'PDF genere : '+bytes.constatCount+' constat(s).\n'+
+        (mode==='android'?'Enregistrement Android lance.':'Telechargement navigateur lance.'));
+    } catch(e) {
+      console.error('Export PDF des constats',e);
+      informer('Export des constats','Echec de la generation du PDF : '+(e.message||e));
+    }
   };
   async function deriveKey(password,salt){const enc=new TextEncoder();const base=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:150000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
   function b64bytes(s){const bin=atob(s);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return a;}
   window.mhV30EncryptedRestore=async function(input){
-    const f=input?.files?.[0];if(!f)return; const p=prompt('Mot de passe de la sauvegarde chiffrée :');if(!p)return;
-    try{const obj=JSON.parse(await f.text());if(obj.format!=='MesHeures Encrypted Backup')throw new Error('Format de sauvegarde chiffrée non reconnu.');const salt=b64bytes(obj.salt),iv=b64bytes(obj.iv),key=await deriveKey(p,salt);const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,b64bytes(obj.ciphertext));const payload=JSON.parse(new TextDecoder().decode(plain));if(!payload?.data?.days)throw new Error('Structure MesHeures invalide.');window.mhRomiStore?.validate?.(payload.romiMaster);if(!confirm('Restaurer cette sauvegarde chiffrée ? Une copie de sécurité sera créée avant restauration.'))return; mhV30Backup?.('before-encrypted-restore');const d=payload.data;DB={s:{...DEF,...(d.s||{})},days:{...(d.days||{})},cmp:{...(d.cmp||{})},periods:Array.isArray(d.periods)?d.periods:[],bul:{...(d.bul||{})},bulletins:Array.isArray(d.bulletins)?d.bulletins:[],romi:{...(d.romi||{})},per:{start:DEF.anchor,nb:1,...(d.per||{})},exp:d.exp??null,constats:Array.isArray(d.constats)?d.constats:[],events:Array.isArray(d.events)?d.events:[],reconciliation:Array.isArray(d.reconciliation)?d.reconciliation:[]};if(typeof mhNormalizeMealSettings==='function')mhNormalizeMealSettings();save();const romiDone=window.mhRomiStore?.import?.(payload.romiMaster);mhRefresh();alert('✅ Sauvegarde chiffrée restaurée.'+(window.mhRomiStore?'\n'+window.mhRomiStore.label(romiDone??null):''));}catch(e){alert('❌ Restauration impossible : mot de passe incorrect ou fichier invalide.');console.warn(e)}finally{input.value=''}
+    const f=input?.files?.[0];if(!f)return;
+    const d=DLG();
+    const p=d?await d.saisir({titre:'Restaurer une sauvegarde chiffrée',message:'Mot de passe de la sauvegarde chiffrée.',libelle:'Mot de passe',type:'password',autocomplete:'current-password',action:'Déchiffrer'})
+      :prompt('Mot de passe de la sauvegarde chiffrée :');
+    if(!p){input.value='';return}
+    /* V37.5.0 : validation et application par mhV30RestoreCore (app-backup.js), avec copie de sécurité vérifiée et retour arrière ;
+       corrige l'accès à « d » avant sa déclaration (V37.4.1), qui faisait échouer toute restauration chiffrée. */
+    let etape='dechiffrement';
+    try{const obj=JSON.parse(await f.text());if(obj.format!=='MesHeures Encrypted Backup')throw new Error('Format de sauvegarde chiffrée non reconnu.');const salt=b64bytes(obj.salt),iv=b64bytes(obj.iv),key=await deriveKey(p,salt);const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,b64bytes(obj.ciphertext));const payload=JSON.parse(new TextDecoder().decode(plain));etape='restauration';const S=window.mhV30RestoreCore;if(!S)throw new Error('Module de sauvegarde indisponible.');if(payload==null||typeof payload!=='object'||Array.isArray(payload))throw new Error('Structure MesHeures invalide.');const prep=S.preparer({format:S.FORMAT,formatVersion:payload.formatVersion,data:payload.data,romiMaster:payload.romiMaster,plannings:payload.plannings});const ok=d?await d.confirmer({titre:'Restaurer cette sauvegarde chiffrée ?',message:'Les données actuelles seront remplacées par celles de la sauvegarde.\nUne copie de sécurité sera créée avant restauration.',action:'Restaurer',danger:true})
+      :confirm('Restaurer cette sauvegarde chiffrée ? Une copie de sécurité sera créée avant restauration.');if(!ok)return;const r=S.appliquer(prep,'before-encrypted-restore');informer('Sauvegarde restaurée','✅ Sauvegarde chiffrée restaurée.\n'+S.romiLabel(r.romiDone)+'\n'+S.planLabel(r.plansDone));}catch(e){informer('Restauration impossible',etape==='dechiffrement'?'❌ Restauration impossible : mot de passe incorrect ou fichier invalide.':'❌ Restauration impossible : '+e.message);console.warn(e)}finally{input.value=''}
   };
   window.mhV30EncryptedBackup=async function(){
-    const p=prompt('Mot de passe pour chiffrer la sauvegarde :');if(!p)return;const p2=prompt('Confirme le mot de passe :');if(p!==p2)return alert('❌ Les mots de passe ne correspondent pas.');
-    try{init();const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),key=await deriveKey(p,salt);const payload={format:'MesHeures Encrypted Backup',version:V,createdAt:new Date().toISOString(),data:DB,romiMaster:window.mhRomiStore?.export?.()||null};const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(payload)));const obj={format:payload.format,version:V,createdAt:payload.createdAt,kdf:'PBKDF2-SHA256',iterations:150000,cipher:'AES-256-GCM',salt:btoa(String.fromCharCode(...salt)),iv:btoa(String.fromCharCode(...iv)),ciphertext:btoa(String.fromCharCode(...new Uint8Array(ct)))};const mode=typeof mhDownloadFile==='function'?mhDownloadFile('MesHeures-backup-chiffre-'+today()+'.mhbackup.json',JSON.stringify(obj,null,2),'application/json'):null; if(!mode){const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='MesHeures-backup-chiffre-'+today()+'.mhbackup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);} alert(mode==='android'?'📁 Choisis où enregistrer la sauvegarde chiffrée.':'✅ Sauvegarde chiffrée exportée.');}catch(e){alert('❌ Chiffrement impossible : '+e.message)}
+    const d=DLG();let p;
+    if(d){const v=await d.formulaire({titre:'Sauvegarde chiffrée',message:'Choisis un mot de passe. Il sera demandé pour restaurer : sans lui, la sauvegarde est illisible.',action:'Chiffrer et enregistrer',champs:[
+        {nom:'p',libelle:'Mot de passe',type:'password',requis:true,autocomplete:'new-password'},{nom:'p2',libelle:'Confirme le mot de passe',type:'password',requis:true,autocomplete:'new-password'}],
+        valider:x=>x.p===x.p2?null:'❌ Les mots de passe ne correspondent pas.'});
+      if(!v)return;p=v.p}
+    else{p=prompt('Mot de passe pour chiffrer la sauvegarde :');if(!p)return;const p2=prompt('Confirme le mot de passe :');if(p!==p2)return alert('❌ Les mots de passe ne correspondent pas.')}
+    try{init();const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),key=await deriveKey(p,salt);const payload={format:'MesHeures Encrypted Backup',version:V,createdAt:new Date().toISOString(),formatVersion:window.mhV30RestoreCore?.FORMAT_VERSION,data:DB,romiMaster:window.mhRomiStore?.export?.()||null,plannings:window.mhPlanningBackup?.export?.()||null};const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(payload)));const obj={format:payload.format,version:V,createdAt:payload.createdAt,kdf:'PBKDF2-SHA256',iterations:150000,cipher:'AES-256-GCM',salt:btoa(String.fromCharCode(...salt)),iv:btoa(String.fromCharCode(...iv)),ciphertext:btoa((()=>{const b=new Uint8Array(ct);let s='';for(let i=0;i<b.length;i+=0x8000)s+=String.fromCharCode(...b.subarray(i,i+0x8000));return s})())};const mode=typeof mhDownloadFile==='function'?mhDownloadFile('MesHeures-backup-chiffre-'+today()+'.mhbackup.json',JSON.stringify(obj,null,2),'application/json'):null; if(!mode){const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='MesHeures-backup-chiffre-'+today()+'.mhbackup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);} informer('Sauvegarde chiffrée',mode==='android'?'📁 Choisis où enregistrer la sauvegarde chiffrée.':'✅ Sauvegarde chiffrée exportée.');}catch(e){informer('Chiffrement impossible','❌ Chiffrement impossible : '+e.message)}
   };
   window.mhV30RenderEvidence=renderEvidence;
 

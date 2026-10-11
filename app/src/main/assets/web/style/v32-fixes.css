@@ -316,3 +316,12 @@ html:root:not([data-theme="light"]){--dim:#9ba5b0;--bad:#ff7b72}
 #pRcOut th,#pRcOut td{white-space:normal;overflow-wrap:anywhere;padding-left:3px;padding-right:3px}
 #pRcOut th:first-child,#pRcOut td:first-child{width:27%}
 #pCmp input{min-height:40px}
+
+/* V37.2 — barre du bas : l'onglet OUVERT est mis en évidence (classe .active posée par app-v30.js).
+   Avant : « Accueil » restait toujours en accent en thème sombre (règle button:first-child) et l'onglet ouvert
+   n'était jamais signalé, ni en sombre ni en clair. Couleurs explicites : les variables --m3-* de v30.css ne sont pas
+   résolues à l'exécution (constat V37.2, à traiter dans un lot dédié). */
+#mhV30Nav button.active{background:rgba(63,185,80,.18)!important;color:#3fb950!important}
+#mhV30Nav button:first-child:not(.active){background:transparent!important;color:#758290!important}
+:root[data-theme="light"] #mhV30Nav button.active{background:#dff3e4!important;color:#1a7f37!important}
+:root[data-theme="light"] #mhV30Nav button:first-child:not(.active){background:#eef1f4!important;color:#1f2328!important}

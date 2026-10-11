@@ -29,7 +29,8 @@ function load(days,opts={}){
     ';DB.s={...DEF,...'+JSON.stringify(opts.s||fx.s)+'};DB.days='+JSON.stringify(days)+';'+extra+'mhNormalizeMealSettings();mhMigrateLegacyMealChoices();'+
     'function save(){MH30DataEngine.invalidate("save")}function mhRefresh(){}'+
     ';globalThis.__x={get DB(){return DB},cd,calcPer,brutOf,F,Q:mhQuatorzaine};',ctx);
-  for(const f of ['app-legal.js','app-evidence.js','app-v37-control.js','app-v37-romi-reconciliation.js'])vm.runInContext(fs.readFileSync(path.join(WEB,f),'utf8'),ctx,{filename:f});
+  for(const f of ['app-legal.js','app-evidence.js','app-v371-nuit.js','app-v37-control.js','app-v37-romi-reconciliation.js'])   // V37.1 : MHNuit chargé comme dans index.html
+  vm.runInContext(fs.readFileSync(path.join(WEB,f),'utf8'),ctx,{filename:f});
   if(opts.romi)win.MH_ROMI={list:()=>clone(opts.romi)};
   if(opts.freeze){vm.runInContext('Object.freeze(DB);',ctx);deepFreeze(ctx.__x.DB)}
   vm.runInContext(fs.readFileSync(path.join(WEB,'app-v37-dossier.js'),'utf8'),ctx,{filename:'app-v37-dossier.js'});
@@ -77,9 +78,10 @@ t('pdftotext (si installé) relit le même contenu',()=>{
   ['167h55','173h25','32h00','30h55','150h15','Identité','Rapprochement paie','Smart Control'].forEach(x=>assert.ok(out.includes(x),x))});
 
 console.log('Contenu principal');
-t('les 11 sections sont présentes (PDF et imprimable)',()=>{
+t('les 13 sections sont présentes (PDF et imprimable ; V37.1 : 10. Travail de nuit ; V37.4 : 12. Plannings prévisionnels)',()=>{
   ['1. Identité et configuration','2. Synthèse Smart Control','3. Périodes de paie','4. Relevés ROMI1','5. Rapprochement paie','6. Bulletins importés',
-   '7. Anomalies réglementaires','8. Constats enregistrés','9. Journées','10. Événements et chronologie','11. Intégrité'].forEach(s=>{
+   '7. Anomalies réglementaires','8. Constats enregistrés','9. Journées','10. Travail de nuit (art. 9)','11. Événements et chronologie',
+   '12. Plannings prévisionnels (référence, pas une preuve)','13. Intégrité'].forEach(s=>{
     assert.ok(R.pdf.text.includes(s),'PDF '+s);assert.ok(R.html.includes(s.replace(/&/g,'&amp;')),'HTML '+s)})});
 t('identité : embauche, ancienneté (moteur calcAnc), taux, CP ; nom absent → « non renseigné »',()=>{
   assert.ok(R.pdf.text.includes('09/09/2019'));assert.ok(R.pdf.text.includes('14,20 € / h'));assert.ok(/Salarié\nnon renseigné/.test(R.pdf.text));
@@ -194,9 +196,14 @@ t('DB identique avant / après (données sans constats ni événements : rien n�
 t('window.DB n’est pas exposé',()=>{assert.equal(R.win.DB,undefined)});
 
 console.log('Cas limites');
-t('aucune donnée : PDF d’une page, lisible, sans valeur invalide',()=>{
-  const B=build({});assert.equal(B.bytes.pageCount,1);assert.ok(B.pdf.text.includes('Aucune journée enregistrée.'));assert.ok(B.pdf.text.includes('aucune journée enregistrée'));
-  assert.ok(!BAD.test(B.pdf.text));assert.ok(B.pdf.text.includes('Page 1 / 1'))});
+/* V37.4 : la section 12 (une ligne quand il n'y a pas de planning) remplit la page 1 ; « 13. Intégrité », section courte,
+   reste entière et passe en page 2 (règle de mise en page V37.0-H). Avant V37.4 : une seule page. */
+t('aucune donnée : PDF de deux pages, lisible, sans valeur invalide ; « 13. Intégrité » entière en page 2',()=>{
+  const B=build({});assert.equal(B.bytes.pageCount,2);assert.ok(B.pdf.text.includes('Aucune journée enregistrée.'));assert.ok(B.pdf.text.includes('aucune journée enregistrée'));
+  assert.ok(!BAD.test(B.pdf.text));assert.ok(B.pdf.text.includes('Page 1 / 2')&&B.pdf.text.includes('Page 2 / 2'));
+  const p1=B.pdf.pages[0].text,p2=B.pdf.pages[1].text;
+  assert.ok(p1.includes('12. Plannings prévisionnels')&&/planning prévisionnel indisponible|Aucun planning prévisionnel enregistré/.test(p1),'section 12 en page 1');
+  assert.ok(p2.includes('13. Intégrité')&&p2.includes('Empreinte SHA-256 des données')&&p2.includes('JSON canonique du dossier'),'Intégrité entière en page 2')});
 t('gros historique (2 ans) : pagination, en-tête de tableau répété, aucune page vide',()=>{
   let days={};for(let w=-52;w<52;w+=4)Object.assign(days,shift(fx.days,w*7));
   const B=build(days,{romi:[ROMI_REF]});assert.ok(B.bytes.pageCount>15,'pages '+B.bytes.pageCount);

@@ -5,8 +5,8 @@
 (function(){
   'use strict';
 
-  const V='37.0.0';
-  const SECTIONS=['home','jour','mois','paie','analyse','audit','bul','romi','reg'];
+  const V='37.5.0';
+  const SECTIONS=['home','jour','mois','paie','analyse','audit','bul','romi','reg','prevu'];   // V37.2 : « prevu » = planning prévisionnel
   const q=s=>document.querySelector(s);
   const el=id=>document.getElementById(id);
   const fmt=m=>typeof F==='function'?F(Math.round(m||0)):'0h00';
@@ -153,7 +153,7 @@
   function buildAnalysis(){
     if(el('s-analyse'))return;
     const sec=document.createElement('section');sec.id='s-analyse';
-    sec.innerHTML=`<div class="mh30-shell"><header class="mh30-pagehead"><div><span class="mh30-kicker">MESHEURES · ANALYSE</span><h2>Centre de pilotage</h2><p>Une seule vue pour les tendances, risques et droits à vérifier.</p></div></header><div id="mh30Analysis"></div><div class="mh30-tools"><button onclick="tab('audit')">🛡️ Contrôle légal</button><button onclick="tab('bul')">📄 Bulletin</button><button onclick="tab('romi')">📋 ROMI1</button><button onclick="tab('reg')">⚙ Réglages</button></div></div>`;
+    sec.innerHTML=`<div class="mh30-shell"><header class="mh30-pagehead"><div><span class="mh30-kicker">MESHEURES · ANALYSE</span><h2>Centre de pilotage</h2><p>Une seule vue pour les tendances, risques et droits à vérifier.</p></div></header><div id="mh30Analysis"></div><div class="mh30-tools"><button onclick="tab('audit')">🛡️ Contrôle légal · Dossier</button><button onclick="tab('bul')">📄 Bulletin</button><button onclick="tab('romi')">📋 ROMI1</button><button onclick="tab('reg')">⚙ Réglages</button></div></div>`;
     const main=document.querySelector('main');const pay=el('s-paie');main.insertBefore(sec,pay?.nextSibling||null);
   }
   function renderAnalysis(){
@@ -183,7 +183,7 @@
     }
     nav.className='mh-v30-nav mh30-nav';
     nav.setAttribute('aria-label','Navigation principale');
-    nav.innerHTML=`<button data-nav-tab="home" onclick="tab('home')">⌂<span>Accueil</span></button><button data-nav-tab="jour" onclick="tab('jour')">＋<span>Saisie</span></button><button data-nav-tab="mois" onclick="tab('mois')">▦<span>Planning</span></button><button data-nav-tab="paie" onclick="tab('paie')">€<span>Paie</span></button><button data-nav-tab="analyse" onclick="tab('analyse')">◌<span>Analyse</span></button>`;
+    nav.innerHTML=`<button data-nav-tab="home" onclick="tab('home')">⌂<span>Accueil</span></button><button data-nav-tab="jour" onclick="tab('jour')">＋<span>Saisie</span></button><button data-nav-tab="mois" onclick="tab('mois')">▦<span>Planning</span></button><button data-nav-tab="paie" onclick="tab('paie')">€<span>Paie</span></button><button data-nav-tab="analyse" onclick="tab('analyse')">◌<span>Analyse</span></button><button data-nav-tab="prevu" onclick="tab('prevu')">📋<span>Prévu</span></button>`;
     syncNav30();
   }
 
@@ -259,6 +259,7 @@
     else if(t==='bul')safe(window.renderBulHist,'bulletins');
     else if(t==='romi')safe(window.renderRomiTab,'romi');
     else if(t==='reg')safe(window.renderReg,'settings');
+    else if(t==='prevu')safe(()=>window.MHPrevu?.render?.(),'prevu');
     /* V30: modules that historically piggy-backed on renderAll are refreshed only
        when their owning tab is active. */
     if(t==='audit'){
@@ -345,8 +346,8 @@
   function boot(){
     if(booted)return; booted=true;
     document.documentElement.dataset.mhVersion=V;
-    if($('mhVersion'))$('mhVersion').textContent='V37.0.0';
-    document.title='MesHeures V37.0.0';
+    if($('mhVersion'))$('mhVersion').textContent='V37.5.0';
+    document.title='MesHeures V37.5.0';
     patchSave();
     if(window.__mh30PendingRefresh){ const pending=window.__mh30PendingRefresh; delete window.__mh30PendingRefresh; schedule(pending); }
     /* V30 est l’unique propriétaire du runtime. */
@@ -403,7 +404,7 @@
    (3) l'enregistrement passait par <a download>, ignoré par le WebView Android : aucun fichier.
    Désormais : données et mise en page par MHDossier (app-v37-dossier.js, lecture seule, moteur existant),
    enregistrement par le pont natif binaire (mhDownloadBinary). window.DB n'est pas réactivé. */
-const PDF_V='37.0.0';
+const PDF_V='37.5.0';
 async function sha(bytes){const h=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 async function keypair(){const k='mh30-signing-key';return new Promise((resolve,reject)=>{const r=indexedDB.open('mesheures-v30-keys',1);r.onupgradeneeded=()=>{try{r.result.createObjectStore('keys')}catch(e){}};r.onerror=()=>reject(r.error);r.onsuccess=async()=>{try{const db=r.result,tx=db.transaction('keys','readonly'),st=tx.objectStore('keys'),g=st.get(k);g.onsuccess=async()=>{if(g.result){resolve(g.result);return}const kp=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);const pub=await crypto.subtle.exportKey('jwk',kp.publicKey),priv=await crypto.subtle.exportKey('jwk',kp.privateKey);const w=db.transaction('keys','readwrite');w.objectStore('keys').put({pub,priv},k);resolve({pub,priv})}}catch(e){reject(e)}}})}
 async function sign(hash){const kp=await keypair();const priv=await crypto.subtle.importKey('jwk',kp.priv,{name:'ECDSA',namedCurve:'P-256'},false,['sign']);const sig=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},priv,new TextEncoder().encode(hash));return {algorithm:'ECDSA-P256-SHA256',hashAlgorithm:'SHA-256',hash,signature:btoa(String.fromCharCode(...new Uint8Array(sig))),publicKeyJwk:kp.pub,signedAt:new Date().toISOString(),note:'Signature detachee du PDF; verifier avec la cle publique et l empreinte SHA-256.'}}
@@ -419,11 +420,14 @@ window.mhV30ExportSignedPDF=async function(){
       note:'Signature ECDSA détachée de l’empreinte SHA-256 du PDF. dataSha256 = SHA-256 de JSON.stringify(dossier), imprimée dans le PDF.'};
     const mode=window.mhDownloadBinary(name+'.pdf',pdf,'application/pdf');
     window.mhDownloadBinary(name+'.sig.json',new TextEncoder().encode(JSON.stringify(proof,null,2)),'application/json');
-    alert((mode==='android'?'📁 Choisis où enregistrer le PDF, puis le fichier de signature.\n':'✅ PDF probatoire exporté.\n')+
-      'Pages : '+pdf.pageCount+'\nEmpreinte SHA-256 du PDF : '+pdfHash+'\nEmpreinte des données : '+dataHash);
+    /* V37.4.1 : résultat dans une fenêtre intégrée (MHDialogue), empreintes sélectionnables */
+    const msg=mode==='android'?'📁 Choisis où enregistrer le PDF, puis le fichier de signature.':'✅ PDF probatoire exporté.',det='Pages : '+pdf.pageCount+'\nEmpreinte SHA-256 du PDF : '+pdfHash+'\nEmpreinte des données : '+dataHash;
+    if(window.MHDialogue)window.MHDialogue.info({titre:'PDF probatoire signé',message:msg,details:det});else alert(msg+'\n'+det);
     return {mode,pages:pdf.pageCount,pdfHash,dataHash};
-  }catch(e){alert('❌ Export PDF signé impossible : '+e.message);return null}
+  }catch(e){if(window.MHDialogue)window.MHDialogue.info({titre:'PDF probatoire signé',message:'❌ Export PDF signé impossible : '+e.message});else alert('❌ Export PDF signé impossible : '+e.message);return null}
 };
+/* V37.4.1 : un deuxième appui pendant l'export est ignoré */
+(function(){const f=window.mhV30ExportSignedPDF;window.mhV30ExportSignedPDF=()=>window.MHDialogue?window.MHDialogue.exclusif('pdf-signe',f):f()})();
 window.mhV30DossierRefresh=function(){};
 
 })();

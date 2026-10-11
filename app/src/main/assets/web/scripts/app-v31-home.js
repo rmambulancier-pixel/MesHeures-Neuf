@@ -16,7 +16,7 @@
 (function () {
   'use strict';
 
-  const V = '37.0.0';
+  const V = '37.5.0';
   const WORK = ['T', 'NUIT'];
   const WINDOW_DAYS = 28;
   const NB = '\u00a0';
