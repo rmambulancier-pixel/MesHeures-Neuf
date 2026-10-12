@@ -416,7 +416,7 @@ document.addEventListener('touchend',e=>{
   else if(curTab==='mois'){dx<0?goMonth(1):goMonth(-1)}
 });
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js?v=37.5.0',{scope:'./'}).then(reg=>{
+  navigator.serviceWorker.register('./sw.js?v=37.5.0-B',{scope:'./'}).then(reg=>{
     try{
       window.mhServiceWorkerReady=!!reg;
       if(typeof reg.update==='function') reg.update().catch(()=>{});

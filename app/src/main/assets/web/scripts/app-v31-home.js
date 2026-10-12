@@ -100,7 +100,46 @@
   /* COLLECTE : lecture unique des modules existants                     */
   /* ------------------------------------------------------------------ */
 
-  function collectPeriod(now, days) {
+  /* V37.5.0 — Services prévus : calendrier « Prévu » (fiches validées, MHPrevuCalendrier), en LECTURE SEULE.
+     Seules les dates FUTURES sans journée réelle peuvent compter un service prévu : la journée réelle prime toujours,
+     quel que soit son type, et le réalisé ne vient que des journées réelles. Nature : MHComparaison.naturePrevu
+     (Jour, Samu, Condo = travail ; repos, congés, férié, formation, non concerné, non interprété = jamais un service).
+     Durée : dureeMin (« Jour 7h ») ; Samu / Condo : inconnue (l'amplitude 8h-20h n'est pas du temps de travail effectif).
+     Conflit entre fiches : exclu des calculs et compté à part. Valeurs identiques sur plusieurs fiches : une seule fois. */
+  function prevuIndex() {
+    try {
+      return window.MHPrevuCalendrier?.index?.() || null;
+    } catch (e) {
+      console.warn('MesHeures V31 · Prévu indisponible', e);
+      return null;
+    }
+  }
+
+  function prevuService(idx, k) {
+    const e = idx && idx.get(k);
+    if (!e || !Array.isArray(e.valeurs) || !e.valeurs.length) return null;
+    if (e.etat === 'conflit') return { k, conflit: true };
+    const v = e.valeurs[0];
+    if (window.MHComparaison?.naturePrevu?.(v)?.nature !== 'travail') return null;
+    const t = v.dureeMin == null ? 0 : num(v.dureeMin);
+    return { k, libelle: String(v.libelle || ''), tte: t > 0 ? t : 0, horaires: v.horaires || null };
+  }
+
+  /* Journée « vide » : REPOS sans horaires, pauses ni note. gd() (app.js) en crée une dès qu'un jour est affiché ou ouvert
+     (l'onglet Mois le fait pour TOUS les jours du mois) : ce n'est pas une saisie et elle ne masque pas « Prévu ».
+     Même règle que MHReelLecture / Comparaison (correctif V37.3.0-A). Toute autre journée (repos noté, CP, RC…) prime. */
+  const isEmptyDay = d => !!d && d.t === 'REPOS' && !d.deb && !d.fin && !d.note && !(Array.isArray(d.p) && d.p.length);
+  const hasRealEntry = d => !!d && !isEmptyDay(d);
+
+  /* Date future : journée réelle si elle existe (elle prime), sinon service prévu ; null = rien à compter. */
+  function futureDay(k, days, idx) {
+    if (hasRealEntry(days[k])) return isWork(days[k]) ? { src: 'reel', tte: num(engineDay(k).tte) } : null;
+    const p = prevuService(idx, k);
+    if (!p) return null;
+    return p.conflit ? { conflit: true } : { src: 'prevu', tte: p.tte };
+  }
+
+  function collectPeriod(now, days, idx) {
     const base = window.MH302?.period?.();
     if (!base) return null;
 
@@ -121,11 +160,14 @@
 
     let planned = 0;
     let plannedDays = 0;
+    let plannedUnknown = 0;
+    let conflicts = 0;
     for (let k = addD(now, 1); k <= base.end; k = addD(k, 1)) {
-      const d = days[k];
-      if (!isWork(d)) continue;
+      const f = futureDay(k, days, idx);
+      if (!f) continue;
+      if (f.conflit) { conflicts++; continue; }
       plannedDays++;
-      planned += num(engineDay(k).tte);
+      if (f.tte > 0) planned += f.tte; else plannedUnknown++;
     }
 
     return {
@@ -139,34 +181,41 @@
       h50: num(q.h50),
       brut,
       planned,
-      plannedDays
+      plannedDays,
+      plannedUnknown,
+      conflicts
     };
   }
 
-  function collectMonth(now, days) {
+  function collectMonth(now, days, idx) {
     const ym = now.slice(0, 7);
     const Y = Number(ym.slice(0, 4));
     const M = Number(ym.slice(5, 7));
     const lastDay = new Date(Y, M, 0).getDate();
 
     let done = 0, doneDays = 0, ampSum = 0;
-    let planned = 0, plannedDays = 0, plannedUnknown = 0;
+    let planned = 0, plannedDays = 0, plannedUnknown = 0, plannedPrevu = 0, conflicts = 0;
 
     for (let n = 1; n <= lastDay; n++) {
       const k = ym + '-' + String(n).padStart(2, '0');
+
+      if (k > now) {
+        const f = futureDay(k, days, idx);
+        if (!f) continue;
+        if (f.conflit) { conflicts++; continue; }
+        plannedDays++;
+        if (f.src === 'prevu') plannedPrevu++;
+        if (f.tte > 0) planned += f.tte; else plannedUnknown++;
+        continue;
+      }
+
       if (!isWork(days[k])) continue;
       const r = engineDay(k);
       const t = num(r.tte);
-
-      if (k <= now) {
-        if (t > 0) {
-          done += t;
-          doneDays++;
-          ampSum += num(r.amp);
-        }
-      } else {
-        plannedDays++;
-        if (t > 0) planned += t; else plannedUnknown++;
+      if (t > 0) {
+        done += t;
+        doneDays++;
+        ampSum += num(r.amp);
       }
     }
 
@@ -183,6 +232,8 @@
       planned,
       plannedDays,
       plannedUnknown,
+      plannedPrevu,
+      conflicts,
       projected,
       remaining: Math.max(0, projected - done),
       pct: projected > 0 ? Math.min(100, done / projected * 100) : 0,
@@ -208,8 +259,14 @@
     return out;
   }
 
-  function collectNextService(now, days) {
-    const k = Object.keys(days).filter(x => x > now && isWork(days[x])).sort()[0];
+  function collectNextService(now, days, idx) {
+    const k = Object.keys(days).filter(x => x > now && isWork(days[x])).sort()[0] || null;
+    let prevu = null;
+    if (idx) {
+      [...idx.keys()].filter(x => x > now && !hasRealEntry(days[x]) && (!k || x < k)).sort()
+        .some(x => { const p = prevuService(idx, x); if (p && !p.conflit) prevu = p; return !!prevu; });
+    }
+    if (prevu) return { k: prevu.k, prevu };
     return k ? { k, d: days[k] } : null;
   }
 
@@ -232,13 +289,14 @@
     const live = !!window.MH30Live?.active?.();
     const d = days[now] || null;
     const r = engineDay(now);
+    const idx = prevuIndex();
 
     return {
       now, days, live, d, r,
-      per: safe(() => collectPeriod(now, days), null),
-      month: collectMonth(now, days),
+      per: safe(() => collectPeriod(now, days, idx), null),
+      month: collectMonth(now, days, idx),
       dossier: collectDossier(),
-      next: collectNextService(now, days),
+      next: collectNextService(now, days, idx),
       intel: safe(() => window.mhV30IntelligenceData?.(), null),
       smart: safe(() => window.MH302?.insights?.(), null),
       anomalies: safe(() => window.MH302?.anomalies?.(), []),
@@ -313,14 +371,28 @@
     }
 
     /* Pas d'objectif « en retard » tant qu'aucune journée n'est enregistrée (pas de donnée inventée). */
+    /* V37.5.0 : un service à durée inconnue (Samu, Condo, journée sans horaires) n'est jamais converti en heures ;
+       il est cité. Un conflit dans Prévu n'est jamais compté ni passé sous silence. */
     if (per && per.gap > 0 && num(smart?.count) > 0) {
+      const conf = per.conflicts
+        ? ' ' + plural(per.conflicts, 'conflit', 'conflits') + ' dans Prévu, non compté' + (per.conflicts > 1 ? 's' : '') + '.'
+        : '';
+      const inconnus = plural(per.plannedUnknown, 'service sans durée connue', 'services sans durée connue');
+      const go = per.conflicts ? goTab('prevu') : goTab('mois');
       if (per.plannedDays === 0) {
-        out.push({ lvl: 'info', icon: '🎯', title: 'Quatorzaine sans service planifié',
-          text: 'Il reste ' + fmt(per.gap) + ' pour atteindre l’objectif, aucun service prévu d’ici le ' + short(per.end) + '.',
-          go: goTab('mois') });
-      } else if (per.planned > 0 && per.planned < per.gap) {
-        out.push({ lvl: 'warn', icon: '🎯', title: 'Objectif de quatorzaine difficile',
-          text: fmt(per.planned) + ' planifiées pour ' + fmt(per.gap) + ' restantes.', go: goTab('mois') });
+        out.push({ lvl: per.conflicts ? 'warn' : 'info', icon: '🎯', title: 'Quatorzaine sans service planifié',
+          text: 'Il reste ' + fmt(per.gap) + ' pour atteindre l’objectif, aucun service prévu d’ici le ' + short(per.end) + '.' + conf,
+          go });
+      } else if (per.planned === 0) {
+        out.push({ lvl: 'info', icon: '🎯', title: 'Objectif de quatorzaine non évaluable',
+          text: inconnus + ' d’ici le ' + short(per.end) + ' : ' + fmt(per.gap) + ' restantes à confirmer.' + conf, go });
+      } else if (per.planned < per.gap) {
+        out.push({ lvl: per.plannedUnknown ? 'info' : 'warn', icon: '🎯',
+          title: per.plannedUnknown ? 'Objectif de quatorzaine à confirmer' : 'Objectif de quatorzaine difficile',
+          text: fmt(per.planned) + ' planifiées' + (per.plannedUnknown ? ' + ' + inconnus : '') + ' pour ' + fmt(per.gap) + ' restantes.' + conf,
+          go });
+      } else if (per.conflicts) {
+        out.push({ lvl: 'warn', icon: '⚠️', title: 'Conflit dans Prévu', text: 'Quatorzaine jusqu’au ' + short(per.end) + ' :' + conf, go });
       }
     }
 
@@ -360,11 +432,16 @@
   function buildNextAction(c) {
     const { d, r, live, now, dossier, next } = c;
 
-    const service = next && {
+    const service = next && (next.prevu ? {
+      tone: 'info', icon: '📅', title: 'Prochain service (prévu)',
+      text: shortDate(next.k) + ' · ' + next.prevu.libelle +
+        (next.prevu.horaires ? ' · ' + next.prevu.horaires.debut + ' → ' + next.prevu.horaires.fin : ''),
+      go: goTab('prevu')
+    } : {
       tone: 'info', icon: '📅', title: 'Prochain service',
       text: shortDate(next.k) + ' · ' + (next.d.deb || 'horaire à définir') + (next.d.fin ? ' → ' + next.d.fin : ''),
       go: goDay(next.k)
-    };
+    });
 
     let main = null;
 
@@ -449,8 +526,13 @@
         metric('JOURS TRAVAILLÉS', String(m.doneDays), plural(m.remainingDays, 'jour restant', 'jours restants')) +
         metric('RYTHME MOYEN', m.avg ? fmt(m.avg) : '—', 'par journée travaillée') +
         metric('AMPLITUDE MOYENNE', m.avgAmp ? fmt(m.avgAmp) : '—', 'par journée travaillée') +
-        metric('SERVICES À VENIR', String(m.plannedDays), 'planifiés ce mois-ci') +
+        metric('SERVICES À VENIR', String(m.plannedDays), m.plannedPrevu ? 'dont ' + m.plannedPrevu + ' depuis Prévu' : 'planifiés ce mois-ci') +
       '</div>';
+
+    if (m.conflicts) {
+      html += '<div class="mh31-note">⚠️ ' + plural(m.conflicts, 'conflit', 'conflits') +
+        ' dans Prévu ce mois-ci, non compté' + (m.conflicts > 1 ? 's' : '') + ' : à vérifier dans le calendrier Prévu.</div>';
+    }
 
     if (c.live) html += '<div class="mh31-note">Service en cours non compté tant qu’il n’est pas arrêté.</div>';
 
@@ -464,6 +546,10 @@
           '<span>HS' + NB + '25' + NB + '% <b>' + fmt(p.h25) + '</b></span>' +
           '<span>HS' + NB + '50' + NB + '% <b>' + fmt(p.h50) + '</b></span>' +
         '</div>' +
+        (p.conflicts
+          ? '<div class="mh31-note">⚠️ ' + plural(p.conflicts, 'conflit', 'conflits') + ' dans Prévu sur la quatorzaine, non compté' +
+            (p.conflicts > 1 ? 's' : '') + ' : à vérifier dans le calendrier Prévu.</div>'
+          : '') +
         (p.brut != null
           ? '<div class="mh31-quat-pay"><span>Brut estimé de la quatorzaine</span><b>' + euro(p.brut) + '</b></div>'
           : '') +
